@@ -1615,25 +1615,28 @@ export async function affecterPiecesATravail(
 export async function receptionnerLigneCommande(
   ligneId: string,
   quantiteRecue: number,
-  articleId: string | undefined,
+  articleId: string | null | undefined,
   designation: string,
   affectations: { travailId: string; quantite: number }[],
   ajouterAuStock: number
 ): Promise<void> {
+  // Valider l'articleId
+  const validArticleId = (typeof articleId === 'string' && articleId.length > 0) ? articleId : null;
+  
   // 1. Mettre à jour la ligne de commande
   await updateCommandeLigne(ligneId, { quantite_recue: quantiteRecue });
   
   // 2. Affecter aux travaux
   for (const aff of affectations) {
     if (aff.quantite > 0) {
-      await affecterPiecesATravail(aff.travailId, articleId, designation, aff.quantite);
+      await affecterPiecesATravail(aff.travailId, validArticleId || undefined, designation, aff.quantite);
     }
   }
   
-  // 3. Ajouter au stock si nécessaire
-  if (ajouterAuStock > 0 && articleId) {
+  // 3. Ajouter au stock si nécessaire (seulement si on a un articleId valide)
+  if (ajouterAuStock > 0 && validArticleId) {
     await createStockMouvement({
-      article_id: articleId,
+      article_id: validArticleId,
       type_mouvement: 'entree',
       quantite: ajouterAuStock,
       motif: `Réception commande`,

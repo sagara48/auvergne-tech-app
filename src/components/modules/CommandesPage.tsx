@@ -694,6 +694,36 @@ function ReceptionModal({
     });
   };
 
+  // Mettre à jour la quantité reçue
+  const updateQuantiteRecue = (ligneId: string, nouvelleQuantite: number) => {
+    setAffectationsParLigne(prev => {
+      const ligne = prev[ligneId];
+      if (!ligne) return prev;
+      
+      // Recalculer les affectations (ne pas dépasser la nouvelle quantité)
+      let resteDisponible = nouvelleQuantite;
+      const newAffectations = ligne.affectations.map(a => {
+        const newQte = Math.min(a.quantite, resteDisponible);
+        resteDisponible -= newQte;
+        return { ...a, quantite: newQte };
+      });
+      
+      // Le reste va au stock
+      const totalAffecte = newAffectations.reduce((sum, a) => sum + a.quantite, 0);
+      const stockQuantite = Math.max(0, nouvelleQuantite - totalAffecte);
+      
+      return {
+        ...prev,
+        [ligneId]: {
+          ...ligne,
+          quantiteRecue: nouvelleQuantite,
+          affectations: newAffectations,
+          stockQuantite
+        }
+      };
+    });
+  };
+
   // Valider la réception
   const validerReception = async () => {
     setIsSaving(true);
@@ -702,10 +732,15 @@ function ReceptionModal({
         const ligne = commande.lignes?.find((l: any) => l.id === ligneId);
         if (!ligne) continue;
         
+        // Extraire l'article_id correctement (peut être un objet article ou un string)
+        const articleId = typeof ligne.article_id === 'string' 
+          ? ligne.article_id 
+          : (ligne.article?.id || null);
+        
         await receptionnerLigneCommande(
           ligneId,
           data.quantiteRecue,
-          ligne.article_id,
+          articleId,
           ligne.designation,
           data.affectations.filter(a => a.quantite > 0).map(a => ({ travailId: a.travailId, quantite: a.quantite })),
           data.stockQuantite
@@ -797,8 +832,39 @@ function ReceptionModal({
                           {ligne.reference && <div className="text-xs text-[var(--text-muted)]">Réf: {ligne.reference}</div>}
                         </div>
                         <div className="text-right">
-                          <div className="text-lg font-bold text-green-400">{data.quantiteRecue} reçus</div>
-                          <div className="text-xs text-[var(--text-muted)]">sur {ligne.quantite} commandés</div>
+                          <div className="text-xs text-[var(--text-muted)] mb-1">Commandé: {ligne.quantite}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-[var(--text-secondary)]">Reçu:</span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => updateQuantiteRecue(ligne.id, Math.max(0, data.quantiteRecue - 1))}
+                                className="w-7 h-7 rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] flex items-center justify-center hover:bg-[var(--bg-hover)]"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <input
+                                type="number"
+                                min="0"
+                                value={data.quantiteRecue}
+                                onChange={(e) => updateQuantiteRecue(ligne.id, parseInt(e.target.value) || 0)}
+                                className="w-14 text-center font-mono text-sm py-1 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded text-green-400 font-bold"
+                              />
+                              <button
+                                onClick={() => updateQuantiteRecue(ligne.id, data.quantiteRecue + 1)}
+                                className="w-7 h-7 rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] flex items-center justify-center hover:bg-[var(--bg-hover)]"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                            {data.quantiteRecue !== ligne.quantite && (
+                              <button
+                                onClick={() => updateQuantiteRecue(ligne.id, ligne.quantite)}
+                                className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30"
+                              >
+                                Tout
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                       
