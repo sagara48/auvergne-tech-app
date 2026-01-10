@@ -18,7 +18,7 @@ import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
 const CURRENT_USER_ID = '11111111-1111-1111-1111-111111111111';
-const CURRENT_VEHICULE_ID = 'vvvv1111-1111-1111-1111-111111111111';
+const CURRENT_VEHICULE_ID = 'eeee1111-1111-1111-1111-111111111111';
 
 interface NFCScanModalProps {
   isOpen: boolean;

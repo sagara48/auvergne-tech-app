@@ -8,6 +8,17 @@ export type TypeJour = 'travail' | 'conge' | 'rtt' | 'maladie' | 'ferie' | 'form
 export type Periode = 'matin' | 'apres-midi';
 export type TypeAstreinte = 'samedi_jour' | 'samedi_nuit' | 'dimanche_jour' | 'dimanche_nuit' | 'nuit_semaine';
 export type ComptageAstreinte = 'rtt' | 'paye';
+
+// Labels pour les types de jour
+export const TYPES_JOUR_LABELS: Record<TypeJour, string> = {
+  travail: 'Travail',
+  conge: 'Congé',
+  rtt: 'RTT',
+  maladie: 'Maladie',
+  ferie: 'Férié',
+  formation: 'Formation'
+};
+
 export type StatutAscenseur = 'en_service' | 'en_panne' | 'arrete' | 'en_travaux';
 export type TypeTravaux = 'reparation' | 'modernisation' | 'installation' | 'mise_conformite' | 'depannage';
 export type StatutTravaux = 'planifie' | 'en_cours' | 'en_attente' | 'termine' | 'annule';
@@ -267,6 +278,9 @@ export interface Document {
   client?: Client;
   ascenseur?: Ascenseur;
 }
+
+// Alias pour la GED
+export type GEDDocument = Document;
 
 export interface PlanningEvent {
   id: string;
@@ -562,6 +576,9 @@ export interface NFCTag {
   vehicule?: Vehicule;
 }
 
+// Alias pour compatibilité
+export type NfcTag = NFCTag;
+
 export interface NFCScan {
   id: string;
   tag_id: string;
@@ -581,6 +598,9 @@ export interface NFCScan {
   ascenseur?: Ascenseur;
   article?: StockArticle;
 }
+
+// Alias pour compatibilité
+export type NfcScan = NFCScan;
 
 // État du lecteur NFC
 export interface NFCReaderState {
@@ -643,3 +663,29 @@ export const JOURS_CONFIG: JourConfig[] = [
   { id: 4, nom: 'Vendredi', nomCourt: 'Ven', heuresRef: 7 },
 ];
 
+export const TYPES_ASTREINTE_LABELS: Record<TypeAstreinte, string> = {
+  samedi_jour: 'Samedi jour',
+  samedi_nuit: 'Samedi nuit',
+  dimanche_jour: 'Dimanche jour',
+  dimanche_nuit: 'Dimanche nuit',
+  nuit_semaine: 'Nuit semaine'
+};
+
+export const TYPE_EVENT_COLORS: Record<TypeEvent, string> = {
+  travaux: '#ef4444',
+  tournee: '#3b82f6',
+  mise_service: '#22c55e',
+  formation: '#a855f7',
+  conge: '#f59e0b',
+  rtt: '#06b6d4',
+  astreinte: '#ec4899',
+  reunion: '#6366f1',
+  autre: '#71717a'
+};
+
+export const STATUT_TRANSFERT_CONFIG: Record<StatutTransfert, { label: string; color: string }> = {
+  en_attente: { label: 'En attente', color: '#f59e0b' },
+  valide: { label: 'Validé', color: '#22c55e' },
+  refuse: { label: 'Refusé', color: '#ef4444' },
+  annule: { label: 'Annulé', color: '#71717a' }
+};

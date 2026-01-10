@@ -1394,3 +1394,15 @@ export async function getNotesByAscenseur(ascenseurId: string): Promise<any[]> {
   if (error) throw error;
   return data || [];
 }
+
+// Aliases pour compatibilité (camelCase)
+export const getNfcTagByUid = getNFCTagByUID;
+export const createNfcScan = createNFCScan;
+export const getNfcTags = getNFCTags;
+export const getNfcTag = getNFCTag;
+export const createNfcTag = createNFCTag;
+export const updateNfcTag = updateNFCTag;
+export const deleteNfcTag = deleteNFCTag;
+export const getNfcScans = getNFCScans;
+export const getNfcStats = getNFCStats;
+
