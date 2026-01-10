@@ -1,0 +1,14 @@
+export { PlanningPage } from './PlanningPage';
+export { TravauxPage } from './TravauxPage';
+export { MiseEnServicePage } from './MiseEnServicePage';
+export { TourneesPage } from './TourneesPage';
+export { AscenseursPage } from './AscenseursPage';
+export { StockPage } from './StockPage';
+export { VehiculesPage } from './VehiculesPage';
+export { DemandesPage } from './DemandesPage';
+export { GEDPage } from './GEDPage';
+export { ChatPage, ContextChat } from './ChatPage';
+export { NotesPage, ContextNotes } from './NotesPage';
+export { ArchivesPage, ArchiveModal } from './ArchivesPage';
+export { CommandesPage } from './CommandesPage';
+export { NFCPage } from './NFCPage';

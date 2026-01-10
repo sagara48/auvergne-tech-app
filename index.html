@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AuvergneTech - Application de gestion intégrée pour techniciens ascensoristes" />
+    <meta name="theme-color" content="#09090b" />
+    <title>AuvergneTech - Gestion Intégrée</title>
+    <script>
+      // Initialiser le thème avant le rendu pour éviter le flash
+      (function() {
+        try {
+          const stored = localStorage.getItem('auvergne-tech-storage');
+          if (stored) {
+            const data = JSON.parse(stored);
+            const theme = data.state?.theme || 'dark';
+            document.documentElement.classList.remove('dark', 'light');
+            document.documentElement.classList.add(theme);
+            // Mettre à jour la couleur du thème meta tag
+            const metaTheme = document.querySelector('meta[name="theme-color"]');
+            if (metaTheme) {
+              metaTheme.setAttribute('content', theme === 'dark' ? '#09090b' : '#ffffff');
+            }
+          }
+        } catch (e) {
+          // En cas d'erreur, garder le thème sombre par défaut
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
