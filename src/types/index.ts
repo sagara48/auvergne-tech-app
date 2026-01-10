@@ -142,6 +142,7 @@ export interface TravauxPiece {
   designation: string;
   reference?: string;
   quantite: number;
+  quantite_recue?: number;
   source?: 'stock' | 'commande';
   consommee?: boolean;
 }

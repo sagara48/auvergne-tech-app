@@ -1520,3 +1520,123 @@ export const deleteNfcTag = deleteNFCTag;
 export const getNfcScans = getNFCScans;
 export const getNfcStats = getNFCStats;
 
+// === RÉCEPTION COMMANDES - WORKFLOW INTELLIGENT ===
+
+// Récupérer les travaux en attente de pièces (source='commande', non consommées)
+export async function getTravauxEnAttentePieces(): Promise<any[]> {
+  const { data, error } = await supabase
+    .from('travaux')
+    .select('*, ascenseur:ascenseurs(*), client:clients(*)')
+    .not('pieces', 'eq', '[]')
+    .in('statut', ['a_planifier', 'planifie', 'en_cours'])
+    .or('archive.is.null,archive.eq.false')
+    .order('date_butoir', { ascending: true });
+  
+  if (error) {
+    console.error('Erreur getTravauxEnAttentePieces:', error);
+    return [];
+  }
+  
+  // Filtrer ceux qui ont des pièces en attente (source='commande' et non consommées)
+  return (data || []).filter(travail => {
+    const pieces = travail.pieces || [];
+    return pieces.some((p: any) => p.source === 'commande' && !p.consommee);
+  });
+}
+
+// Trouver les travaux qui ont besoin d'un article spécifique
+export async function getTravauxNeedingArticle(articleId?: string, designation?: string): Promise<any[]> {
+  const travauxEnAttente = await getTravauxEnAttentePieces();
+  
+  return travauxEnAttente.filter(travail => {
+    const pieces = travail.pieces || [];
+    return pieces.some((p: any) => {
+      if (p.source !== 'commande' || p.consommee) return false;
+      // Match par article_id ou par designation (pour les pièces manuelles)
+      if (articleId && p.article_id === articleId) return true;
+      if (designation && p.designation?.toLowerCase().includes(designation.toLowerCase())) return true;
+      return false;
+    });
+  });
+}
+
+// Affecter des pièces reçues à un travail
+export async function affecterPiecesATravail(
+  travailId: string, 
+  articleId: string | undefined, 
+  designation: string,
+  quantiteAffectee: number
+): Promise<void> {
+  // Récupérer le travail
+  const { data: travail, error: fetchError } = await supabase
+    .from('travaux')
+    .select('pieces')
+    .eq('id', travailId)
+    .single();
+  
+  if (fetchError) throw fetchError;
+  
+  const pieces = travail.pieces || [];
+  let resteAAfecter = quantiteAffectee;
+  
+  // Mettre à jour les pièces correspondantes
+  const updatedPieces = pieces.map((p: any) => {
+    if (resteAAfecter <= 0) return p;
+    if (p.source !== 'commande' || p.consommee) return p;
+    
+    // Match par article_id ou designation
+    const match = (articleId && p.article_id === articleId) || 
+                  (designation && p.designation?.toLowerCase() === designation.toLowerCase());
+    
+    if (match) {
+      const qteNecessaire = p.quantite - (p.quantite_recue || 0);
+      const qteAAffecter = Math.min(resteAAfecter, qteNecessaire);
+      resteAAfecter -= qteAAffecter;
+      
+      return {
+        ...p,
+        quantite_recue: (p.quantite_recue || 0) + qteAAffecter,
+        consommee: (p.quantite_recue || 0) + qteAAffecter >= p.quantite,
+      };
+    }
+    return p;
+  });
+  
+  // Sauvegarder
+  const { error: updateError } = await supabase
+    .from('travaux')
+    .update({ pieces: updatedPieces, updated_at: new Date().toISOString() })
+    .eq('id', travailId);
+  
+  if (updateError) throw updateError;
+}
+
+// Réceptionner une ligne de commande avec distribution intelligente
+export async function receptionnerLigneCommande(
+  ligneId: string,
+  quantiteRecue: number,
+  articleId: string | undefined,
+  designation: string,
+  affectations: { travailId: string; quantite: number }[],
+  ajouterAuStock: number
+): Promise<void> {
+  // 1. Mettre à jour la ligne de commande
+  await updateCommandeLigne(ligneId, { quantite_recue: quantiteRecue });
+  
+  // 2. Affecter aux travaux
+  for (const aff of affectations) {
+    if (aff.quantite > 0) {
+      await affecterPiecesATravail(aff.travailId, articleId, designation, aff.quantite);
+    }
+  }
+  
+  // 3. Ajouter au stock si nécessaire
+  if (ajouterAuStock > 0 && articleId) {
+    await createStockMouvement({
+      article_id: articleId,
+      type_mouvement: 'entree',
+      quantite: ajouterAuStock,
+      motif: `Réception commande`,
+    });
+  }
+}

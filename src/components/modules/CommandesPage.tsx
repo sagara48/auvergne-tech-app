@@ -1,14 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ShoppingCart, Plus, Search, Package, Truck, Check, X, Eye, Edit, 
-  Archive, Calendar, User, Clock, AlertTriangle, Minus,
-  ChevronRight, FileText, Trash2, ChevronDown, ChevronUp
+  Archive, Calendar, User, Clock, AlertTriangle, Minus, MoreVertical,
+  ChevronRight, FileText, Trash2, ChevronDown, ChevronUp, ArrowRight
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
 import { 
   getCommandes, createCommande, updateCommande, archiveCommande,
-  addCommandeLigne, deleteCommandeLigne, getStockArticles, getAscenseurs
+  addCommandeLigne, deleteCommandeLigne, updateCommandeLigne, getStockArticles, getAscenseurs,
+  getTravauxEnAttentePieces, receptionnerLigneCommande, createStockMouvement
 } from '@/services/api';
 import { ArchiveModal } from './ArchivesPage';
 import type { Commande, CommandeLigne, StatutCommande, Priorite } from '@/types';
@@ -58,6 +59,100 @@ interface LigneForm {
   quantite: number;
   ascenseur_id?: string;
   detail?: string;
+}
+
+// Helper pour obtenir l'action suivante logique
+function getNextAction(statut: StatutCommande): { next: StatutCommande | null; label: string } | null {
+  switch (statut) {
+    case 'brouillon': return { next: 'en_attente', label: 'Soumettre' };
+    case 'en_attente': return { next: 'validee', label: 'Valider' };
+    case 'validee': return { next: 'commandee', label: 'Commander' };
+    case 'commandee': return { next: 'expediee', label: 'Expédier' };
+    case 'expediee': return { next: null, label: 'Réceptionner' }; // null = ouvre modal
+    default: return null;
+  }
+}
+
+// Helper pour les autres actions disponibles
+function getOtherActions(statut: StatutCommande): { statut: StatutCommande; label: string; color: string }[] {
+  const actions: { statut: StatutCommande; label: string; color: string }[] = [];
+  
+  if (!['recue', 'annulee'].includes(statut)) {
+    actions.push({ statut: 'annulee', label: 'Annuler', color: 'red' });
+  }
+  
+  return actions;
+}
+
+// Menu d'actions rapides
+function ActionDropdown({ 
+  commande, 
+  onStatusChange, 
+  onArchive,
+  onOpenDetail,
+  onReception
+}: { 
+  commande: Commande; 
+  onStatusChange: (statut: StatutCommande) => void;
+  onArchive: () => void;
+  onOpenDetail: () => void;
+  onReception: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const otherActions = getOtherActions(commande.statut);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+        className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-muted)]"
+      >
+        <MoreVertical className="w-5 h-5" />
+      </button>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 w-48 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded-xl shadow-lg z-50 py-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenDetail(); setIsOpen(false); }}
+              className="w-full px-4 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center gap-2"
+            >
+              <Eye className="w-4 h-4" /> Voir détails
+            </button>
+            
+            {['commandee', 'expediee'].includes(commande.statut) && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onReception(); setIsOpen(false); }}
+                className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-green-500/10 flex items-center gap-2"
+              >
+                <Package className="w-4 h-4" /> Réceptionner
+              </button>
+            )}
+            
+            {otherActions.map(action => (
+              <button
+                key={action.statut}
+                onClick={(e) => { e.stopPropagation(); onStatusChange(action.statut); setIsOpen(false); }}
+                className={`w-full px-4 py-2 text-left text-sm hover:bg-${action.color}-500/10 text-${action.color}-400 flex items-center gap-2`}
+              >
+                <X className="w-4 h-4" /> {action.label}
+              </button>
+            ))}
+            
+            <div className="border-t border-[var(--border-primary)] my-1" />
+            
+            <button
+              onClick={(e) => { e.stopPropagation(); onArchive(); setIsOpen(false); }}
+              className="w-full px-4 py-2 text-left text-sm text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] flex items-center gap-2"
+            >
+              <Archive className="w-4 h-4" /> Archiver
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 // Modal création/édition commande amélioré
@@ -452,6 +547,393 @@ function CommandeFormModal({
   );
 }
 
+// Interface pour l'affectation
+interface AffectationLigne {
+  ligneId: string;
+  quantiteRecue: number;
+  affectations: { travailId: string; travailCode: string; travailTitre: string; besoin: number; quantite: number }[];
+  stockQuantite: number;
+}
+
+// Modal de réception intelligent
+function ReceptionModal({
+  commande,
+  onClose,
+  onSuccess,
+}: {
+  commande: Commande;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [travauxEnAttente, setTravauxEnAttente] = useState<any[]>([]);
+  const [affectationsParLigne, setAffectationsParLigne] = useState<Record<string, AffectationLigne>>({});
+
+  // Charger les travaux en attente de pièces
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const travaux = await getTravauxEnAttentePieces();
+        setTravauxEnAttente(travaux);
+        
+        // Initialiser les affectations pour chaque ligne
+        const initialAffectations: Record<string, AffectationLigne> = {};
+        
+        commande.lignes?.forEach((ligne: any) => {
+          // Trouver les travaux qui ont besoin de cet article
+          const travauxPourCetteLigne = travaux.filter(t => {
+            const pieces = t.pieces || [];
+            return pieces.some((p: any) => {
+              if (p.source !== 'commande' || p.consommee) return false;
+              if (ligne.article_id && p.article_id === ligne.article_id) return true;
+              if (p.designation?.toLowerCase() === ligne.designation?.toLowerCase()) return true;
+              return false;
+            });
+          });
+          
+          // Calculer les besoins par travail
+          const affectations = travauxPourCetteLigne.map(t => {
+            const pieces = t.pieces || [];
+            const pieceMatch = pieces.find((p: any) => {
+              if (p.source !== 'commande' || p.consommee) return false;
+              if (ligne.article_id && p.article_id === ligne.article_id) return true;
+              if (p.designation?.toLowerCase() === ligne.designation?.toLowerCase()) return true;
+              return false;
+            });
+            const besoin = pieceMatch ? pieceMatch.quantite - (pieceMatch.quantite_recue || 0) : 0;
+            return {
+              travailId: t.id,
+              travailCode: t.code,
+              travailTitre: t.titre || t.ascenseur?.adresse || 'Sans titre',
+              besoin,
+              quantite: 0, // Par défaut, rien d'affecté
+            };
+          });
+          
+          initialAffectations[ligne.id] = {
+            ligneId: ligne.id,
+            quantiteRecue: ligne.quantite, // Par défaut, on considère tout reçu
+            affectations,
+            stockQuantite: ligne.quantite, // Par défaut, tout va au stock
+          };
+        });
+        
+        setAffectationsParLigne(initialAffectations);
+      } catch (err) {
+        console.error('Erreur chargement:', err);
+        toast.error('Erreur lors du chargement');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, [commande]);
+
+  // Mettre à jour la quantité affectée à un travail
+  const updateAffectation = (ligneId: string, travailId: string, quantite: number) => {
+    setAffectationsParLigne(prev => {
+      const ligne = prev[ligneId];
+      if (!ligne) return prev;
+      
+      const newAffectations = ligne.affectations.map(a => 
+        a.travailId === travailId ? { ...a, quantite: Math.max(0, quantite) } : a
+      );
+      
+      // Recalculer ce qui reste pour le stock
+      const totalAffecte = newAffectations.reduce((sum, a) => sum + a.quantite, 0);
+      const stockQuantite = Math.max(0, ligne.quantiteRecue - totalAffecte);
+      
+      return {
+        ...prev,
+        [ligneId]: { ...ligne, affectations: newAffectations, stockQuantite }
+      };
+    });
+  };
+
+  // Tout affecter à un travail
+  const affecterTout = (ligneId: string, travailId: string) => {
+    setAffectationsParLigne(prev => {
+      const ligne = prev[ligneId];
+      if (!ligne) return prev;
+      
+      const aff = ligne.affectations.find(a => a.travailId === travailId);
+      if (!aff) return prev;
+      
+      // Mettre le maximum possible sur ce travail
+      const maxPossible = Math.min(aff.besoin, ligne.quantiteRecue);
+      return {
+        ...prev,
+        [ligneId]: {
+          ...ligne,
+          affectations: ligne.affectations.map(a => 
+            a.travailId === travailId ? { ...a, quantite: maxPossible } : { ...a, quantite: 0 }
+          ),
+          stockQuantite: ligne.quantiteRecue - maxPossible
+        }
+      };
+    });
+  };
+
+  // Tout au stock
+  const toutAuStock = (ligneId: string) => {
+    setAffectationsParLigne(prev => {
+      const ligne = prev[ligneId];
+      if (!ligne) return prev;
+      
+      return {
+        ...prev,
+        [ligneId]: {
+          ...ligne,
+          affectations: ligne.affectations.map(a => ({ ...a, quantite: 0 })),
+          stockQuantite: ligne.quantiteRecue
+        }
+      };
+    });
+  };
+
+  // Valider la réception
+  const validerReception = async () => {
+    setIsSaving(true);
+    try {
+      for (const [ligneId, data] of Object.entries(affectationsParLigne)) {
+        const ligne = commande.lignes?.find((l: any) => l.id === ligneId);
+        if (!ligne) continue;
+        
+        await receptionnerLigneCommande(
+          ligneId,
+          data.quantiteRecue,
+          ligne.article_id,
+          ligne.designation,
+          data.affectations.filter(a => a.quantite > 0).map(a => ({ travailId: a.travailId, quantite: a.quantite })),
+          data.stockQuantite
+        );
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ['commandes'] });
+      queryClient.invalidateQueries({ queryKey: ['travaux'] });
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      
+      toast.success('Réception validée avec succès');
+      onSuccess();
+    } catch (err) {
+      console.error('Erreur réception:', err);
+      toast.error('Erreur lors de la réception');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Résumé des affectations
+  const resume = useMemo(() => {
+    const affectationsTravaux: { travailCode: string; designation: string; quantite: number }[] = [];
+    const stockEntrees: { designation: string; quantite: number }[] = [];
+    
+    Object.values(affectationsParLigne).forEach(ligne => {
+      const ligneData = commande.lignes?.find((l: any) => l.id === ligne.ligneId);
+      if (!ligneData) return;
+      
+      ligne.affectations.forEach(aff => {
+        if (aff.quantite > 0) {
+          affectationsTravaux.push({
+            travailCode: aff.travailCode,
+            designation: ligneData.designation,
+            quantite: aff.quantite
+          });
+        }
+      });
+      
+      if (ligne.stockQuantite > 0) {
+        stockEntrees.push({
+          designation: ligneData.designation,
+          quantite: ligne.stockQuantite
+        });
+      }
+    });
+    
+    return { affectationsTravaux, stockEntrees };
+  }, [affectationsParLigne, commande.lignes]);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Card className="w-[800px] max-h-[90vh] overflow-y-auto">
+        <CardBody>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <Package className="w-6 h-6 text-green-400" />
+                Réception de commande
+              </h2>
+              <p className="text-sm text-[var(--text-secondary)]">{commande.code} - {commande.fournisseur}</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+              <X className="w-5 h-5 text-[var(--text-tertiary)]" />
+            </button>
+          </div>
+
+          {isLoading ? (
+            <div className="p-8 text-center">
+              <div className="animate-spin w-8 h-8 border-2 border-green-400 border-t-transparent rounded-full mx-auto mb-4" />
+              <p className="text-[var(--text-muted)]">Analyse des besoins en cours...</p>
+            </div>
+          ) : (
+            <>
+              {/* Liste des lignes avec affectations */}
+              <div className="space-y-4 mb-6">
+                {commande.lignes?.map((ligne: any) => {
+                  const data = affectationsParLigne[ligne.id];
+                  if (!data) return null;
+                  
+                  const hasAffectations = data.affectations.length > 0;
+                  
+                  return (
+                    <div key={ligne.id} className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
+                      {/* Header ligne */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <div className="font-medium text-[var(--text-primary)]">{ligne.designation}</div>
+                          {ligne.reference && <div className="text-xs text-[var(--text-muted)]">Réf: {ligne.reference}</div>}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-green-400">{data.quantiteRecue} reçus</div>
+                          <div className="text-xs text-[var(--text-muted)]">sur {ligne.quantite} commandés</div>
+                        </div>
+                      </div>
+                      
+                      {/* Affectations aux travaux */}
+                      {hasAffectations && (
+                        <div className="mb-3">
+                          <div className="text-xs font-medium text-amber-400 mb-2 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Travaux en attente de cette pièce :
+                          </div>
+                          <div className="space-y-2">
+                            {data.affectations.map(aff => (
+                              <div key={aff.travailId} className="flex items-center gap-3 p-2 bg-[var(--bg-elevated)] rounded-lg">
+                                <input
+                                  type="checkbox"
+                                  checked={aff.quantite > 0}
+                                  onChange={(e) => updateAffectation(ligne.id, aff.travailId, e.target.checked ? Math.min(aff.besoin, data.quantiteRecue) : 0)}
+                                  className="w-4 h-4 rounded border-[var(--border-primary)] text-green-500"
+                                />
+                                <div className="flex-1">
+                                  <span className="font-mono text-xs text-cyan-400">{aff.travailCode}</span>
+                                  <span className="text-sm text-[var(--text-primary)] ml-2">{aff.travailTitre}</span>
+                                  <span className="text-xs text-[var(--text-muted)] ml-2">(besoin: {aff.besoin})</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-[var(--text-muted)]">Affecter:</span>
+                                  <button
+                                    onClick={() => updateAffectation(ligne.id, aff.travailId, Math.max(0, aff.quantite - 1))}
+                                    className="w-6 h-6 rounded bg-[var(--bg-tertiary)] text-[var(--text-secondary)] flex items-center justify-center hover:bg-[var(--bg-hover)]"
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={Math.min(aff.besoin, data.quantiteRecue)}
+                                    value={aff.quantite}
+                                    onChange={(e) => updateAffectation(ligne.id, aff.travailId, parseInt(e.target.value) || 0)}
+                                    className="w-12 text-center font-mono text-sm py-1 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded text-[var(--text-primary)]"
+                                  />
+                                  <button
+                                    onClick={() => updateAffectation(ligne.id, aff.travailId, Math.min(aff.besoin, aff.quantite + 1))}
+                                    className="w-6 h-6 rounded bg-[var(--bg-tertiary)] text-[var(--text-secondary)] flex items-center justify-center hover:bg-[var(--bg-hover)]"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => affecterTout(ligne.id, aff.travailId)}
+                                    className="px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 ml-1"
+                                  >
+                                    Max
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Reste au stock */}
+                      <div className="flex items-center justify-between p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-4 h-4 text-blue-400" />
+                          <span className="text-sm text-[var(--text-primary)]">Ajouter au stock</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-bold text-blue-400">{data.stockQuantite}</span>
+                          {hasAffectations && (
+                            <button
+                              onClick={() => toutAuStock(ligne.id)}
+                              className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30"
+                            >
+                              Tout
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Résumé */}
+              <div className="p-4 bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-primary)] mb-6">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Résumé de la réception</h3>
+                
+                {resume.affectationsTravaux.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-xs text-amber-400 font-medium mb-1">→ Affectations aux travaux :</div>
+                    {resume.affectationsTravaux.map((aff, i) => (
+                      <div key={i} className="text-sm text-[var(--text-secondary)] ml-2">
+                        • {aff.quantite}x {aff.designation} → <span className="font-mono text-cyan-400">{aff.travailCode}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {resume.stockEntrees.length > 0 && (
+                  <div>
+                    <div className="text-xs text-blue-400 font-medium mb-1">→ Entrées en stock :</div>
+                    {resume.stockEntrees.map((entry, i) => (
+                      <div key={i} className="text-sm text-[var(--text-secondary)] ml-2">
+                        • {entry.quantite}x {entry.designation}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {resume.affectationsTravaux.length === 0 && resume.stockEntrees.length === 0 && (
+                  <div className="text-sm text-[var(--text-muted)]">Aucune affectation configurée</div>
+                )}
+              </div>
+              
+              {/* Actions */}
+              <div className="flex gap-3">
+                <Button variant="secondary" className="flex-1" onClick={onClose} disabled={isSaving}>
+                  Annuler
+                </Button>
+                <Button variant="primary" className="flex-1" onClick={validerReception} disabled={isSaving}>
+                  {isSaving ? (
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  Valider la réception
+                </Button>
+              </div>
+            </>
+          )}
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
 // Modal détail commande
 function CommandeDetailModal({
   commande,
@@ -459,12 +941,14 @@ function CommandeDetailModal({
   onEdit,
   onArchive,
   onStatusChange,
+  onReception,
 }: {
   commande: Commande;
   onClose: () => void;
   onEdit: () => void;
   onArchive: () => void;
   onStatusChange: (statut: StatutCommande) => void;
+  onReception: () => void;
 }) {
   const queryClient = useQueryClient();
   const config = STATUT_CONFIG[commande.statut];
@@ -478,6 +962,14 @@ function CommandeDetailModal({
     },
   });
 
+  // Calculer les stats de réception
+  const statsReception = useMemo(() => {
+    if (!commande.lignes) return { total: 0, recues: 0, complete: false };
+    const total = commande.lignes.reduce((sum: number, l: any) => sum + l.quantite, 0);
+    const recues = commande.lignes.reduce((sum: number, l: any) => sum + (l.quantite_recue || 0), 0);
+    return { total, recues, complete: recues >= total };
+  }, [commande.lignes]);
+
   // Workflow des statuts
   const getNextStatuts = (): StatutCommande[] => {
     switch (commande.statut) {
@@ -485,14 +977,17 @@ function CommandeDetailModal({
       case 'en_attente': return ['validee', 'annulee'];
       case 'validee': return ['commandee', 'annulee'];
       case 'commandee': return ['expediee', 'annulee'];
-      case 'expediee': return ['recue'];
+      case 'expediee': return [];
       default: return [];
     }
   };
 
+  // Peut-on réceptionner ?
+  const canReceptionner = ['commandee', 'expediee'].includes(commande.statut);
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <Card className="w-[650px] max-h-[90vh] overflow-y-auto">
+      <Card className="w-[700px] max-h-[90vh] overflow-y-auto">
         <CardBody>
           {/* Header */}
           <div className="flex items-start justify-between mb-6">
@@ -553,31 +1048,73 @@ function CommandeDetailModal({
 
           {/* Lignes */}
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-              <Package className="w-4 h-4" /> Articles ({commande.lignes?.length || 0})
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                <Package className="w-4 h-4" /> Articles ({commande.lignes?.length || 0})
+                {statsReception.recues > 0 && (
+                  <Badge variant={statsReception.complete ? 'green' : 'amber'}>
+                    {statsReception.recues}/{statsReception.total} reçus
+                  </Badge>
+                )}
+              </h3>
+              {canReceptionner && (
+                <Button variant="primary" size="sm" onClick={onReception}>
+                  <Package className="w-4 h-4" /> Réceptionner
+                </Button>
+              )}
+            </div>
+            
             {commande.lignes && commande.lignes.length > 0 ? (
               <div className="space-y-2">
-                {commande.lignes.map((ligne: any) => (
-                  <div key={ligne.id} className="p-3 bg-[var(--bg-tertiary)] rounded-lg flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium text-[var(--text-primary)]">{ligne.designation}</div>
-                      {ligne.reference && <div className="text-xs text-[var(--text-muted)]">Réf: {ligne.reference}</div>}
-                      {ligne.detail && <div className="text-xs text-[var(--text-tertiary)]">{ligne.detail}</div>}
+                {commande.lignes.map((ligne: any) => {
+                  const qteRecue = ligne.quantite_recue || 0;
+                  const isComplete = qteRecue >= ligne.quantite;
+                  const isPartial = qteRecue > 0 && qteRecue < ligne.quantite;
+                  
+                  return (
+                    <div 
+                      key={ligne.id} 
+                      className={`p-3 rounded-lg border ${
+                        isComplete 
+                          ? 'bg-green-500/10 border-green-500/30' 
+                          : isPartial 
+                            ? 'bg-amber-500/10 border-amber-500/30'
+                            : 'bg-[var(--bg-tertiary)] border-[var(--border-primary)]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-[var(--text-primary)]">{ligne.designation}</span>
+                            {isComplete && <Check className="w-4 h-4 text-green-400" />}
+                          </div>
+                          {ligne.reference && <div className="text-xs text-[var(--text-muted)]">Réf: {ligne.reference}</div>}
+                          {ligne.detail && <div className="text-xs text-[var(--text-tertiary)]">{ligne.detail}</div>}
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            {(qteRecue > 0 || commande.statut === 'recue') && (
+                              <span className={`text-xs ${isComplete ? 'text-green-400' : 'text-amber-400'}`}>
+                                {qteRecue} reçu(s)
+                              </span>
+                            )}
+                            <span className="font-mono font-bold text-[var(--text-primary)]">x{ligne.quantite}</span>
+                          </div>
+                          
+                          {commande.statut === 'brouillon' && (
+                            <button
+                              onClick={() => deleteLigneMutation.mutate(ligne.id)}
+                              className="p-1.5 hover:bg-red-500/20 rounded text-red-400"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono font-bold text-[var(--text-primary)]">x{ligne.quantite}</span>
-                      {commande.statut === 'brouillon' && (
-                        <button
-                          onClick={() => deleteLigneMutation.mutate(ligne.id)}
-                          className="p-1.5 hover:bg-red-500/20 rounded text-red-400"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="p-4 text-center text-[var(--text-muted)] text-sm">Aucun article</div>
@@ -628,6 +1165,7 @@ export function CommandesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editCommande, setEditCommande] = useState<Commande | null>(null);
   const [detailCommande, setDetailCommande] = useState<Commande | null>(null);
+  const [receptionCommande, setReceptionCommande] = useState<Commande | null>(null);
   const [archiveItem, setArchiveItem] = useState<Commande | null>(null);
   const queryClient = useQueryClient();
 
@@ -817,14 +1355,18 @@ export function CommandesPage() {
               const config = STATUT_CONFIG[commande.statut];
               const prioriteConfig = PRIORITE_CONFIG[commande.priorite];
               const StatusIcon = config.icon;
+              const nextAction = getNextAction(commande.statut);
+              
               return (
                 <div
                   key={commande.id}
-                  className="p-4 hover:bg-[var(--bg-tertiary)]/30 cursor-pointer transition-colors"
-                  onClick={() => setDetailCommande(commande)}
+                  className="p-4 hover:bg-[var(--bg-tertiary)]/30 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div 
+                      className="flex items-center gap-4 flex-1 cursor-pointer"
+                      onClick={() => setDetailCommande(commande)}
+                    >
                       <div className={`w-12 h-12 rounded-xl bg-${config.color}-500/20 flex items-center justify-center`}>
                         <StatusIcon className={`w-6 h-6 text-${config.color}-400`} />
                       </div>
@@ -841,7 +1383,39 @@ export function CommandesPage() {
                         </div>
                       </div>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-[var(--text-muted)]" />
+                    
+                    {/* Actions rapides */}
+                    <div className="flex items-center gap-2">
+                      {nextAction && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (nextAction.next) {
+                              handleStatusChange(commande, nextAction.next);
+                            } else {
+                              // Pour réceptionner, ouvrir le modal de réception
+                              setReceptionCommande(commande);
+                            }
+                          }}
+                          className={`px-3 py-1.5 text-sm font-medium rounded-lg flex items-center gap-1.5 transition-colors ${
+                            nextAction.next === null
+                              ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                              : 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+                          }`}
+                        >
+                          <ArrowRight className="w-4 h-4" />
+                          {nextAction.label}
+                        </button>
+                      )}
+                      
+                      <ActionDropdown
+                        commande={commande}
+                        onStatusChange={(statut) => handleStatusChange(commande, statut)}
+                        onArchive={() => setArchiveItem(commande)}
+                        onOpenDetail={() => setDetailCommande(commande)}
+                        onReception={() => setReceptionCommande(commande)}
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -865,6 +1439,24 @@ export function CommandesPage() {
           onEdit={() => { setEditCommande(detailCommande); setDetailCommande(null); }}
           onArchive={() => { setArchiveItem(detailCommande); }}
           onStatusChange={(statut) => handleStatusChange(detailCommande, statut)}
+          onReception={() => { setReceptionCommande(detailCommande); setDetailCommande(null); }}
+        />
+      )}
+
+      {receptionCommande && (
+        <ReceptionModal
+          commande={receptionCommande}
+          onClose={() => setReceptionCommande(null)}
+          onSuccess={() => {
+            // Vérifier si toutes les pièces sont reçues
+            const toutRecu = receptionCommande.lignes?.every((l: any) => 
+              (l.quantite_recue || 0) >= l.quantite
+            );
+            if (toutRecu) {
+              handleStatusChange(receptionCommande, 'recue');
+            }
+            setReceptionCommande(null);
+          }}
         />
       )}
 
