@@ -41,11 +41,19 @@ function VehiculeFormModal({
       toast.error('L\'immatriculation est requise');
       return;
     }
+    if (!marque.trim()) {
+      toast.error('La marque est requise');
+      return;
+    }
+    if (!modele.trim()) {
+      toast.error('Le modèle est requis');
+      return;
+    }
     onSave({
       immatriculation: immatriculation.toUpperCase(),
-      marque,
-      modele,
-      annee: parseInt(annee) || null,
+      marque: marque.trim(),
+      modele: modele.trim(),
+      annee: annee ? parseInt(annee) : null,
       kilometrage: parseInt(kilometrage) || 0,
       date_ct: dateCt || null,
       date_assurance: dateAssurance || null,
@@ -90,11 +98,11 @@ function VehiculeFormModal({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-[var(--text-secondary)] mb-1 block">Marque</label>
+                <label className="text-sm text-[var(--text-secondary)] mb-1 block">Marque *</label>
                 <Input value={marque} onChange={e => setMarque(e.target.value)} placeholder="Renault, Peugeot..." />
               </div>
               <div>
-                <label className="text-sm text-[var(--text-secondary)] mb-1 block">Modèle</label>
+                <label className="text-sm text-[var(--text-secondary)] mb-1 block">Modèle *</label>
                 <Input value={modele} onChange={e => setModele(e.target.value)} placeholder="Kangoo, Partner..." />
               </div>
             </div>
@@ -265,7 +273,15 @@ export function VehiculesPage() {
       toast.success('Véhicule créé');
       setShowForm(false);
     },
-    onError: () => toast.error('Erreur lors de la création'),
+    onError: (error: any) => {
+      console.error('Erreur création véhicule:', error);
+      const message = error?.message || 'Erreur lors de la création';
+      if (message.includes('duplicate') || message.includes('unique')) {
+        toast.error('Cette immatriculation existe déjà');
+      } else {
+        toast.error(message);
+      }
+    },
   });
 
   const updateMutation = useMutation({
