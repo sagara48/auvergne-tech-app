@@ -405,12 +405,14 @@ export interface Jour {
   type_jour: TypeJour;
   heures_reference: number;
   heure_depart?: string;
-  lieu_depart: string;
+  lieu_depart?: string;
   heure_arrivee?: string;
   lieu_arrivee?: string;
   duree_pause: string;
   heure_fin?: string;
+  lieu_depart_soir?: string;
   heure_retour?: string;
+  lieu_arrivee_soir?: string;
   heures_travail: number;
   heures_trajet: number;
   heures_rtt: number;

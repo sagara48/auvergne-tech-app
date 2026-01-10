@@ -203,11 +203,11 @@ export function FeuilleHeuresPage() {
 
         {/* Jours */}
         <div className="space-y-4">
-          {semaine?.jours?.map((jour, index) => (
+          {semaine?.jours?.map((jour) => (
             <JourRow
               key={jour.id}
               jour={jour}
-              config={JOURS_CONFIG[index]}
+              config={JOURS_CONFIG[jour.jour_semaine]}
               taches={jour.taches || []}
               onUpdateJour={handleUpdateJour(jour.id)}
               onAddTache={handleAddTache(jour.id)}

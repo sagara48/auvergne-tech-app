@@ -910,8 +910,11 @@ export async function getSemaine(technicienId: string, annee: number, numeroSema
   } else if (error) throw error;
   if (!semaine) return null;
 
-  const totaux = calculerTotaux(semaine.jours || [], semaine.astreintes || []);
-  return { ...semaine, jours: semaine.jours || [], astreintes: semaine.astreintes || [], totaux };
+  // Trier les jours par jour_semaine (0=lundi, 4=vendredi)
+  const joursTries = (semaine.jours || []).sort((a: Jour, b: Jour) => a.jour_semaine - b.jour_semaine);
+  
+  const totaux = calculerTotaux(joursTries, semaine.astreintes || []);
+  return { ...semaine, jours: joursTries, astreintes: semaine.astreintes || [], totaux };
 }
 
 export async function creerSemaine(technicienId: string, annee: number, numeroSemaine: number): Promise<Semaine> {
@@ -990,8 +993,14 @@ export function parseIntervalToHours(interval: string): number {
 function calculerTotaux(jours: Jour[], astreintes: Astreinte[]): TotauxSemaine {
   let heures_travail = 0, heures_trajet = 0, heures_rtt = 0;
   for (const jour of jours) {
-    heures_travail += jour.heures_travail || 0;
-    heures_trajet += jour.heures_trajet || 0;
+    // RTT et congés comptent comme heures de travail normales
+    if (jour.type_jour === 'rtt' || jour.type_jour === 'conge' || jour.type_jour === 'ferie' || jour.type_jour === 'formation') {
+      heures_travail += jour.heures_reference || 0;
+    } else if (jour.type_jour === 'travail') {
+      heures_travail += jour.heures_travail || 0;
+      heures_trajet += jour.heures_trajet || 0;
+    }
+    // Maladie ne compte pas dans les heures de travail
     heures_rtt += jour.heures_rtt || 0;
   }
   let heures_astreinte_rtt = 0, heures_astreinte_paye = 0;
@@ -1000,6 +1009,178 @@ function calculerTotaux(jours: Jour[], astreintes: Astreinte[]): TotauxSemaine {
     if (a.comptage === 'rtt') heures_astreinte_rtt += t; else heures_astreinte_paye += t;
   }
   return { heures_travail, heures_trajet, heures_rtt, heures_astreinte_rtt, heures_astreinte_paye, progression: Math.min(100, (heures_travail / 39) * 100) };
+}
+
+// ================================================
+// SOLDES CONGÉS / RTT
+// ================================================
+
+export interface SoldeConges {
+  id: string;
+  technicien_id: string;
+  annee_conges: number;
+  conges_initial: number;
+  conges_acquis: number;
+  conges_pris: number;
+  conges_solde?: number;
+  rtt_initial: number;
+  rtt_acquis: number;
+  rtt_pris: number;
+  rtt_solde?: number;
+  periode_debut?: string;
+  periode_fin?: string;
+  verrouille: boolean;
+  verrouille_at?: string;
+  verrouille_par?: string;
+  deverrouille_at?: string;
+  deverrouille_par?: string;
+}
+
+// Calculer l'année de congés (mai à avril)
+export function getAnneeConges(date: Date = new Date()): number {
+  const month = date.getMonth() + 1; // 1-12
+  const year = date.getFullYear();
+  // Si entre janvier et avril, on est dans l'année précédente
+  return month < 5 ? year - 1 : year;
+}
+
+export async function getSoldeConges(technicienId: string, anneeConges?: number): Promise<SoldeConges | null> {
+  const annee = anneeConges ?? getAnneeConges();
+  
+  // Essayer de récupérer le solde existant
+  let { data, error } = await supabase
+    .from('soldes_conges')
+    .select('*')
+    .eq('technicien_id', technicienId)
+    .eq('annee_conges', annee)
+    .single();
+
+  if (error && error.code === 'PGRST116') {
+    // Créer le solde s'il n'existe pas
+    const { data: newData, error: insertError } = await supabase
+      .from('soldes_conges')
+      .insert({
+        technicien_id: technicienId,
+        annee_conges: annee,
+        conges_initial: 0,
+        conges_acquis: calculerCongesAcquis(annee),
+        conges_pris: 0,
+        rtt_initial: 0,
+        rtt_acquis: 0,
+        rtt_pris: 0,
+      })
+      .select()
+      .single();
+    
+    if (insertError) {
+      console.warn('Erreur création solde congés:', insertError);
+      return null;
+    }
+    data = newData;
+  } else if (error) {
+    console.warn('Erreur récupération solde congés:', error);
+    return null;
+  }
+
+  if (!data) return null;
+
+  // Calculer les soldes
+  return {
+    ...data,
+    conges_solde: data.conges_initial + data.conges_acquis - data.conges_pris,
+    rtt_solde: data.rtt_initial + data.rtt_acquis - data.rtt_pris,
+  };
+}
+
+export async function updateSoldeConges(
+  technicienId: string, 
+  anneeConges: number, 
+  data: Partial<SoldeConges>
+): Promise<SoldeConges> {
+  const { data: result, error } = await supabase
+    .from('soldes_conges')
+    .update(data)
+    .eq('technicien_id', technicienId)
+    .eq('annee_conges', anneeConges)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  return {
+    ...result,
+    conges_solde: result.conges_initial + result.conges_acquis - result.conges_pris,
+    rtt_solde: result.rtt_initial + result.rtt_acquis - result.rtt_pris,
+  };
+}
+
+// Verrouiller les soldes (validation définitive)
+export async function verrouillerSoldes(
+  technicienId: string, 
+  anneeConges: number,
+  verrouillePar: string
+): Promise<SoldeConges> {
+  const { data: result, error } = await supabase
+    .from('soldes_conges')
+    .update({ 
+      verrouille: true, 
+      verrouille_at: new Date().toISOString(),
+      verrouille_par: verrouillePar 
+    })
+    .eq('technicien_id', technicienId)
+    .eq('annee_conges', anneeConges)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  return {
+    ...result,
+    conges_solde: result.conges_initial + result.conges_acquis - result.conges_pris,
+    rtt_solde: result.rtt_initial + result.rtt_acquis - result.rtt_pris,
+  };
+}
+
+// Déverrouiller les soldes (admin seulement)
+export async function deverrouillerSoldes(
+  technicienId: string, 
+  anneeConges: number,
+  deverrouillePar: string
+): Promise<SoldeConges> {
+  const { data: result, error } = await supabase
+    .from('soldes_conges')
+    .update({ 
+      verrouille: false, 
+      deverrouille_at: new Date().toISOString(),
+      deverrouille_par: deverrouillePar 
+    })
+    .eq('technicien_id', technicienId)
+    .eq('annee_conges', anneeConges)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  return {
+    ...result,
+    conges_solde: result.conges_initial + result.conges_acquis - result.conges_pris,
+    rtt_solde: result.rtt_initial + result.rtt_acquis - result.rtt_pris,
+  };
+}
+
+// Calculer les congés acquis depuis mai (2.08j/mois, max 25j)
+function calculerCongesAcquis(anneeConges: number): number {
+  const now = new Date();
+  const debutPeriode = new Date(anneeConges, 4, 1); // 1er mai
+  
+  if (now < debutPeriode) return 0;
+  
+  const moisEcoules = Math.min(12, 
+    (now.getFullYear() - debutPeriode.getFullYear()) * 12 
+    + now.getMonth() - debutPeriode.getMonth() + 1
+  );
+  
+  return Math.min(25, Math.round(moisEcoules * 2.08 * 100) / 100);
 }
 
 export function getDatesSemaine(annee: number, numeroSemaine: number): Date[] {

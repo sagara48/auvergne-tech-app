@@ -81,77 +81,98 @@ export function JourRow({
           ))}
         </Select>
 
-        {/* Horaires */}
-        <div className="flex items-center gap-3 flex-1">
-          {/* Départ domicile */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
-              <Home className="w-4 h-4 text-green-400" />
+        {/* Horaires - Matin */}
+        <div className="flex items-center gap-2 flex-1">
+          {/* Départ domicile matin */}
+          <div className="flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center" title="Départ matin">
+              <Home className="w-3.5 h-3.5 text-green-400" />
             </div>
             <TimeInput
               value={jour.heure_depart || ''}
               onChange={(e) => onUpdateJour({ heure_depart: e.target.value })}
               disabled={!isTravail || isLoading}
-              className="w-20"
+              className="w-[70px]"
+            />
+            <Input
+              value={jour.lieu_depart || ''}
+              onChange={(e) => onUpdateJour({ lieu_depart: e.target.value })}
+              disabled={!isTravail || isLoading}
+              placeholder="De"
+              className="w-20 text-xs"
             />
           </div>
 
-          {/* Arrivée chantier */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-              <MapPin className="w-4 h-4 text-blue-400" />
+          {/* Arrivée chantier matin */}
+          <div className="flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center" title="Arrivée matin">
+              <MapPin className="w-3.5 h-3.5 text-blue-400" />
             </div>
             <TimeInput
               value={jour.heure_arrivee || ''}
               onChange={(e) => onUpdateJour({ heure_arrivee: e.target.value })}
               disabled={!isTravail || isLoading}
-              className="w-20"
+              className="w-[70px]"
             />
             <Input
               value={jour.lieu_arrivee || ''}
               onChange={(e) => onUpdateJour({ lieu_arrivee: e.target.value })}
               disabled={!isTravail || isLoading}
-              placeholder="Lieu"
-              className="w-28 text-xs"
+              placeholder="À"
+              className="w-20 text-xs"
             />
           </div>
 
           {/* Pause */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <Coffee className="w-4 h-4 text-amber-400" />
+          <div className="flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center" title="Pause">
+              <Coffee className="w-3.5 h-3.5 text-amber-400" />
             </div>
             <TimeInput
               value={jour.duree_pause?.slice(0, 5) || '01:00'}
               onChange={(e) => onUpdateJour({ duree_pause: e.target.value + ':00' })}
               disabled={!isTravail || isLoading}
-              className="w-20"
+              className="w-[70px]"
             />
           </div>
 
-          {/* Fin */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-              <LogOut className="w-4 h-4 text-orange-400" />
+          {/* Départ chantier soir */}
+          <div className="flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-lg bg-orange-500/20 flex items-center justify-center" title="Départ soir">
+              <LogOut className="w-3.5 h-3.5 text-orange-400" />
             </div>
             <TimeInput
               value={jour.heure_fin || ''}
               onChange={(e) => onUpdateJour({ heure_fin: e.target.value })}
               disabled={!isTravail || isLoading}
-              className="w-20"
+              className="w-[70px]"
+            />
+            <Input
+              value={jour.lieu_depart_soir || ''}
+              onChange={(e) => onUpdateJour({ lieu_depart_soir: e.target.value })}
+              disabled={!isTravail || isLoading}
+              placeholder="De"
+              className="w-20 text-xs"
             />
           </div>
 
-          {/* Retour domicile */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <Home className="w-4 h-4 text-purple-400" />
+          {/* Retour domicile soir */}
+          <div className="flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center" title="Arrivée soir">
+              <Home className="w-3.5 h-3.5 text-purple-400" />
             </div>
             <TimeInput
               value={jour.heure_retour || ''}
               onChange={(e) => onUpdateJour({ heure_retour: e.target.value })}
               disabled={!isTravail || isLoading}
-              className="w-20"
+              className="w-[70px]"
+            />
+            <Input
+              value={jour.lieu_arrivee_soir || ''}
+              onChange={(e) => onUpdateJour({ lieu_arrivee_soir: e.target.value })}
+              disabled={!isTravail || isLoading}
+              placeholder="À"
+              className="w-20 text-xs"
             />
           </div>
         </div>
