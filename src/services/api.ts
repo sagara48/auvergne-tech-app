@@ -1,7 +1,12 @@
 import { supabase } from './supabase';
-import type { Semaine, Jour, Tache, Astreinte, SemaineAvecDetails, TotauxSemaine, DashboardStats,
+import type { 
+  Semaine, Jour, Tache, Astreinte, SemaineAvecDetails, TotauxSemaine, DashboardStats,
   Ascenseur, Travaux, MiseEnService, StockArticle, Vehicule, Demande, Document, PlanningEvent, Tournee, Technicien, StockVehicule, StockTransfert, Role, Permission,
-  ChatChannel, ChatMessage, ChatMessageRead } from '@/types';
+  ChatChannel, ChatMessage, ChatMessageRead, Note, NoteCategory,
+  Notification, NotificationPreferences, NotificationType, NotificationPriority,
+  Commande, CommandeLigne, StatutCommande,
+  NFCTag, NFCScan, TypeTagNFC, NFCAction
+} from '@/types';
 import { format, addDays, getWeek, getYear } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -351,10 +356,21 @@ export async function getVehicules(): Promise<Vehicule[]> {
   return data || [];
 }
 
+export async function createVehicule(vehicule: Partial<Vehicule>): Promise<Vehicule> {
+  const { data, error } = await supabase.from('vehicules').insert(vehicule).select('*, technicien:techniciens(*)').single();
+  if (error) throw error;
+  return data;
+}
+
 export async function updateVehicule(id: string, data: Partial<Vehicule>): Promise<Vehicule> {
   const { data: result, error } = await supabase.from('vehicules').update(data).eq('id', id).select().single();
   if (error) throw error;
   return result;
+}
+
+export async function deleteVehicule(id: string): Promise<void> {
+  const { error } = await supabase.from('vehicules').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ================================================
@@ -749,8 +765,6 @@ export async function createDirectChannel(userId1: string, userId2: string): Pro
 // NOTES & MÉMOS
 // ================================================
 
-import type { Note, NoteCategory } from '@/types';
-
 // Types étendus pour Notes
 export interface NoteDossier {
   id: string;
@@ -1053,8 +1067,6 @@ export async function searchNotes(technicienId: string, query: string): Promise<
 // NOTIFICATIONS
 // ================================================
 
-import type { Notification, NotificationPreferences, NotificationType, NotificationPriority } from '@/types';
-
 export async function getNotifications(
   technicienId: string, 
   options: { limit?: number; includeRead?: boolean; includeArchived?: boolean } = {}
@@ -1349,8 +1361,6 @@ export async function getArchiveStats(): Promise<{
 // COMMANDES
 // ================================================
 
-import type { Commande, CommandeLigne, StatutCommande } from '@/types';
-
 export async function getCommandes(includeArchived = false): Promise<Commande[]> {
   try {
     let query = supabase
@@ -1485,8 +1495,6 @@ export async function deleteCommandeLigne(id: string, commandeId: string): Promi
 // ================================================
 // NFC TAGS & SCANS
 // ================================================
-
-import type { NFCTag, NFCScan, TypeTagNFC, NFCAction } from '@/types';
 
 export async function getNFCTags(options?: {
   type?: TypeTagNFC;
