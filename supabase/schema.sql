@@ -253,6 +253,7 @@ CREATE TABLE IF NOT EXISTS travaux (
   client_id UUID REFERENCES clients(id),
   ascenseur_id UUID REFERENCES ascenseurs(id),
   technicien_id UUID REFERENCES techniciens(id),
+  tournee_id UUID REFERENCES tournees(id),  -- Tournée d'entretien associée
   type_travaux TEXT DEFAULT 'reparation',
   priorite TEXT DEFAULT 'normale',
   statut TEXT DEFAULT 'planifie',

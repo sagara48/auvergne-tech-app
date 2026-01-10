@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Calendar, User, Building2, X, Eye, Edit, CalendarCheck, AlertTriangle, Clock, Archive, Trash2, Package, CheckCircle2, Circle, GripVertical, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Search, Calendar, User, Building2, X, Eye, Edit, CalendarCheck, AlertTriangle, Clock, Archive, Trash2, Package, CheckCircle2, Circle, GripVertical, ChevronDown, ChevronUp, ShoppingCart, Camera, XCircle, AlertOctagon, MessageSquare, Route } from 'lucide-react';
 import { Button, Card, CardBody, Badge, ProgressBar, Input, Select } from '@/components/ui';
-import { getTravaux, updateTravaux, createTravaux, getAscenseurs, archiveTravaux, getStockArticles } from '@/services/api';
+import { getTravaux, updateTravaux, createTravaux, getAscenseurs, archiveTravaux, getStockArticles, createStockMouvement, getTournees } from '@/services/api';
 import { supabase } from '@/services/supabase';
+import { usePanierStore } from '@/stores/panierStore';
 import { ContextChat } from './ChatPage';
 import { ContextNotes } from './NotesPage';
 import { ArchiveModal } from './ArchivesPage';
-import type { Travaux, StatutTravaux, Priorite, StockArticle } from '@/types';
+import { TravauxFormModal } from './TravauxFormModal';
+import type { Travaux, StatutTravaux, Priorite, StockArticle, Tournee } from '@/types';
 import { format, parseISO, differenceInDays, isAfter, isBefore, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -39,27 +41,33 @@ const TYPE_TRAVAUX = [
 ];
 
 const STATUT_TACHE = [
-  { value: 'a_faire', label: 'À faire', color: 'gray' },
-  { value: 'en_cours', label: 'En cours', color: 'amber' },
-  { value: 'termine', label: 'Terminé', color: 'green' },
+  { value: 'a_faire', label: 'À faire', color: 'gray', icon: Circle },
+  { value: 'en_cours', label: 'En cours', color: 'amber', icon: Clock },
+  { value: 'termine', label: 'Terminé', color: 'green', icon: CheckCircle2 },
+  { value: 'non_conforme', label: 'Non conforme', color: 'red', icon: AlertOctagon },
 ];
 
 // Types pour tâches et pièces
 interface TacheForm {
   id: string;
   description: string;
-  statut: 'a_faire' | 'en_cours' | 'termine';
+  statut: 'a_faire' | 'en_cours' | 'termine' | 'non_conforme';
   ordre: number;
+  remarque?: string;
+  photos?: string[];  // URLs des photos (base64 ou URLs)
 }
 
 interface PieceForm {
   id: string;
   type: 'stock' | 'manuel';
+  source: 'stock' | 'commande';  // Pièce en stock ou à commander
   article_id?: string;
   article?: StockArticle;
   designation: string;
   reference?: string;
   quantite: number;
+  stock_disponible?: number;  // Stock disponible pour comparaison
+  consommee?: boolean;  // Pièce déjà consommée du stock
 }
 
 // Fonction pour calculer l'urgence de la date butoir
@@ -102,572 +110,6 @@ function DateButoirBadge({ dateButoir, statut }: { dateButoir?: string; statut: 
       <Icon className="w-3 h-3" />
       {status.label}
     </span>
-  );
-}
-
-// Modal création/édition avec tâches et pièces
-function TravauxFormModal({ travaux, onClose, onSave }: { travaux?: Travaux; onClose: () => void; onSave: (data: Partial<Travaux>) => void }) {
-  const [form, setForm] = useState({
-    titre: travaux?.titre || '',
-    description: travaux?.description || '',
-    type_travaux: travaux?.type_travaux || 'reparation',
-    priorite: travaux?.priorite || 'normale',
-    statut: travaux?.statut || 'planifie',
-    client_id: travaux?.client_id || '',
-    ascenseur_id: travaux?.ascenseur_id || '',
-    technicien_id: travaux?.technicien_id || '',
-    date_butoir: travaux?.date_butoir || '',
-    devis_montant: travaux?.devis_montant || '',
-  });
-
-  // Tâches
-  const [taches, setTaches] = useState<TacheForm[]>(() => {
-    if (travaux?.taches && Array.isArray(travaux.taches)) {
-      return travaux.taches.map((t: any, i: number) => ({
-        id: t.id || `tache-${Date.now()}-${i}`,
-        description: t.description || '',
-        statut: t.statut || 'a_faire',
-        ordre: t.ordre || i,
-      }));
-    }
-    return [];
-  });
-  const [newTache, setNewTache] = useState('');
-
-  // Pièces
-  const [pieces, setPieces] = useState<PieceForm[]>(() => {
-    if (travaux?.pieces && Array.isArray(travaux.pieces)) {
-      return travaux.pieces.map((p: any, i: number) => ({
-        id: p.id || `piece-${Date.now()}-${i}`,
-        type: p.article_id ? 'stock' : 'manuel',
-        article_id: p.article_id,
-        designation: p.designation || '',
-        reference: p.reference || '',
-        quantite: p.quantite || 1,
-      }));
-    }
-    return [];
-  });
-  const [showPieceForm, setShowPieceForm] = useState(false);
-  const [pieceMode, setPieceMode] = useState<'stock' | 'manuel'>('stock');
-  const [pieceSearch, setPieceSearch] = useState('');
-  const [newPiece, setNewPiece] = useState({ designation: '', reference: '', quantite: 1 });
-
-  // Sections dépliables
-  const [showTaches, setShowTaches] = useState(true);
-  const [showPieces, setShowPieces] = useState(true);
-
-  const { data: clients } = useQuery({
-    queryKey: ['clients'],
-    queryFn: async () => {
-      const { data } = await supabase.from('clients').select('*').eq('actif', true).order('raison_sociale');
-      return data || [];
-    },
-  });
-
-  const { data: ascenseurs } = useQuery({ queryKey: ['ascenseurs'], queryFn: getAscenseurs });
-
-  const { data: techniciens } = useQuery({
-    queryKey: ['techniciens'],
-    queryFn: async () => {
-      const { data } = await supabase.from('techniciens').select('*, role:roles(*)').eq('actif', true).order('nom');
-      return data || [];
-    },
-  });
-
-  const { data: stockArticles } = useQuery({
-    queryKey: ['stock-articles'],
-    queryFn: getStockArticles,
-  });
-
-  const techs = techniciens?.filter(t => t.role?.code === 'technicien' || t.role?.code === 'chef_equipe') || [];
-  const filteredAscenseurs = form.client_id ? ascenseurs?.filter(a => a.client_id === form.client_id) : ascenseurs;
-
-  // Filtrer les articles pour la recherche
-  const filteredArticles = stockArticles?.filter(a => 
-    pieceSearch && (
-      a.designation.toLowerCase().includes(pieceSearch.toLowerCase()) ||
-      a.reference?.toLowerCase().includes(pieceSearch.toLowerCase())
-    )
-  ).slice(0, 10) || [];
-
-  // Ajouter une tâche
-  const addTache = () => {
-    if (!newTache.trim()) return;
-    setTaches([...taches, {
-      id: `tache-${Date.now()}`,
-      description: newTache.trim(),
-      statut: 'a_faire',
-      ordre: taches.length,
-    }]);
-    setNewTache('');
-  };
-
-  // Supprimer une tâche
-  const removeTache = (id: string) => {
-    setTaches(taches.filter(t => t.id !== id));
-  };
-
-  // Changer le statut d'une tâche
-  const updateTacheStatut = (id: string, statut: TacheForm['statut']) => {
-    setTaches(taches.map(t => t.id === id ? { ...t, statut } : t));
-  };
-
-  // Ajouter une pièce depuis le stock
-  const addPieceFromStock = (article: StockArticle) => {
-    // Vérifier si déjà ajoutée
-    if (pieces.some(p => p.article_id === article.id)) {
-      toast.error('Cette pièce est déjà dans la liste');
-      return;
-    }
-    setPieces([...pieces, {
-      id: `piece-${Date.now()}`,
-      type: 'stock',
-      article_id: article.id,
-      article,
-      designation: article.designation,
-      reference: article.reference || '',
-      quantite: 1,
-    }]);
-    setPieceSearch('');
-    setShowPieceForm(false);
-  };
-
-  // Ajouter une pièce manuelle
-  const addPieceManuelle = () => {
-    if (!newPiece.designation.trim()) {
-      toast.error('La désignation est requise');
-      return;
-    }
-    setPieces([...pieces, {
-      id: `piece-${Date.now()}`,
-      type: 'manuel',
-      designation: newPiece.designation.trim(),
-      reference: newPiece.reference.trim(),
-      quantite: newPiece.quantite || 1,
-    }]);
-    setNewPiece({ designation: '', reference: '', quantite: 1 });
-    setShowPieceForm(false);
-  };
-
-  // Supprimer une pièce
-  const removePiece = (id: string) => {
-    setPieces(pieces.filter(p => p.id !== id));
-  };
-
-  // Modifier la quantité d'une pièce
-  const updatePieceQuantite = (id: string, quantite: number) => {
-    setPieces(pieces.map(p => p.id === id ? { ...p, quantite: Math.max(1, quantite) } : p));
-  };
-
-  // Calculer la progression basée sur les tâches
-  const calculerProgression = () => {
-    if (taches.length === 0) return 0;
-    const terminees = taches.filter(t => t.statut === 'termine').length;
-    return Math.round((terminees / taches.length) * 100);
-  };
-
-  const handleSubmit = () => {
-    if (!form.titre) {
-      toast.error('Le titre est requis');
-      return;
-    }
-    onSave({
-      ...form,
-      devis_montant: form.devis_montant ? parseFloat(form.devis_montant as string) : undefined,
-      date_butoir: form.date_butoir || null,
-      taches: taches.map(t => ({
-        description: t.description,
-        statut: t.statut,
-        ordre: t.ordre,
-      })),
-      pieces: pieces.map(p => ({
-        article_id: p.article_id,
-        designation: p.designation,
-        reference: p.reference,
-        quantite: p.quantite,
-      })),
-      progression: calculerProgression(),
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <Card className="w-[700px] max-h-[90vh] overflow-y-auto">
-        <CardBody>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-[var(--text-primary)]">{travaux ? 'Modifier le travaux' : 'Nouveau travaux'}</h2>
-            <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
-              <X className="w-5 h-5 text-[var(--text-tertiary)]" />
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            {/* Informations de base */}
-            <div>
-              <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Titre *</label>
-              <Input value={form.titre} onChange={e => setForm({ ...form, titre: e.target.value })} placeholder="Ex: Remplacement variateur" />
-            </div>
-
-            <div>
-              <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Description</label>
-              <textarea
-                value={form.description}
-                onChange={e => setForm({ ...form, description: e.target.value })}
-                className="w-full px-4 py-3 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] placeholder-dark-500 focus:outline-none focus:border-purple-500 resize-none"
-                rows={2}
-                placeholder="Détails du travaux..."
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Type de travaux</label>
-                <Select value={form.type_travaux} onChange={e => setForm({ ...form, type_travaux: e.target.value as any })}>
-                  {TYPE_TRAVAUX.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Priorité</label>
-                <Select value={form.priorite} onChange={e => setForm({ ...form, priorite: e.target.value as any })}>
-                  {Object.entries(PRIORITE_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Client</label>
-                <Select value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value, ascenseur_id: '' })}>
-                  <option value="">Sélectionner...</option>
-                  {clients?.map(c => <option key={c.id} value={c.id}>{c.raison_sociale}</option>)}
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Ascenseur</label>
-                <Select value={form.ascenseur_id} onChange={e => setForm({ ...form, ascenseur_id: e.target.value })}>
-                  <option value="">Sélectionner...</option>
-                  {filteredAscenseurs?.map(a => <option key={a.id} value={a.id}>{a.code} - {a.adresse}</option>)}
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Technicien assigné</label>
-                <Select value={form.technicien_id} onChange={e => setForm({ ...form, technicien_id: e.target.value })}>
-                  <option value="">Non assigné</option>
-                  {techs.map(t => <option key={t.id} value={t.id}>{t.prenom} {t.nom}</option>)}
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Date butoir</label>
-                <input
-                  type="date"
-                  value={form.date_butoir}
-                  onChange={e => setForm({ ...form, date_butoir: e.target.value })}
-                  className="w-full px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] text-sm focus:outline-none focus:border-purple-500"
-                />
-              </div>
-            </div>
-
-            {travaux && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Statut</label>
-                  <Select value={form.statut} onChange={e => setForm({ ...form, statut: e.target.value as any })}>
-                    {Object.entries(STATUT_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Montant devis (€)</label>
-                  <Input type="number" step="0.01" value={form.devis_montant} onChange={e => setForm({ ...form, devis_montant: e.target.value })} placeholder="0.00" />
-                </div>
-              </div>
-            )}
-
-            {/* Section Tâches */}
-            <div className="border border-[var(--border-primary)] rounded-xl overflow-hidden">
-              <button
-                onClick={() => setShowTaches(!showTaches)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-400" />
-                  <span className="font-medium text-[var(--text-primary)]">Tâches à réaliser</span>
-                  <Badge variant="gray">{taches.length}</Badge>
-                  {taches.length > 0 && (
-                    <span className="text-xs text-[var(--text-tertiary)]">
-                      ({calculerProgression()}% terminé)
-                    </span>
-                  )}
-                </div>
-                {showTaches ? <ChevronUp className="w-4 h-4 text-[var(--text-tertiary)]" /> : <ChevronDown className="w-4 h-4 text-[var(--text-tertiary)]" />}
-              </button>
-
-              {showTaches && (
-                <div className="p-4 space-y-3">
-                  {/* Liste des tâches */}
-                  {taches.length > 0 && (
-                    <div className="space-y-2">
-                      {taches.map((tache, index) => (
-                        <div 
-                          key={tache.id} 
-                          className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                            tache.statut === 'termine' 
-                              ? 'bg-green-500/10 border-green-500/30' 
-                              : tache.statut === 'en_cours'
-                              ? 'bg-amber-500/10 border-amber-500/30'
-                              : 'bg-[var(--bg-tertiary)] border-[var(--border-secondary)]'
-                          }`}
-                        >
-                          <span className="text-xs text-[var(--text-muted)] w-5">{index + 1}.</span>
-                          
-                          <button
-                            onClick={() => {
-                              const nextStatut = tache.statut === 'a_faire' ? 'en_cours' : tache.statut === 'en_cours' ? 'termine' : 'a_faire';
-                              updateTacheStatut(tache.id, nextStatut);
-                            }}
-                            className="flex-shrink-0"
-                          >
-                            {tache.statut === 'termine' ? (
-                              <CheckCircle2 className="w-5 h-5 text-green-400" />
-                            ) : tache.statut === 'en_cours' ? (
-                              <Clock className="w-5 h-5 text-amber-400" />
-                            ) : (
-                              <Circle className="w-5 h-5 text-[var(--text-muted)]" />
-                            )}
-                          </button>
-                          
-                          <span className={`flex-1 text-sm ${tache.statut === 'termine' ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
-                            {tache.description}
-                          </span>
-                          
-                          <Select
-                            value={tache.statut}
-                            onChange={e => updateTacheStatut(tache.id, e.target.value as TacheForm['statut'])}
-                            className="w-28 text-xs py-1"
-                          >
-                            {STATUT_TACHE.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                          </Select>
-                          
-                          <button
-                            onClick={() => removeTache(tache.id)}
-                            className="p-1.5 hover:bg-red-500/20 rounded-lg text-[var(--text-muted)] hover:text-red-400"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Ajouter une tâche */}
-                  <div className="flex gap-2">
-                    <Input
-                      value={newTache}
-                      onChange={e => setNewTache(e.target.value)}
-                      placeholder="Nouvelle tâche..."
-                      className="flex-1"
-                      onKeyDown={e => e.key === 'Enter' && addTache()}
-                    />
-                    <Button variant="secondary" onClick={addTache} disabled={!newTache.trim()}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Section Pièces */}
-            <div className="border border-[var(--border-primary)] rounded-xl overflow-hidden">
-              <button
-                onClick={() => setShowPieces(!showPieces)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Package className="w-4 h-4 text-blue-400" />
-                  <span className="font-medium text-[var(--text-primary)]">Pièces nécessaires</span>
-                  <Badge variant="gray">{pieces.length}</Badge>
-                </div>
-                {showPieces ? <ChevronUp className="w-4 h-4 text-[var(--text-tertiary)]" /> : <ChevronDown className="w-4 h-4 text-[var(--text-tertiary)]" />}
-              </button>
-
-              {showPieces && (
-                <div className="p-4 space-y-3">
-                  {/* Liste des pièces */}
-                  {pieces.length > 0 && (
-                    <div className="space-y-2">
-                      {pieces.map((piece) => (
-                        <div 
-                          key={piece.id} 
-                          className="flex items-center gap-3 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]"
-                        >
-                          <Package className={`w-4 h-4 flex-shrink-0 ${piece.type === 'stock' ? 'text-blue-400' : 'text-amber-400'}`} />
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-[var(--text-primary)] truncate">
-                              {piece.designation}
-                            </div>
-                            {piece.reference && (
-                              <div className="text-xs text-[var(--text-muted)]">
-                                Réf: {piece.reference}
-                              </div>
-                            )}
-                          </div>
-                          
-                          <Badge variant={piece.type === 'stock' ? 'blue' : 'amber'} className="text-xs">
-                            {piece.type === 'stock' ? 'Stock' : 'Manuel'}
-                          </Badge>
-                          
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => updatePieceQuantite(piece.id, piece.quantite - 1)}
-                              className="p-1 hover:bg-[var(--bg-hover)] rounded"
-                              disabled={piece.quantite <= 1}
-                            >
-                              <span className="text-[var(--text-tertiary)]">−</span>
-                            </button>
-                            <span className="w-8 text-center text-sm font-medium text-[var(--text-primary)]">
-                              {piece.quantite}
-                            </span>
-                            <button
-                              onClick={() => updatePieceQuantite(piece.id, piece.quantite + 1)}
-                              className="p-1 hover:bg-[var(--bg-hover)] rounded"
-                            >
-                              <span className="text-[var(--text-tertiary)]">+</span>
-                            </button>
-                          </div>
-                          
-                          <button
-                            onClick={() => removePiece(piece.id)}
-                            className="p-1.5 hover:bg-red-500/20 rounded-lg text-[var(--text-muted)] hover:text-red-400"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Formulaire ajout pièce */}
-                  {showPieceForm ? (
-                    <div className="p-3 bg-[var(--bg-elevated)] rounded-lg border border-[var(--border-secondary)] space-y-3">
-                      {/* Toggle mode */}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setPieceMode('stock')}
-                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                            pieceMode === 'stock'
-                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                              : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                          }`}
-                        >
-                          Depuis le stock
-                        </button>
-                        <button
-                          onClick={() => setPieceMode('manuel')}
-                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                            pieceMode === 'manuel'
-                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                              : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                          }`}
-                        >
-                          Saisie manuelle
-                        </button>
-                      </div>
-
-                      {pieceMode === 'stock' ? (
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                            <Input
-                              value={pieceSearch}
-                              onChange={e => setPieceSearch(e.target.value)}
-                              placeholder="Rechercher une pièce..."
-                              className="pl-10"
-                            />
-                          </div>
-                          {filteredArticles.length > 0 && (
-                            <div className="max-h-40 overflow-y-auto rounded-lg border border-[var(--border-secondary)]">
-                              {filteredArticles.map(article => (
-                                <button
-                                  key={article.id}
-                                  onClick={() => addPieceFromStock(article)}
-                                  className="w-full flex items-center justify-between px-3 py-2 hover:bg-[var(--bg-hover)] transition-colors text-left"
-                                >
-                                  <div>
-                                    <div className="text-sm text-[var(--text-primary)]">{article.designation}</div>
-                                    <div className="text-xs text-[var(--text-muted)]">
-                                      {article.reference && `Réf: ${article.reference} • `}
-                                      Stock: {article.quantite_stock}
-                                    </div>
-                                  </div>
-                                  <Plus className="w-4 h-4 text-[var(--text-tertiary)]" />
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          {pieceSearch && filteredArticles.length === 0 && (
-                            <p className="text-sm text-[var(--text-muted)] text-center py-2">
-                              Aucun article trouvé
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <Input
-                            value={newPiece.designation}
-                            onChange={e => setNewPiece({ ...newPiece, designation: e.target.value })}
-                            placeholder="Désignation *"
-                          />
-                          <div className="grid grid-cols-2 gap-2">
-                            <Input
-                              value={newPiece.reference}
-                              onChange={e => setNewPiece({ ...newPiece, reference: e.target.value })}
-                              placeholder="Référence (optionnel)"
-                            />
-                            <Input
-                              type="number"
-                              min="1"
-                              value={newPiece.quantite}
-                              onChange={e => setNewPiece({ ...newPiece, quantite: parseInt(e.target.value) || 1 })}
-                              placeholder="Quantité"
-                            />
-                          </div>
-                          <Button variant="primary" size="sm" className="w-full" onClick={addPieceManuelle}>
-                            <Plus className="w-4 h-4" /> Ajouter la pièce
-                          </Button>
-                        </div>
-                      )}
-
-                      <button
-                        onClick={() => setShowPieceForm(false)}
-                        className="w-full text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                      >
-                        Annuler
-                      </button>
-                    </div>
-                  ) : (
-                    <Button variant="secondary" className="w-full" onClick={() => setShowPieceForm(true)}>
-                      <Plus className="w-4 h-4" /> Ajouter une pièce
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Boutons actions */}
-            <div className="flex gap-3 pt-4 border-t border-[var(--border-primary)]">
-              <Button variant="secondary" className="flex-1" onClick={onClose}>Annuler</Button>
-              <Button variant="primary" className="flex-1" onClick={handleSubmit}>
-                {travaux ? 'Enregistrer' : 'Créer le travaux'}
-              </Button>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
-    </div>
   );
 }
 
@@ -759,6 +201,12 @@ function TravauxDetailModal({
                 <div><span className="text-[var(--text-tertiary)] text-sm">Technicien:</span> <span className="text-[var(--text-primary)]">{travaux.technicien.prenom} {travaux.technicien.nom}</span></div>
               </div>
             )}
+            {travaux.tournee && (
+              <div className="flex items-center gap-3">
+                <Route className="w-4 h-4 text-green-400" />
+                <div><span className="text-[var(--text-tertiary)] text-sm">Tournée:</span> <span className="text-[var(--text-primary)]">{travaux.tournee.nom} ({travaux.tournee.secteur})</span></div>
+              </div>
+            )}
             {travaux.date_butoir && !butoirStatus?.urgent && (
               <div className="flex items-center gap-3">
                 <Calendar className="w-4 h-4 text-[var(--text-muted)]" />
@@ -797,29 +245,63 @@ function TravauxDetailModal({
               </div>
               <div className="space-y-2">
                 {travaux.taches.map((tache: any, index: number) => (
-                  <div 
-                    key={index} 
-                    className={`flex items-center gap-3 p-2 rounded-lg ${
-                      tache.statut === 'termine' 
-                        ? 'bg-green-500/10' 
-                        : tache.statut === 'en_cours'
-                        ? 'bg-amber-500/10'
-                        : 'bg-[var(--bg-elevated)]'
-                    }`}
-                  >
-                    {tache.statut === 'termine' ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-400" />
-                    ) : tache.statut === 'en_cours' ? (
-                      <Clock className="w-4 h-4 text-amber-400" />
-                    ) : (
-                      <Circle className="w-4 h-4 text-[var(--text-muted)]" />
+                  <div key={index} className="rounded-lg overflow-hidden border border-[var(--border-secondary)]">
+                    <div 
+                      className={`flex items-center gap-3 p-2 ${
+                        tache.statut === 'termine' 
+                          ? 'bg-green-500/10' 
+                          : tache.statut === 'en_cours'
+                          ? 'bg-amber-500/10'
+                          : tache.statut === 'non_conforme'
+                          ? 'bg-red-500/10'
+                          : 'bg-[var(--bg-elevated)]'
+                      }`}
+                    >
+                      {tache.statut === 'termine' ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-400" />
+                      ) : tache.statut === 'en_cours' ? (
+                        <Clock className="w-4 h-4 text-amber-400" />
+                      ) : tache.statut === 'non_conforme' ? (
+                        <AlertOctagon className="w-4 h-4 text-red-400" />
+                      ) : (
+                        <Circle className="w-4 h-4 text-[var(--text-muted)]" />
+                      )}
+                      <span className={`text-sm flex-1 ${tache.statut === 'termine' ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+                        {tache.description}
+                      </span>
+                      <Badge variant={
+                        tache.statut === 'termine' ? 'green' : 
+                        tache.statut === 'en_cours' ? 'amber' : 
+                        tache.statut === 'non_conforme' ? 'red' : 'gray'
+                      } className="text-xs">
+                        {tache.statut === 'termine' ? 'Terminé' : 
+                         tache.statut === 'en_cours' ? 'En cours' : 
+                         tache.statut === 'non_conforme' ? 'Non conforme' : 'À faire'}
+                      </Badge>
+                    </div>
+                    {/* Remarque et photos */}
+                    {(tache.remarque || (tache.photos && tache.photos.length > 0)) && (
+                      <div className="px-3 py-2 bg-[var(--bg-elevated)] border-t border-[var(--border-secondary)]">
+                        {tache.remarque && (
+                          <p className="text-xs text-[var(--text-tertiary)] mb-2">
+                            <MessageSquare className="w-3 h-3 inline mr-1" />
+                            {tache.remarque}
+                          </p>
+                        )}
+                        {tache.photos && tache.photos.length > 0 && (
+                          <div className="flex gap-1 flex-wrap">
+                            {tache.photos.map((photo: string, photoIdx: number) => (
+                              <img 
+                                key={photoIdx}
+                                src={photo} 
+                                alt={`Photo ${photoIdx + 1}`} 
+                                className="w-12 h-12 object-cover rounded border border-[var(--border-secondary)]"
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
-                    <span className={`text-sm flex-1 ${tache.statut === 'termine' ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
-                      {tache.description}
-                    </span>
-                    <Badge variant={tache.statut === 'termine' ? 'green' : tache.statut === 'en_cours' ? 'amber' : 'gray'} className="text-xs">
-                      {tache.statut === 'termine' ? 'Terminé' : tache.statut === 'en_cours' ? 'En cours' : 'À faire'}
-                    </Badge>
                   </div>
                 ))}
               </div>
@@ -837,16 +319,29 @@ function TravauxDetailModal({
                 {travaux.pieces.map((piece: any, index: number) => (
                   <div 
                     key={index} 
-                    className="flex items-center gap-3 p-2 rounded-lg bg-[var(--bg-elevated)]"
+                    className={`flex items-center gap-3 p-2 rounded-lg ${
+                      piece.consommee 
+                        ? 'bg-green-500/10 border border-green-500/30' 
+                        : piece.source === 'commande'
+                        ? 'bg-amber-500/10 border border-amber-500/30'
+                        : 'bg-[var(--bg-elevated)] border border-[var(--border-secondary)]'
+                    }`}
                   >
-                    <Package className={`w-4 h-4 ${piece.article_id ? 'text-blue-400' : 'text-amber-400'}`} />
+                    <Package className={`w-4 h-4 ${
+                      piece.consommee ? 'text-green-400' :
+                      piece.source === 'commande' ? 'text-amber-400' : 'text-blue-400'
+                    }`} />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-[var(--text-primary)] truncate">{piece.designation}</div>
                       {piece.reference && <div className="text-xs text-[var(--text-muted)]">Réf: {piece.reference}</div>}
                     </div>
-                    <Badge variant={piece.article_id ? 'blue' : 'amber'} className="text-xs">
-                      {piece.article_id ? 'Stock' : 'Manuel'}
-                    </Badge>
+                    {piece.consommee ? (
+                      <Badge variant="green" className="text-xs">Consommé</Badge>
+                    ) : piece.source === 'commande' ? (
+                      <Badge variant="amber" className="text-xs">À commander</Badge>
+                    ) : (
+                      <Badge variant="blue" className="text-xs">En stock</Badge>
+                    )}
                     <span className="text-sm font-medium text-[var(--text-primary)]">×{piece.quantite}</span>
                   </div>
                 ))}

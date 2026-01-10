@@ -130,8 +130,10 @@ export interface Tournee {
 export interface TravauxTache {
   id?: string;
   description: string;
-  statut: 'a_faire' | 'en_cours' | 'termine';
+  statut: 'a_faire' | 'en_cours' | 'termine' | 'non_conforme';
   ordre: number;
+  remarque?: string;
+  photos?: string[];
 }
 
 export interface TravauxPiece {
@@ -140,6 +142,8 @@ export interface TravauxPiece {
   designation: string;
   reference?: string;
   quantite: number;
+  source?: 'stock' | 'commande';
+  consommee?: boolean;
 }
 
 export interface Travaux {
@@ -150,6 +154,7 @@ export interface Travaux {
   client_id?: string;
   ascenseur_id?: string;
   technicien_id?: string;
+  tournee_id?: string;
   type_travaux: TypeTravaux;
   priorite: Priorite;
   statut: StatutTravaux;
@@ -163,6 +168,7 @@ export interface Travaux {
   client?: Client;
   ascenseur?: Ascenseur;
   technicien?: Technicien;
+  tournee?: Tournee;
 }
 
 export interface MiseEnService {

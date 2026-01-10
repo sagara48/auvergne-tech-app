@@ -56,7 +56,7 @@ export async function updateAscenseur(id: string, data: Partial<Ascenseur>): Pro
 export async function getTravaux(includeArchived = false): Promise<Travaux[]> {
   let query = supabase
     .from('travaux')
-    .select('*, client:clients(*), technicien:techniciens(*), ascenseur:ascenseurs(*)')
+    .select('*, client:clients(*), technicien:techniciens(*), ascenseur:ascenseurs(*), tournee:tournees(*)')
     .order('created_at', { ascending: false });
   
   if (!includeArchived) {
