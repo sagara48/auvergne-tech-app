@@ -751,10 +751,91 @@ export async function createDirectChannel(userId1: string, userId2: string): Pro
 
 import type { Note, NoteCategory } from '@/types';
 
+// Types étendus pour Notes
+export interface NoteDossier {
+  id: string;
+  nom: string;
+  description?: string;
+  couleur: string;
+  icone: string;
+  ordre: number;
+  parent_id?: string;
+  created_at: string;
+}
+
+export interface NoteCommentaire {
+  id: string;
+  note_id: string;
+  technicien_id: string;
+  contenu: string;
+  created_at: string;
+  technicien?: { id: string; nom: string; prenom: string; avatar_initiales: string };
+}
+
+export interface NotePieceJointe {
+  id: string;
+  note_id: string;
+  nom: string;
+  fichier_url: string;
+  fichier_type?: string;
+  fichier_taille?: number;
+  created_at: string;
+}
+
+export interface ChecklistItem {
+  id: string;
+  texte: string;
+  fait: boolean;
+  ordre: number;
+}
+
+// Fonctions Dossiers Notes
+export async function getNotesDossiers(): Promise<NoteDossier[]> {
+  const { data, error } = await supabase
+    .from('notes_dossiers')
+    .select('*')
+    .order('ordre');
+  if (error) {
+    console.warn('Table notes_dossiers non disponible');
+    return [];
+  }
+  return data || [];
+}
+
+export async function createNoteDossier(dossier: Partial<NoteDossier>): Promise<NoteDossier> {
+  const { data, error } = await supabase
+    .from('notes_dossiers')
+    .insert(dossier)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateNoteDossier(id: string, dossier: Partial<NoteDossier>): Promise<NoteDossier> {
+  const { data, error } = await supabase
+    .from('notes_dossiers')
+    .update(dossier)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteNoteDossier(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('notes_dossiers')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Fonctions Notes principales
 export async function getNotes(technicienId: string, includeShared = true): Promise<Note[]> {
   let query = supabase
     .from('notes')
-    .select('*, technicien:techniciens(id, nom, prenom, avatar_initiales), ascenseur:ascenseurs(code, adresse), travaux:travaux(code, titre), client:clients(code, raison_sociale)')
+    .select('*, technicien:techniciens(id, nom, prenom, avatar_initiales), ascenseur:ascenseurs(id, code, adresse), travaux:travaux(code, titre), client:clients(code, raison_sociale), dossier:notes_dossiers(id, nom, couleur)')
     .eq('archive', false)
     .order('epingle', { ascending: false })
     .order('updated_at', { ascending: false });
@@ -773,7 +854,7 @@ export async function getNotes(technicienId: string, includeShared = true): Prom
 export async function getNote(id: string): Promise<Note | null> {
   const { data, error } = await supabase
     .from('notes')
-    .select('*, technicien:techniciens(id, nom, prenom, avatar_initiales), ascenseur:ascenseurs(code, adresse), travaux:travaux(code, titre), client:clients(code, raison_sociale)')
+    .select('*, technicien:techniciens(id, nom, prenom, avatar_initiales), ascenseur:ascenseurs(id, code, adresse), travaux:travaux(code, titre), client:clients(code, raison_sociale), dossier:notes_dossiers(id, nom, couleur)')
     .eq('id', id)
     .single();
   if (error) throw error;
@@ -838,6 +919,110 @@ export async function archiveNote(id: string): Promise<void> {
     .from('notes')
     .update({ archive: true, updated_at: new Date().toISOString() })
     .eq('id', id);
+  if (error) throw error;
+}
+
+// Fonctions Commentaires
+export async function getNoteCommentaires(noteId: string): Promise<NoteCommentaire[]> {
+  const { data, error } = await supabase
+    .from('notes_commentaires')
+    .select('*, technicien:techniciens(id, nom, prenom, avatar_initiales)')
+    .eq('note_id', noteId)
+    .order('created_at', { ascending: true });
+  if (error) return [];
+  return data || [];
+}
+
+export async function createNoteCommentaire(commentaire: { note_id: string; technicien_id: string; contenu: string }): Promise<NoteCommentaire> {
+  const { data, error } = await supabase
+    .from('notes_commentaires')
+    .insert(commentaire)
+    .select('*, technicien:techniciens(id, nom, prenom, avatar_initiales)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteNoteCommentaire(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('notes_commentaires')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Fonctions Pièces jointes
+export async function getNotePiecesJointes(noteId: string): Promise<NotePieceJointe[]> {
+  const { data, error } = await supabase
+    .from('notes_pieces_jointes')
+    .select('*')
+    .eq('note_id', noteId)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return data || [];
+}
+
+export async function uploadNotePieceJointe(noteId: string, file: File, createdBy: string): Promise<NotePieceJointe> {
+  // Upload fichier
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+  const filePath = `notes/${noteId}/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('documents')
+    .upload(filePath, file);
+
+  if (uploadError) throw new Error('Erreur upload fichier');
+
+  const { data: urlData } = supabase.storage
+    .from('documents')
+    .getPublicUrl(filePath);
+
+  // Créer entrée en base
+  const { data, error } = await supabase
+    .from('notes_pieces_jointes')
+    .insert({
+      note_id: noteId,
+      nom: file.name,
+      fichier_url: urlData.publicUrl,
+      fichier_type: file.type,
+      fichier_taille: file.size,
+      created_by: createdBy,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteNotePieceJointe(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('notes_pieces_jointes')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Fonctions Rappels
+export async function getNotesAvecRappel(technicienId: string): Promise<Note[]> {
+  const { data, error } = await supabase
+    .from('notes')
+    .select('*, technicien:techniciens(id, nom, prenom)')
+    .not('rappel_date', 'is', null)
+    .eq('rappel_envoye', false)
+    .eq('archive', false)
+    .or(`technicien_id.eq.${technicienId},partage.eq.true`)
+    .order('rappel_date', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function marquerRappelEnvoye(noteId: string): Promise<void> {
+  const { error } = await supabase
+    .from('notes')
+    .update({ rappel_envoye: true })
+    .eq('id', noteId);
   if (error) throw error;
 }
 
@@ -1720,4 +1905,156 @@ async function affecterPiecesATravailSansMouvement(
     .eq('id', travailId);
   
   if (updateError) throw updateError;
+}
+
+// ================================================
+// GED - GESTION ELECTRONIQUE DES DOCUMENTS
+// ================================================
+
+export interface GedDossier {
+  id: string;
+  nom: string;
+  description?: string;
+  parent_id?: string;
+  couleur: string;
+  icone: string;
+  ordre: number;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  _count?: number;
+}
+
+export async function getGedDossiers(): Promise<GedDossier[]> {
+  const { data, error } = await supabase
+    .from('ged_dossiers')
+    .select('*')
+    .order('ordre', { ascending: true });
+  if (error) {
+    console.warn('Table ged_dossiers non disponible:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+export async function createGedDossier(dossier: Partial<GedDossier>): Promise<GedDossier> {
+  const { data, error } = await supabase
+    .from('ged_dossiers')
+    .insert(dossier)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateGedDossier(id: string, dossier: Partial<GedDossier>): Promise<GedDossier> {
+  const { data, error } = await supabase
+    .from('ged_dossiers')
+    .update(dossier)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteGedDossier(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('ged_dossiers')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function getDocumentsWithDossier(): Promise<Document[]> {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*, dossier_ged:ged_dossiers(id, nom, couleur)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function uploadDocument(file: File, metadata: {
+  nom: string;
+  type_document: string;
+  dossier_id?: string;
+  dossier?: string;
+  ascenseur_id?: string;
+  client_id?: string;
+}): Promise<Document> {
+  // 1. Upload du fichier vers Supabase Storage
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+  const filePath = `documents/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('documents')
+    .upload(filePath, file);
+
+  if (uploadError) {
+    console.error('Erreur upload:', uploadError);
+    throw new Error('Erreur lors de l\'upload du fichier');
+  }
+
+  // 2. Obtenir l'URL publique
+  const { data: urlData } = supabase.storage
+    .from('documents')
+    .getPublicUrl(filePath);
+
+  // 3. Créer l'entrée dans la base
+  const { data, error } = await supabase
+    .from('documents')
+    .insert({
+      nom: metadata.nom || file.name,
+      type_document: metadata.type_document,
+      dossier: metadata.dossier,
+      dossier_id: metadata.dossier_id,
+      ascenseur_id: metadata.ascenseur_id,
+      client_id: metadata.client_id,
+      fichier_nom: file.name,
+      fichier_type: file.type,
+      fichier_taille: file.size,
+      fichier_url: urlData.publicUrl,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  // Récupérer le document pour avoir le chemin du fichier
+  const { data: doc } = await supabase
+    .from('documents')
+    .select('fichier_url')
+    .eq('id', id)
+    .single();
+
+  // Supprimer le fichier du storage si présent
+  if (doc?.fichier_url) {
+    const path = doc.fichier_url.split('/documents/')[1];
+    if (path) {
+      await supabase.storage.from('documents').remove([`documents/${path}`]);
+    }
+  }
+
+  // Supprimer l'entrée de la base
+  const { error } = await supabase
+    .from('documents')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateDocument(id: string, data: Partial<Document>): Promise<Document> {
+  const { data: doc, error } = await supabase
+    .from('documents')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return doc;
 }

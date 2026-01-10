@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DndContext, DragOverlay, useDraggable, useDroppable, DragStartEvent, DragEndEvent, pointerWithin } from '@dnd-kit/core';
 import { 
-  ChevronLeft, ChevronRight, Plus, Hammer, FileCheck, Route, GripVertical, X, Clock, MapPin, User, Eye, Calendar, Building2, 
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, Hammer, FileCheck, Route, GripVertical, X, Clock, MapPin, User, Eye, Calendar, Building2, 
   AlertTriangle, Info, Palmtree, Phone, Trash2, Check, RotateCcw, CalendarPlus, Copy
 } from 'lucide-react';
 import { Button, Card, CardBody, Badge, Select, Input } from '@/components/ui';
@@ -731,6 +731,7 @@ export function PlanningPage() {
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [showConges, setShowConges] = useState(false);
   const [showAstreintes, setShowAstreintes] = useState(false);
+  const [showPanelElements, setShowPanelElements] = useState(true);
   const [createEventDate, setCreateEventDate] = useState<Date>();
   const [createEventTech, setCreateEventTech] = useState<string>();
   const queryClient = useQueryClient();
@@ -900,7 +901,7 @@ export function PlanningPage() {
         </div>
 
         {/* Grille Planning */}
-        <Card className="flex-1 overflow-auto min-h-0 mb-4">
+        <Card className={`flex-1 overflow-auto min-h-0 ${showPanelElements ? 'mb-4' : 'mb-2'}`}>
           <div className="grid grid-cols-[160px_repeat(5,1fr)] min-w-[900px]">
             <div className="p-3 bg-[var(--bg-tertiary)] font-semibold text-sm border-b border-r border-[var(--border-primary)] sticky top-0 z-10">Technicien</div>
             {jours.map((jour, i) => {
@@ -933,67 +934,97 @@ export function PlanningPage() {
           </div>
         </Card>
 
-        {/* Éléments à planifier - En bas, horizontal */}
-        <div className="flex-shrink-0">
-          <div className="text-sm font-semibold text-[var(--text-secondary)] mb-2">📋 Éléments à planifier</div>
-          <div className="grid grid-cols-3 gap-4">
-            {/* Travaux */}
-            <Card className="overflow-hidden">
-              <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Hammer className="w-4 h-4 text-purple-400" />
-                  <span className="text-sm font-medium text-[var(--text-primary)]">Travaux</span>
+        {/* Éléments à planifier - Volet rétractable */}
+        <div className={`flex-shrink-0 transition-all duration-300 ${showPanelElements ? '' : 'h-10 overflow-hidden'}`}>
+          <button 
+            onClick={() => setShowPanelElements(!showPanelElements)}
+            className="w-full flex items-center justify-between p-2 mb-2 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-primary)] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-[var(--text-secondary)]">📋 Éléments à planifier</span>
+              {!showPanelElements && (
+                <div className="flex items-center gap-2 ml-2">
+                  {travauxNonPlanifies && travauxNonPlanifies.length > 0 && (
+                    <Badge variant="purple" className="text-xs">{travauxNonPlanifies.length} travaux</Badge>
+                  )}
+                  {mesNonPlanifiees && mesNonPlanifiees.length > 0 && (
+                    <Badge variant="orange" className="text-xs">{mesNonPlanifiees.length} MES</Badge>
+                  )}
+                  {tournees && tournees.length > 0 && (
+                    <Badge variant="blue" className="text-xs">{tournees.length} tournées</Badge>
+                  )}
                 </div>
-                {travauxNonPlanifies && travauxNonPlanifies.length > 0 && (
-                  <Badge variant="purple">{travauxNonPlanifies.length}</Badge>
-                )}
-              </div>
-              <CardBody className="p-2 max-h-[150px] overflow-y-auto">
-                <div className="space-y-2">
-                  {travauxNonPlanifies?.map(t => <SidebarCard key={t.id} item={t} type="travaux" icon={Hammer} color={TYPE_EVENT_COLORS.travaux} onShowDetail={() => {}} />)}
-                  {!travauxNonPlanifies?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">✓ Tous planifiés</div>}
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {showPanelElements ? (
+                <ChevronDown className="w-5 h-5 text-[var(--text-tertiary)]" />
+              ) : (
+                <ChevronUp className="w-5 h-5 text-[var(--text-tertiary)]" />
+              )}
+            </div>
+          </button>
+          
+          {showPanelElements && (
+            <div className="grid grid-cols-3 gap-4 animate-in slide-in-from-top-2 duration-200">
+              {/* Travaux */}
+              <Card className="overflow-hidden">
+                <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Hammer className="w-4 h-4 text-purple-400" />
+                    <span className="text-sm font-medium text-[var(--text-primary)]">Travaux</span>
+                  </div>
+                  {travauxNonPlanifies && travauxNonPlanifies.length > 0 && (
+                    <Badge variant="purple">{travauxNonPlanifies.length}</Badge>
+                  )}
                 </div>
-              </CardBody>
-            </Card>
+                <CardBody className="p-2 max-h-[150px] overflow-y-auto">
+                  <div className="space-y-2">
+                    {travauxNonPlanifies?.map(t => <SidebarCard key={t.id} item={t} type="travaux" icon={Hammer} color={TYPE_EVENT_COLORS.travaux} onShowDetail={() => {}} />)}
+                    {!travauxNonPlanifies?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">✓ Tous planifiés</div>}
+                  </div>
+                </CardBody>
+              </Card>
 
-            {/* MES */}
-            <Card className="overflow-hidden">
-              <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileCheck className="w-4 h-4 text-orange-400" />
-                  <span className="text-sm font-medium text-[var(--text-primary)]">Mises en service</span>
+              {/* MES */}
+              <Card className="overflow-hidden">
+                <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileCheck className="w-4 h-4 text-orange-400" />
+                    <span className="text-sm font-medium text-[var(--text-primary)]">Mises en service</span>
+                  </div>
+                  {mesNonPlanifiees && mesNonPlanifiees.length > 0 && (
+                    <Badge variant="orange">{mesNonPlanifiees.length}</Badge>
+                  )}
                 </div>
-                {mesNonPlanifiees && mesNonPlanifiees.length > 0 && (
-                  <Badge variant="orange">{mesNonPlanifiees.length}</Badge>
-                )}
-              </div>
-              <CardBody className="p-2 max-h-[150px] overflow-y-auto">
-                <div className="space-y-2">
-                  {mesNonPlanifiees?.map(m => <SidebarCard key={m.id} item={m} type="mes" icon={FileCheck} color={TYPE_EVENT_COLORS.mise_service} onShowDetail={() => {}} />)}
-                  {!mesNonPlanifiees?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">✓ Toutes planifiées</div>}
-                </div>
-              </CardBody>
-            </Card>
+                <CardBody className="p-2 max-h-[150px] overflow-y-auto">
+                  <div className="space-y-2">
+                    {mesNonPlanifiees?.map(m => <SidebarCard key={m.id} item={m} type="mes" icon={FileCheck} color={TYPE_EVENT_COLORS.mise_service} onShowDetail={() => {}} />)}
+                    {!mesNonPlanifiees?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">✓ Toutes planifiées</div>}
+                  </div>
+                </CardBody>
+              </Card>
 
-            {/* Tournées */}
-            <Card className="overflow-hidden">
-              <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Route className="w-4 h-4 text-blue-400" />
-                  <span className="text-sm font-medium text-[var(--text-primary)]">Tournées</span>
+              {/* Tournées */}
+              <Card className="overflow-hidden">
+                <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Route className="w-4 h-4 text-blue-400" />
+                    <span className="text-sm font-medium text-[var(--text-primary)]">Tournées</span>
+                  </div>
+                  {tournees && tournees.length > 0 && (
+                    <Badge variant="blue">{tournees.length}</Badge>
+                  )}
                 </div>
-                {tournees && tournees.length > 0 && (
-                  <Badge variant="blue">{tournees.length}</Badge>
-                )}
-              </div>
-              <CardBody className="p-2 max-h-[150px] overflow-y-auto">
-                <div className="space-y-2">
-                  {tournees?.map(t => <SidebarCard key={t.id} item={t} type="tournee" icon={Route} color={TYPE_EVENT_COLORS.tournee} onShowDetail={() => {}} />)}
-                  {!tournees?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">Aucune tournée</div>}
-                </div>
-              </CardBody>
-            </Card>
-          </div>
+                <CardBody className="p-2 max-h-[150px] overflow-y-auto">
+                  <div className="space-y-2">
+                    {tournees?.map(t => <SidebarCard key={t.id} item={t} type="tournee" icon={Route} color={TYPE_EVENT_COLORS.tournee} onShowDetail={() => {}} />)}
+                    {!tournees?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">Aucune tournée</div>}
+                  </div>
+                </CardBody>
+              </Card>
+            </div>
+          )}
         </div>
       </div>
 

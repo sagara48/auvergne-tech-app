@@ -484,12 +484,19 @@ export interface Note {
   technicien_id: string;
   titre: string;
   contenu?: string;
+  contenu_html?: string;
   couleur: string;
   categorie: NoteCategorie;
   tags: string[];
   epingle: boolean;
   archive: boolean;
+  // Nouveaux champs
+  priorite?: string;
+  statut?: string;
+  dossier_id?: string;
   rappel_date?: string;
+  rappel_envoye?: boolean;
+  checklist?: any[];
   // Contexte métier
   ascenseur_id?: string;
   travaux_id?: string;
@@ -507,6 +514,7 @@ export interface Note {
   travaux?: Travaux;
   client?: Client;
   mise_en_service?: MiseEnService;
+  dossier?: { id: string; nom: string; couleur: string };
 }
 
 export interface NoteCategory {
