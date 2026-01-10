@@ -351,19 +351,19 @@ export async function getTechnicienPermissions(technicienId: string): Promise<st
 // VEHICULES
 // ================================================
 export async function getVehicules(): Promise<Vehicule[]> {
-  const { data, error } = await supabase.from('vehicules').select('*, technicien:techniciens(*)').order('immatriculation');
+  const { data, error } = await supabase.from('vehicules').select('*, technicien:techniciens!vehicules_technicien_id_fkey(*)').order('immatriculation');
   if (error) throw error;
   return data || [];
 }
 
 export async function createVehicule(vehicule: Partial<Vehicule>): Promise<Vehicule> {
-  const { data, error } = await supabase.from('vehicules').insert(vehicule).select('*, technicien:techniciens(*)').single();
+  const { data, error } = await supabase.from('vehicules').insert(vehicule).select('*, technicien:techniciens!vehicules_technicien_id_fkey(*)').single();
   if (error) throw error;
   return data;
 }
 
 export async function updateVehicule(id: string, data: Partial<Vehicule>): Promise<Vehicule> {
-  const { data: result, error } = await supabase.from('vehicules').update(data).eq('id', id).select().single();
+  const { data: result, error } = await supabase.from('vehicules').update(data).eq('id', id).select('*, technicien:techniciens!vehicules_technicien_id_fkey(*)').single();
   if (error) throw error;
   return result;
 }
