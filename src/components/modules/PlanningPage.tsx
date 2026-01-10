@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DndContext, DragOverlay, useDraggable, useDroppable, DragStartEvent, DragEndEvent, pointerWithin } from '@dnd-kit/core';
 import { 
@@ -105,11 +105,12 @@ async function deletePlanningAstreinte(id: string): Promise<void> {
 
 async function getAstreinteEnCours(date: string): Promise<PlanningAstreinte | null> {
   try {
+    // date_fin est exclusive (le jeudi de fin est le début de la prochaine astreinte)
     const { data, error } = await supabase
       .from('planning_astreintes')
       .select('*, technicien:technicien_id(prenom, nom, telephone)')
       .lte('date_debut', date)
-      .gte('date_fin', date)
+      .gt('date_fin', date)  // > au lieu de >= pour exclure le dernier jour
       .maybeSingle();
     if (error) return null;
     return data;
@@ -519,12 +520,13 @@ function AstreintesModal({ onClose, techniciens }: { onClose: () => void; techni
   const monthStart = startOfWeek(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1), { weekStartsOn: 1 });
   const daysInView = Array.from({ length: 42 }, (_, i) => addDays(monthStart, i));
 
-  // Astreinte pour un jour donné
+  // Astreinte pour un jour donné (date_fin exclusive)
   const getAstreinteForDay = (date: Date) => {
     return astreintes?.find(a => {
       const start = parseISO(a.date_debut);
       const end = parseISO(a.date_fin);
-      return isWithinInterval(date, { start, end });
+      // end est exclusif : du 01/01 au 08/01 = couvre 01-07 inclus
+      return date >= start && date < end;
     });
   };
 
@@ -722,40 +724,10 @@ function SidebarCard({ item, type, icon: Icon, color, onShowDetail }: { item: an
   );
 }
 
-// Bandeau astreinte
-function AstreinteBanner({ astreinte }: { astreinte: PlanningAstreinte | null }) {
-  if (!astreinte) return null;
-  return (
-    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-          <Phone className="w-5 h-5 text-red-400" />
-        </div>
-        <div>
-          <div className="text-sm font-semibold text-red-300">
-            Astreinte en cours
-          </div>
-          <div className="text-xs text-red-400/70">
-            {astreinte.technicien?.prenom} {astreinte.technicien?.nom} • {astreinte.technicien?.telephone || 'N/A'}
-          </div>
-          <div className="text-[10px] text-red-400/50 mt-0.5">
-            Du {format(parseISO(astreinte.date_debut), 'EEEE d MMM', { locale: fr })} au {format(parseISO(astreinte.date_fin), 'EEEE d MMM', { locale: fr })}
-          </div>
-        </div>
-      </div>
-      <Badge variant="red">
-        <Phone className="w-3 h-3 mr-1" />
-        D'astreinte
-      </Badge>
-    </div>
-  );
-}
-
 // PAGE PRINCIPALE
 export function PlanningPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<'travaux' | 'mes' | 'tournees'>('travaux');
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [showConges, setShowConges] = useState(false);
   const [showAstreintes, setShowAstreintes] = useState(false);
@@ -878,84 +850,149 @@ export function PlanningPage() {
 
   return (
     <DndContext collisionDetection={pointerWithin} onDragStart={e => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
-      <div className="h-full flex gap-4 p-4">
-        <div className="flex-1 flex flex-col min-w-0">
-          <AstreinteBanner astreinte={astreinteEnCours} />
-
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <button onClick={() => naviguer(-1)} className="w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] flex items-center justify-center hover:bg-[var(--bg-elevated)]"><ChevronLeft className="w-5 h-5" /></button>
-              <div className="text-center min-w-[180px]">
-                <div className="text-lg font-bold text-[var(--text-primary)]">Semaine {format(jours[0], 'w', { locale: fr })}</div>
-                <div className="text-sm text-[var(--text-tertiary)]">{format(jours[0], 'd MMM', { locale: fr })} - {format(jours[4], 'd MMM', { locale: fr })}</div>
+      <div className="h-full flex flex-col p-4 overflow-hidden">
+        
+        {/* Encart Astreinte en cours */}
+        {astreinteEnCours && (
+          <div className="mb-4 p-4 bg-gradient-to-r from-red-500/20 to-orange-500/10 border border-red-500/30 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-red-500/30 flex items-center justify-center animate-pulse">
+                <Phone className="w-6 h-6 text-red-400" />
               </div>
-              <button onClick={() => naviguer(1)} className="w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] flex items-center justify-center hover:bg-[var(--bg-elevated)]"><ChevronRight className="w-5 h-5" /></button>
-              <Button variant="secondary" size="sm" onClick={() => setCurrentDate(new Date())}>Aujourd'hui</Button>
+              <div>
+                <div className="text-lg font-bold text-red-300 flex items-center gap-2">
+                  🚨 Technicien d'astreinte
+                </div>
+                <div className="text-sm text-[var(--text-primary)]">
+                  {astreinteEnCours.technicien?.prenom} {astreinteEnCours.technicien?.nom}
+                  <span className="mx-2 text-[var(--text-muted)]">•</span>
+                  <span className="text-blue-400">{astreinteEnCours.technicien?.telephone || 'N/A'}</span>
+                </div>
+                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                  Du {format(parseISO(astreinteEnCours.date_debut), 'EEEE d MMMM', { locale: fr })} au {format(parseISO(astreinteEnCours.date_fin), 'EEEE d MMMM', { locale: fr })}
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex gap-3 mr-4">{[{ l: 'Travaux', c: TYPE_EVENT_COLORS.travaux }, { l: 'Tournée', c: TYPE_EVENT_COLORS.tournee }, { l: 'MES', c: TYPE_EVENT_COLORS.mise_service }, { l: 'Congé', c: '#10b981' }].map(x => <div key={x.l} className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]"><div className="w-3 h-3 rounded" style={{ background: x.c }} />{x.l}</div>)}</div>
-              <Button variant="secondary" size="sm" onClick={() => setShowConges(true)}><Palmtree className="w-4 h-4" /> Congés</Button>
-              <Button variant="secondary" size="sm" onClick={() => setShowAstreintes(true)}><Phone className="w-4 h-4" /> Astreintes</Button>
-              <Button variant="primary" size="sm" onClick={() => setShowCreateEvent(true)}><Plus className="w-4 h-4" /> Événement</Button>
-            </div>
+            <Badge variant="red" className="text-sm px-3 py-1.5">
+              <Phone className="w-4 h-4 mr-1.5" />
+              D'astreinte
+            </Badge>
           </div>
+        )}
 
-          {/* Grille */}
-          <Card className="flex-1 overflow-auto">
-            <div className="grid grid-cols-[160px_repeat(5,1fr)] min-w-[900px]">
-              <div className="p-3 bg-[var(--bg-tertiary)] font-semibold text-sm border-b border-r border-[var(--border-primary)] sticky top-0 z-10">Technicien</div>
-              {jours.map((jour, i) => {
-                const isToday = format(jour, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
-                return <div key={i} className={`p-3 text-center border-b border-r last:border-r-0 sticky top-0 z-10 ${isToday ? 'bg-blue-500/20' : 'bg-[var(--bg-tertiary)]'}`}><div className="text-xs text-[var(--text-tertiary)] uppercase">{format(jour, 'EEE', { locale: fr })}</div><div className={`text-lg font-bold ${isToday ? 'text-blue-400' : 'text-[var(--text-primary)]'}`}>{format(jour, 'd')}</div></div>;
-              })}
-              {techs.map(tech => (
-                <>
-                  <div key={`tech-${tech.id}`} className="p-3 bg-[var(--bg-tertiary)]/50 border-b border-r flex items-center gap-3 sticky left-0 z-[5]">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">{tech.avatar_initiales}</div>
-                    <div><div className="text-sm font-medium text-[var(--text-primary)]">{tech.prenom} {tech.nom?.charAt(0)}.</div><div className="text-xs text-[var(--text-muted)]">{tech.secteur || ''}</div></div>
-                  </div>
-                  {jours.map((jour, jIdx) => {
-                    const cellId = `cell-|${tech.id}|${format(jour, 'yyyy-MM-dd')}`;
-                    const cellEvents = getEventsForCell(tech.id, jour);
-                    const conge = isEnConge(tech.id, jour);
-                    const isToday = format(jour, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
-                    return (
-                      <div key={`${tech.id}-${jIdx}`} className={`border-b border-r last:border-r-0 ${isToday ? 'bg-blue-500/5' : ''}`} onDoubleClick={() => handleCellDoubleClick(tech.id, jour)}>
-                        <DroppableCell id={cellId} isBlocked={!!conge}>
-                          {conge && <CongeCard conge={conge} />}
-                          {!conge && cellEvents.map(evt => <EventCard key={evt.id} event={evt} onDelete={() => handleDeleteEvent(evt.id)} onDuplicate={() => handleDuplicateEvent(evt)} />)}
-                        </DroppableCell>
-                      </div>
-                    );
-                  })}
-                </>
-              ))}
-              {techs.length === 0 && <div className="col-span-6 p-8 text-center text-[var(--text-muted)]">Aucun technicien</div>}
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => naviguer(-1)} className="w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] flex items-center justify-center hover:bg-[var(--bg-elevated)]"><ChevronLeft className="w-5 h-5" /></button>
+            <div className="text-center min-w-[180px]">
+              <div className="text-lg font-bold text-[var(--text-primary)]">Semaine {format(jours[0], 'w', { locale: fr })}</div>
+              <div className="text-sm text-[var(--text-tertiary)]">{format(jours[0], 'd MMM', { locale: fr })} - {format(jours[4], 'd MMM', { locale: fr })}</div>
             </div>
-          </Card>
+            <button onClick={() => naviguer(1)} className="w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] flex items-center justify-center hover:bg-[var(--bg-elevated)]"><ChevronRight className="w-5 h-5" /></button>
+            <Button variant="secondary" size="sm" onClick={() => setCurrentDate(new Date())}>Aujourd'hui</Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-3 mr-4">{[{ l: 'Travaux', c: TYPE_EVENT_COLORS.travaux }, { l: 'Tournée', c: TYPE_EVENT_COLORS.tournee }, { l: 'MES', c: TYPE_EVENT_COLORS.mise_service }, { l: 'Congé', c: '#10b981' }].map(x => <div key={x.l} className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]"><div className="w-3 h-3 rounded" style={{ background: x.c }} />{x.l}</div>)}</div>
+            <Button variant="secondary" size="sm" onClick={() => setShowConges(true)}><Palmtree className="w-4 h-4" /> Congés</Button>
+            <Button variant="secondary" size="sm" onClick={() => setShowAstreintes(true)}><Phone className="w-4 h-4" /> Astreintes</Button>
+            <Button variant="primary" size="sm" onClick={() => setShowCreateEvent(true)}><Plus className="w-4 h-4" /> Événement</Button>
+          </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="w-80 flex-shrink-0 flex flex-col">
-          <div className="flex gap-1 mb-3">
-            {[{ id: 'travaux', label: 'Travaux', icon: Hammer, count: travauxNonPlanifies?.length || 0 }, { id: 'mes', label: 'MES', icon: FileCheck, count: mesNonPlanifiees?.length || 0 }, { id: 'tournees', label: 'Tournées', icon: Route, count: tournees?.length || 0 }].map(tab => (
-              <button key={tab.id} onClick={() => setSidebarTab(tab.id as any)} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium ${sidebarTab === tab.id ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]'}`}>
-                <tab.icon className="w-3.5 h-3.5" />{tab.label}{tab.count > 0 && <Badge variant="purple" className="ml-1 text-[10px] px-1.5 py-0">{tab.count}</Badge>}
-              </button>
+        {/* Grille Planning */}
+        <Card className="flex-1 overflow-auto min-h-0 mb-4">
+          <div className="grid grid-cols-[160px_repeat(5,1fr)] min-w-[900px]">
+            <div className="p-3 bg-[var(--bg-tertiary)] font-semibold text-sm border-b border-r border-[var(--border-primary)] sticky top-0 z-10">Technicien</div>
+            {jours.map((jour, i) => {
+              const isToday = format(jour, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+              return <div key={i} className={`p-3 text-center border-b border-r last:border-r-0 sticky top-0 z-10 ${isToday ? 'bg-blue-500/20' : 'bg-[var(--bg-tertiary)]'}`}><div className="text-xs text-[var(--text-tertiary)] uppercase">{format(jour, 'EEE', { locale: fr })}</div><div className={`text-lg font-bold ${isToday ? 'text-blue-400' : 'text-[var(--text-primary)]'}`}>{format(jour, 'd')}</div></div>;
+            })}
+            {techs.map(tech => (
+              <>
+                <div key={`tech-${tech.id}`} className="p-3 bg-[var(--bg-tertiary)]/50 border-b border-r flex items-center gap-3 sticky left-0 z-[5]">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">{tech.avatar_initiales}</div>
+                  <div><div className="text-sm font-medium text-[var(--text-primary)]">{tech.prenom} {tech.nom?.charAt(0)}.</div><div className="text-xs text-[var(--text-muted)]">{tech.secteur || ''}</div></div>
+                </div>
+                {jours.map((jour, jIdx) => {
+                  const cellId = `cell-|${tech.id}|${format(jour, 'yyyy-MM-dd')}`;
+                  const cellEvents = getEventsForCell(tech.id, jour);
+                  const conge = isEnConge(tech.id, jour);
+                  const isToday = format(jour, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                  return (
+                    <div key={`${tech.id}-${jIdx}`} className={`border-b border-r last:border-r-0 ${isToday ? 'bg-blue-500/5' : ''}`} onDoubleClick={() => handleCellDoubleClick(tech.id, jour)}>
+                      <DroppableCell id={cellId} isBlocked={!!conge}>
+                        {conge && <CongeCard conge={conge} />}
+                        {!conge && cellEvents.map(evt => <EventCard key={evt.id} event={evt} onDelete={() => handleDeleteEvent(evt.id)} onDuplicate={() => handleDuplicateEvent(evt)} />)}
+                      </DroppableCell>
+                    </div>
+                  );
+                })}
+              </>
             ))}
+            {techs.length === 0 && <div className="col-span-6 p-8 text-center text-[var(--text-muted)]">Aucun technicien</div>}
           </div>
-          <Card className="flex-1 overflow-hidden"><CardBody className="p-2 h-full overflow-y-auto"><div className="space-y-2">
-            {sidebarTab === 'travaux' && travauxNonPlanifies?.map(t => <SidebarCard key={t.id} item={t} type="travaux" icon={Hammer} color={TYPE_EVENT_COLORS.travaux} onShowDetail={() => {}} />)}
-            {sidebarTab === 'mes' && mesNonPlanifiees?.map(m => <SidebarCard key={m.id} item={m} type="mes" icon={FileCheck} color={TYPE_EVENT_COLORS.mise_service} onShowDetail={() => {}} />)}
-            {sidebarTab === 'tournees' && tournees?.map(t => <SidebarCard key={t.id} item={t} type="tournee" icon={Route} color={TYPE_EVENT_COLORS.tournee} onShowDetail={() => {}} />)}
-            {sidebarTab === 'travaux' && !travauxNonPlanifies?.length && <div className="text-center py-8 text-[var(--text-muted)] text-sm">Tous planifiés</div>}
-            {sidebarTab === 'mes' && !mesNonPlanifiees?.length && <div className="text-center py-8 text-[var(--text-muted)] text-sm">Toutes planifiées</div>}
-            {sidebarTab === 'tournees' && !tournees?.length && <div className="text-center py-8 text-[var(--text-muted)] text-sm">Aucune tournée</div>}
-          </div></CardBody></Card>
-          <div className="mt-2 p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-primary)] text-xs text-[var(--text-tertiary)]">
-            <div className="font-semibold text-[var(--text-secondary)] mb-1">💡 Astuces</div>
-            <div>• Glisser-déposer • Double-clic = nouvel event • Croix = supprimer</div>
+        </Card>
+
+        {/* Éléments à planifier - En bas, horizontal */}
+        <div className="flex-shrink-0">
+          <div className="text-sm font-semibold text-[var(--text-secondary)] mb-2">📋 Éléments à planifier</div>
+          <div className="grid grid-cols-3 gap-4">
+            {/* Travaux */}
+            <Card className="overflow-hidden">
+              <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Hammer className="w-4 h-4 text-purple-400" />
+                  <span className="text-sm font-medium text-[var(--text-primary)]">Travaux</span>
+                </div>
+                {travauxNonPlanifies && travauxNonPlanifies.length > 0 && (
+                  <Badge variant="purple">{travauxNonPlanifies.length}</Badge>
+                )}
+              </div>
+              <CardBody className="p-2 max-h-[150px] overflow-y-auto">
+                <div className="space-y-2">
+                  {travauxNonPlanifies?.map(t => <SidebarCard key={t.id} item={t} type="travaux" icon={Hammer} color={TYPE_EVENT_COLORS.travaux} onShowDetail={() => {}} />)}
+                  {!travauxNonPlanifies?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">✓ Tous planifiés</div>}
+                </div>
+              </CardBody>
+            </Card>
+
+            {/* MES */}
+            <Card className="overflow-hidden">
+              <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileCheck className="w-4 h-4 text-orange-400" />
+                  <span className="text-sm font-medium text-[var(--text-primary)]">Mises en service</span>
+                </div>
+                {mesNonPlanifiees && mesNonPlanifiees.length > 0 && (
+                  <Badge variant="orange">{mesNonPlanifiees.length}</Badge>
+                )}
+              </div>
+              <CardBody className="p-2 max-h-[150px] overflow-y-auto">
+                <div className="space-y-2">
+                  {mesNonPlanifiees?.map(m => <SidebarCard key={m.id} item={m} type="mes" icon={FileCheck} color={TYPE_EVENT_COLORS.mise_service} onShowDetail={() => {}} />)}
+                  {!mesNonPlanifiees?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">✓ Toutes planifiées</div>}
+                </div>
+              </CardBody>
+            </Card>
+
+            {/* Tournées */}
+            <Card className="overflow-hidden">
+              <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Route className="w-4 h-4 text-blue-400" />
+                  <span className="text-sm font-medium text-[var(--text-primary)]">Tournées</span>
+                </div>
+                {tournees && tournees.length > 0 && (
+                  <Badge variant="blue">{tournees.length}</Badge>
+                )}
+              </div>
+              <CardBody className="p-2 max-h-[150px] overflow-y-auto">
+                <div className="space-y-2">
+                  {tournees?.map(t => <SidebarCard key={t.id} item={t} type="tournee" icon={Route} color={TYPE_EVENT_COLORS.tournee} onShowDetail={() => {}} />)}
+                  {!tournees?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">Aucune tournée</div>}
+                </div>
+              </CardBody>
+            </Card>
           </div>
         </div>
       </div>
