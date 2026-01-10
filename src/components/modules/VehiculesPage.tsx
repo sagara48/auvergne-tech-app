@@ -3,17 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Car, User, AlertTriangle, CheckCircle, Plus, Gauge, Package, X, ChevronDown, ChevronUp, 
   Edit2, Trash2, Calendar, Wrench, Fuel, ArrowRight, ArrowLeft, Settings, 
-  TrendingUp, Droplet, Clock, MapPin, FileText, AlertCircle, History
+  TrendingUp, Droplet, Clock, MapPin, FileText, AlertCircle, History, Save, RotateCcw
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
 import { 
   getVehicules, getStockVehicule, getStockArticles, 
   createVehicule, updateVehicule, deleteVehicule, getTechniciens,
-  ajouterStockVehicule, retirerStockVehicule, setStockVehicule,
+  ajouterStockVehicule, retirerStockVehicule, setStockVehicule, updateStockVehiculeMinimal,
   getTypesEntretien, getEntretiensVehicule, createEntretien, deleteEntretien,
-  getPleinsVehicule, createPlein, deletePlein, getStatsCarburant
+  getPleinsVehicule, createPlein, deletePlein, getStatsCarburant,
+  getPeriodiciteVehicule, upsertPeriodicite, deletePeriodicite
 } from '@/services/api';
-import type { TypeEntretien, EntretienVehicule, PleinCarburant } from '@/services/api';
+import type { TypeEntretien, EntretienVehicule, PleinCarburant, PeriodicitePersonnalisee } from '@/services/api';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { StatutVehicule, Vehicule } from '@/types';
@@ -44,6 +45,8 @@ function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
   const [selectedArticle, setSelectedArticle] = useState('');
   const [qty, setQty] = useState(1);
   const [direction, setDirection] = useState<'in' | 'out'>('in');
+  const [editingMinimal, setEditingMinimal] = useState<string | null>(null);
+  const [minimalValues, setMinimalValues] = useState<Record<string, number>>({});
 
   const { data: stock } = useQuery({ 
     queryKey: ['stock-vehicule', vehiculeId], 
@@ -80,6 +83,17 @@ function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
     onError: () => toast.error('Erreur lors du retrait'),
   });
 
+  const updateMinimalMutation = useMutation({
+    mutationFn: ({ articleId, min }: { articleId: string; min: number }) => 
+      updateStockVehiculeMinimal(vehiculeId, articleId, min),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-vehicule', vehiculeId] });
+      toast.success('Stock minimal mis à jour');
+      setEditingMinimal(null);
+    },
+    onError: () => toast.error('Erreur'),
+  });
+
   const handleSubmit = () => {
     if (!selectedArticle) return;
     if (direction === 'in') {
@@ -87,6 +101,18 @@ function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
     } else {
       retirerMutation.mutate();
     }
+  };
+
+  const handleSaveMinimal = (articleId: string) => {
+    const newMin = minimalValues[articleId];
+    if (newMin !== undefined) {
+      updateMinimalMutation.mutate({ articleId, min: newMin });
+    }
+  };
+
+  const startEditMinimal = (item: any) => {
+    setEditingMinimal(item.article_id);
+    setMinimalValues({ ...minimalValues, [item.article_id]: item.quantite_min });
   };
 
   const alertes = stock?.filter(s => s.quantite <= s.quantite_min) || [];
@@ -106,7 +132,7 @@ function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
       </div>
 
       {stock && stock.length > 0 ? (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="space-y-2">
           {stock.map(item => (
             <div 
               key={item.id} 
@@ -116,17 +142,63 @@ function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
                   : 'bg-[var(--bg-tertiary)]'
               }`}
             >
-              <div>
+              <div className="flex-1">
                 <div className="font-medium text-sm text-[var(--text-primary)]">{item.article?.designation}</div>
                 <div className="text-xs text-[var(--text-muted)]">{item.article?.reference}</div>
               </div>
-              <div className="text-right">
-                <div className={`text-lg font-bold ${
-                  item.quantite <= item.quantite_min ? 'text-red-400' : 'text-[var(--text-primary)]'
-                }`}>
-                  {item.quantite}
+              
+              <div className="flex items-center gap-4">
+                {/* Quantité actuelle */}
+                <div className="text-center">
+                  <div className={`text-lg font-bold ${
+                    item.quantite <= item.quantite_min ? 'text-red-400' : 'text-[var(--text-primary)]'
+                  }`}>
+                    {item.quantite}
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)]">en stock</div>
                 </div>
-                <div className="text-[10px] text-[var(--text-muted)]">min: {item.quantite_min}</div>
+
+                {/* Stock minimal éditable */}
+                <div className="text-center">
+                  {editingMinimal === item.article_id ? (
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={minimalValues[item.article_id] ?? item.quantite_min}
+                        onChange={e => setMinimalValues({ 
+                          ...minimalValues, 
+                          [item.article_id]: parseInt(e.target.value) || 0 
+                        })}
+                        className="w-16 h-8 text-center text-sm"
+                      />
+                      <button 
+                        onClick={() => handleSaveMinimal(item.article_id)}
+                        className="p-1 hover:bg-green-500/20 rounded text-green-400"
+                      >
+                        <Save className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => setEditingMinimal(null)}
+                        className="p-1 hover:bg-[var(--bg-elevated)] rounded text-[var(--text-muted)]"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => startEditMinimal(item)}
+                      className="group"
+                    >
+                      <div className="text-sm font-medium text-amber-400 group-hover:text-amber-300">
+                        min: {item.quantite_min}
+                      </div>
+                      <div className="text-[10px] text-[var(--text-muted)] group-hover:text-[var(--text-tertiary)]">
+                        cliquer pour modifier
+                      </div>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -727,6 +799,176 @@ function VehiculeCarburant({ vehiculeId, kilometrageActuel }: { vehiculeId: stri
 }
 
 // ============================================
+// COMPOSANT RÉGLAGES PÉRIODICITÉS
+// ============================================
+function VehiculeReglages({ vehiculeId, vehiculeImmat }: { vehiculeId: string; vehiculeImmat: string }) {
+  const queryClient = useQueryClient();
+
+  const { data: typesEntretien } = useQuery({
+    queryKey: ['types-entretien'],
+    queryFn: getTypesEntretien,
+  });
+
+  const { data: periodicites } = useQuery({
+    queryKey: ['periodicite-vehicule', vehiculeId],
+    queryFn: () => getPeriodiciteVehicule(vehiculeId),
+  });
+
+  const upsertMutation = useMutation({
+    mutationFn: ({ typeId, data }: { typeId: string; data: any }) => 
+      upsertPeriodicite(vehiculeId, typeId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['periodicite-vehicule', vehiculeId] });
+      toast.success('Périodicité mise à jour');
+    },
+    onError: () => toast.error('Erreur'),
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: (typeId: string) => deletePeriodicite(vehiculeId, typeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['periodicite-vehicule', vehiculeId] });
+      toast.success('Périodicité réinitialisée');
+    },
+  });
+
+  // Map des périodicités personnalisées par type
+  const periodiciteMap = new Map(
+    periodicites?.map(p => [p.type_entretien_id, p]) || []
+  );
+
+  const handleUpdate = (typeId: string, field: 'periodicite_km' | 'periodicite_mois' | 'actif', value: any) => {
+    const current = periodiciteMap.get(typeId);
+    upsertMutation.mutate({
+      typeId,
+      data: {
+        periodicite_km: current?.periodicite_km,
+        periodicite_mois: current?.periodicite_mois,
+        actif: current?.actif ?? true,
+        [field]: value,
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Settings className="w-5 h-5 text-purple-400" />
+        <span className="font-semibold text-[var(--text-primary)]">Périodicités d'entretien</span>
+        <span className="text-xs text-[var(--text-muted)]">pour {vehiculeImmat}</span>
+      </div>
+
+      <p className="text-sm text-[var(--text-tertiary)] mb-4">
+        Personnalisez les intervalles d'entretien pour ce véhicule. Les valeurs modifiées apparaissent en surbrillance.
+      </p>
+
+      <div className="space-y-2">
+        {typesEntretien?.map(type => {
+          const custom = periodiciteMap.get(type.id);
+          const isCustomized = custom !== undefined;
+          const kmValue = custom?.periodicite_km ?? type.periodicite_km;
+          const moisValue = custom?.periodicite_mois ?? type.periodicite_mois;
+          const isActive = custom?.actif ?? true;
+
+          return (
+            <div 
+              key={type.id} 
+              className={`p-4 rounded-xl border transition-all ${
+                isCustomized 
+                  ? 'bg-purple-500/10 border-purple-500/30' 
+                  : 'bg-[var(--bg-tertiary)] border-transparent'
+              } ${!isActive ? 'opacity-50' : ''}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ backgroundColor: `${type.couleur}20` }}
+                  >
+                    <Wrench className="w-4 h-4" style={{ color: type.couleur }} />
+                  </div>
+                  <div>
+                    <div className="font-medium text-[var(--text-primary)]">{type.nom}</div>
+                    <div className="text-xs text-[var(--text-muted)]">{type.description}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isCustomized && (
+                    <button
+                      onClick={() => resetMutation.mutate(type.id)}
+                      className="p-1.5 hover:bg-[var(--bg-elevated)] rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      title="Réinitialiser aux valeurs par défaut"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+                  )}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={e => handleUpdate(type.id, 'actif', e.target.checked)}
+                      className="w-4 h-4 rounded"
+                    />
+                    <span className="text-xs text-[var(--text-secondary)]">Actif</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-[var(--text-muted)] mb-1 block">
+                    Périodicité km
+                    {type.periodicite_km && (
+                      <span className="text-[var(--text-muted)] ml-1">(défaut: {type.periodicite_km.toLocaleString()})</span>
+                    )}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={kmValue || ''}
+                      onChange={e => {
+                        const val = e.target.value ? parseInt(e.target.value) : null;
+                        handleUpdate(type.id, 'periodicite_km', val);
+                      }}
+                      placeholder="km"
+                      className={`${isCustomized && custom?.periodicite_km !== type.periodicite_km ? 'border-purple-500' : ''}`}
+                      disabled={!isActive}
+                    />
+                    <span className="text-sm text-[var(--text-muted)]">km</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-[var(--text-muted)] mb-1 block">
+                    Périodicité mois
+                    {type.periodicite_mois && (
+                      <span className="text-[var(--text-muted)] ml-1">(défaut: {type.periodicite_mois})</span>
+                    )}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={moisValue || ''}
+                      onChange={e => {
+                        const val = e.target.value ? parseInt(e.target.value) : null;
+                        handleUpdate(type.id, 'periodicite_mois', val);
+                      }}
+                      placeholder="mois"
+                      className={`${isCustomized && custom?.periodicite_mois !== type.periodicite_mois ? 'border-purple-500' : ''}`}
+                      disabled={!isActive}
+                    />
+                    <span className="text-sm text-[var(--text-muted)]">mois</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // MODAL FORMULAIRE VÉHICULE
 // ============================================
 function VehiculeFormModal({ 
@@ -924,12 +1166,13 @@ function VehiculeFormModal({
 // DETAIL VÉHICULE
 // ============================================
 function VehiculeDetail({ vehicule, onClose }: { vehicule: Vehicule; onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'stock' | 'entretiens' | 'carburant'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'entretiens' | 'carburant' | 'reglages'>('stock');
   
   const tabs = [
     { id: 'stock', label: 'Stock', icon: Package },
     { id: 'entretiens', label: 'Entretiens', icon: Wrench },
     { id: 'carburant', label: 'Carburant', icon: Fuel },
+    { id: 'reglages', label: 'Réglages', icon: Settings },
   ];
 
   return (
@@ -984,6 +1227,9 @@ function VehiculeDetail({ vehicule, onClose }: { vehicule: Vehicule; onClose: ()
             )}
             {activeTab === 'carburant' && (
               <VehiculeCarburant vehiculeId={vehicule.id} kilometrageActuel={vehicule.kilometrage || 0} />
+            )}
+            {activeTab === 'reglages' && (
+              <VehiculeReglages vehiculeId={vehicule.id} vehiculeImmat={vehicule.immatriculation} />
             )}
           </div>
 

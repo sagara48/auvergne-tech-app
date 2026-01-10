@@ -562,6 +562,85 @@ export async function getProchainEntretiens(vehiculeId: string): Promise<any[]> 
 }
 
 // ================================================
+// PÉRIODICITÉS PERSONNALISÉES
+// ================================================
+
+export interface PeriodicitePersonnalisee {
+  id: string;
+  vehicule_id: string;
+  type_entretien_id: string;
+  periodicite_km?: number;
+  periodicite_mois?: number;
+  actif: boolean;
+  notes?: string;
+  type_entretien?: TypeEntretien;
+}
+
+export async function getPeriodiciteVehicule(vehiculeId: string): Promise<PeriodicitePersonnalisee[]> {
+  const { data, error } = await supabase
+    .from('vehicules_periodicite_personnalisee')
+    .select('*, type_entretien:vehicules_types_entretien(*)')
+    .eq('vehicule_id', vehiculeId);
+  if (error) {
+    console.warn('Table vehicules_periodicite_personnalisee non disponible');
+    return [];
+  }
+  return data || [];
+}
+
+export async function upsertPeriodicite(
+  vehiculeId: string,
+  typeEntretienId: string,
+  data: { periodicite_km?: number; periodicite_mois?: number; actif?: boolean; notes?: string }
+): Promise<PeriodicitePersonnalisee> {
+  const { data: result, error } = await supabase
+    .from('vehicules_periodicite_personnalisee')
+    .upsert({
+      vehicule_id: vehiculeId,
+      type_entretien_id: typeEntretienId,
+      ...data,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'vehicule_id,type_entretien_id' })
+    .select('*, type_entretien:vehicules_types_entretien(*)')
+    .single();
+  if (error) throw error;
+  return result;
+}
+
+export async function deletePeriodicite(vehiculeId: string, typeEntretienId: string): Promise<void> {
+  const { error } = await supabase
+    .from('vehicules_periodicite_personnalisee')
+    .delete()
+    .eq('vehicule_id', vehiculeId)
+    .eq('type_entretien_id', typeEntretienId);
+  if (error) throw error;
+}
+
+// ================================================
+// STOCK VÉHICULE - MISE À JOUR STOCK MINIMAL
+// ================================================
+
+export async function updateStockVehiculeMinimal(
+  vehiculeId: string, 
+  articleId: string, 
+  quantiteMin: number
+): Promise<void> {
+  const { data: existing } = await supabase
+    .from('stock_vehicule')
+    .select('id')
+    .eq('vehicule_id', vehiculeId)
+    .eq('article_id', articleId)
+    .single();
+
+  if (existing) {
+    await supabase
+      .from('stock_vehicule')
+      .update({ quantite_min: quantiteMin })
+      .eq('id', existing.id);
+  }
+}
+
+// ================================================
 // PLEINS CARBURANT
 // ================================================
 
