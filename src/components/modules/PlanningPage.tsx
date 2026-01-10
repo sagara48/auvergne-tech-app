@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DndContext, DragOverlay, useDraggable, useDroppable, DragStartEvent, DragEndEvent, pointerWithin } from '@dnd-kit/core';
 import { 
   ChevronLeft, ChevronRight, Plus, Hammer, FileCheck, Route, GripVertical, X, Clock, MapPin, User, Eye, Calendar, Building2, 
-  AlertTriangle, Info, Palmtree, Phone, Trash2, Check, RotateCcw, CalendarPlus
+  AlertTriangle, Info, Palmtree, Phone, Trash2, Check, RotateCcw, CalendarPlus, Copy
 } from 'lucide-react';
 import { Button, Card, CardBody, Badge, Select, Input } from '@/components/ui';
 import { 
@@ -32,21 +32,35 @@ interface PlanningConge {
 interface PlanningAstreinte {
   id: string;
   technicien_id: string;
-  semaine_debut: string;
+  date_debut: string; // Jeudi de début
+  date_fin: string;   // Jeudi de fin
   type: string;
+  note?: string;
   technicien?: { prenom: string; nom: string; telephone?: string };
 }
 
-// API pour congés et astreintes
+// API pour congés et astreintes (tables optionnelles)
 async function getPlanningConges(): Promise<PlanningConge[]> {
-  const { data, error } = await supabase.from('planning_conges').select('*, technicien:techniciens(prenom, nom)').order('date_debut');
-  if (error) { console.error('Erreur chargement congés:', error); return []; }
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('planning_conges')
+      .select('*, technicien:technicien_id(prenom, nom)')
+      .order('date_debut');
+    if (error) { 
+      // Table n'existe pas encore - silencieux
+      if (error.code === '42P01' || error.code === 'PGRST116') return []; 
+      console.warn('Congés non disponibles:', error.message); 
+      return []; 
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
 }
 
 async function createPlanningConge(conge: Partial<PlanningConge>): Promise<PlanningConge> {
   const { data, error } = await supabase.from('planning_conges').insert(conge).select().single();
-  if (error) throw error;
+  if (error) throw new Error('Veuillez exécuter le script SQL planning_schema.sql dans Supabase');
   return data;
 }
 
@@ -56,20 +70,52 @@ async function deletePlanningConge(id: string): Promise<void> {
 }
 
 async function getPlanningAstreintes(): Promise<PlanningAstreinte[]> {
-  const { data, error } = await supabase.from('planning_astreintes').select('*, technicien:techniciens(prenom, nom, telephone)').order('semaine_debut');
-  if (error) { console.error('Erreur chargement astreintes:', error); return []; }
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('planning_astreintes')
+      .select('*, technicien:technicien_id(prenom, nom, telephone)')
+      .order('date_debut');
+    if (error) { 
+      if (error.code === '42P01' || error.code === 'PGRST116') return [];
+      console.warn('Astreintes non disponibles:', error.message); 
+      return []; 
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
 }
 
 async function createPlanningAstreinte(astreinte: Partial<PlanningAstreinte>): Promise<PlanningAstreinte> {
-  const { data, error } = await supabase.from('planning_astreintes').upsert(astreinte, { onConflict: 'semaine_debut,type' }).select().single();
+  const { data, error } = await supabase.from('planning_astreintes').insert(astreinte).select().single();
+  if (error) throw new Error('Veuillez exécuter le script SQL planning_schema.sql dans Supabase');
+  return data;
+}
+
+async function updatePlanningAstreinte(id: string, astreinte: Partial<PlanningAstreinte>): Promise<PlanningAstreinte> {
+  const { data, error } = await supabase.from('planning_astreintes').update(astreinte).eq('id', id).select().single();
   if (error) throw error;
   return data;
 }
 
-async function getAstreinteSemaine(semaine: string): Promise<PlanningAstreinte | null> {
-  const { data } = await supabase.from('planning_astreintes').select('*, technicien:techniciens(prenom, nom, telephone)').eq('semaine_debut', semaine).single();
-  return data;
+async function deletePlanningAstreinte(id: string): Promise<void> {
+  const { error } = await supabase.from('planning_astreintes').delete().eq('id', id);
+  if (error) throw error;
+}
+
+async function getAstreinteEnCours(date: string): Promise<PlanningAstreinte | null> {
+  try {
+    const { data, error } = await supabase
+      .from('planning_astreintes')
+      .select('*, technicien:technicien_id(prenom, nom, telephone)')
+      .lte('date_debut', date)
+      .gte('date_fin', date)
+      .maybeSingle();
+    if (error) return null;
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 // Composants Drag & Drop
@@ -88,18 +134,24 @@ function DroppableCell({ id, isBlocked, children }: { id: string; isBlocked?: bo
 }
 
 // Carte événement
-function EventCard({ event, onDelete, onClick }: { event: PlanningEvent; onDelete: () => void; onClick: () => void }) {
+function EventCard({ event, onDelete, onDuplicate }: { event: PlanningEvent; onDelete: () => void; onDuplicate: () => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `event-${event.id}`, data: { type: 'event', data: event } });
   const color = event.couleur || TYPE_EVENT_COLORS[event.type_event] || '#6366f1';
   const isExpire = (event as any).statut === 'expire';
 
   return (
-    <div ref={setNodeRef} {...listeners} {...attributes}
-      className={`group relative p-2 rounded-lg text-xs mb-1 cursor-grab transition-all ${isDragging ? 'opacity-50' : 'hover:scale-[1.02]'} ${isExpire ? 'opacity-60' : ''}`}
+    <div 
+      ref={setNodeRef}
+      className={`group relative p-2 rounded-lg text-xs mb-1 transition-all ${isDragging ? 'opacity-50' : 'hover:scale-[1.02]'} ${isExpire ? 'opacity-60' : ''}`}
       style={{ background: `${color}25`, borderLeft: `3px solid ${color}` }}
     >
-      <div className="flex items-start justify-between gap-1">
-        <div className="flex-1 min-w-0" onClick={onClick}>
+      <div className="flex items-start gap-1">
+        {/* Handle de drag - seul élément draggable */}
+        <div {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 hover:bg-white/10 rounded">
+          <GripVertical className="w-3 h-3 text-[var(--text-muted)]" />
+        </div>
+        
+        <div className="flex-1 min-w-0">
           <div className="font-semibold text-[var(--text-primary)] truncate flex items-center gap-1">
             {event.titre}
             {isExpire && <AlertTriangle className="w-3 h-3 text-amber-400" />}
@@ -109,9 +161,24 @@ function EventCard({ event, onDelete, onClick }: { event: PlanningEvent; onDelet
             {format(parseISO(event.date_debut), 'HH:mm')} - {format(parseISO(event.date_fin), 'HH:mm')}
           </div>
         </div>
-        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/30 rounded transition-opacity">
-          <X className="w-3 h-3 text-red-400" />
-        </button>
+        
+        {/* Boutons d'action */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onDuplicate(); }} 
+            className="p-1 hover:bg-blue-500/30 rounded"
+            title="Dupliquer"
+          >
+            <Copy className="w-3 h-3 text-blue-400" />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onDelete(); }} 
+            className="p-1 hover:bg-red-500/30 rounded"
+            title="Supprimer"
+          >
+            <X className="w-3 h-3 text-red-400" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -195,44 +262,186 @@ function CreateEventModal({ onClose, defaultDate, defaultTech, techniciens }: { 
   );
 }
 
-// Modal congés
+// Modal congés avec calendrier mensuel
 function CongesModal({ onClose, techniciens }: { onClose: () => void; techniciens: any[] }) {
   const queryClient = useQueryClient();
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [techId, setTechId] = useState('');
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
   const [type, setType] = useState('conge');
+  const [editingConge, setEditingConge] = useState<PlanningConge | null>(null);
 
   const { data: conges } = useQuery({ queryKey: ['planning-conges'], queryFn: getPlanningConges });
-  const createMutation = useMutation({ mutationFn: createPlanningConge, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['planning-conges'] }); toast.success('Congé ajouté'); setTechId(''); setDateDebut(''); setDateFin(''); } });
-  const deleteMutation = useMutation({ mutationFn: deletePlanningConge, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['planning-conges'] }); toast.success('Congé supprimé'); } });
+  
+  const createMutation = useMutation({ 
+    mutationFn: createPlanningConge, 
+    onSuccess: () => { 
+      queryClient.invalidateQueries({ queryKey: ['planning-conges'] }); 
+      toast.success('Congé ajouté'); 
+      resetForm();
+    },
+    onError: (e: any) => toast.error(e.message || 'Erreur')
+  });
+  
+  const deleteMutation = useMutation({ 
+    mutationFn: deletePlanningConge, 
+    onSuccess: () => { 
+      queryClient.invalidateQueries({ queryKey: ['planning-conges'] }); 
+      toast.success('Congé supprimé'); 
+    } 
+  });
+
+  const resetForm = () => {
+    setTechId('');
+    setDateDebut('');
+    setDateFin('');
+    setEditingConge(null);
+  };
 
   const typeLabels: Record<string, string> = { conge: 'Congés', rtt: 'RTT', maladie: 'Maladie', formation: 'Formation' };
+  const typeColors: Record<string, string> = { conge: '#10b981', rtt: '#3b82f6', maladie: '#ef4444', formation: '#f59e0b' };
+
+  // Générer les jours du mois
+  const monthStart = startOfWeek(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1), { weekStartsOn: 1 });
+  const daysInView = Array.from({ length: 42 }, (_, i) => addDays(monthStart, i));
+
+  // Congés pour un jour donné
+  const getCongesForDay = (date: Date) => {
+    return conges?.filter(c => {
+      const start = parseISO(c.date_debut);
+      const end = parseISO(c.date_fin);
+      return isWithinInterval(date, { start, end: addDays(end, 1) });
+    }) || [];
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <Card className="w-[550px] max-h-[80vh] overflow-hidden flex flex-col">
-        <CardBody className="flex flex-col h-full">
+      <Card className="w-[900px] max-h-[90vh] overflow-hidden flex flex-col">
+        <CardBody className="flex flex-col h-full p-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2"><Palmtree className="w-6 h-6 text-green-400" /> Gestion des congés</h2>
+            <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+              <Palmtree className="w-6 h-6 text-green-400" /> Planning des congés
+            </h2>
             <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"><X className="w-5 h-5" /></button>
           </div>
-          <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl mb-4">
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <Select value={techId} onChange={e => setTechId(e.target.value)}><option value="">Technicien...</option>{techniciens.map(t => <option key={t.id} value={t.id}>{t.prenom} {t.nom}</option>)}</Select>
-              <Select value={type} onChange={e => setType(e.target.value)}>{Object.entries(typeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
-              <Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} placeholder="Début" />
-              <Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} placeholder="Fin" />
-            </div>
-            <Button variant="primary" className="w-full" onClick={() => techId && dateDebut && dateFin && createMutation.mutate({ technicien_id: techId, date_debut: dateDebut, date_fin: dateFin, type, valide: true })}><Plus className="w-4 h-4" /> Ajouter</Button>
-          </div>
-          <div className="flex-1 overflow-y-auto space-y-2">
-            {conges?.map(c => (
-              <div key={c.id} className="flex items-center justify-between p-3 bg-[var(--bg-secondary)] rounded-lg">
-                <div><div className="text-sm font-medium text-[var(--text-primary)]">{c.technicien?.prenom} {c.technicien?.nom}</div><div className="text-xs text-[var(--text-tertiary)]">{format(parseISO(c.date_debut), 'd MMM', { locale: fr })} → {format(parseISO(c.date_fin), 'd MMM', { locale: fr })}</div></div>
-                <div className="flex items-center gap-2"><Badge variant="green">{typeLabels[c.type]}</Badge><button onClick={() => deleteMutation.mutate(c.id)} className="p-1 hover:bg-red-500/20 rounded"><Trash2 className="w-4 h-4 text-red-400" /></button></div>
+
+          <div className="flex gap-4 flex-1 min-h-0">
+            {/* Calendrier */}
+            <div className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <button onClick={() => setCurrentMonth(addDays(currentMonth, -30))} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <span className="text-lg font-semibold text-[var(--text-primary)]">
+                  {format(currentMonth, 'MMMM yyyy', { locale: fr })}
+                </span>
+                <button onClick={() => setCurrentMonth(addDays(currentMonth, 30))} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                  <ChevronRight className="w-5 h-5" />
+                </button>
               </div>
-            ))}
+
+              <div className="grid grid-cols-7 gap-1 text-center text-xs text-[var(--text-tertiary)] mb-1">
+                {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(d => <div key={d} className="py-1">{d}</div>)}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 flex-1">
+                {daysInView.map((day, i) => {
+                  const isCurrentMonth = day.getMonth() === currentMonth.getMonth();
+                  const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                  const dayConges = getCongesForDay(day);
+                  
+                  return (
+                    <div 
+                      key={i} 
+                      className={`min-h-[60px] p-1 rounded border ${isCurrentMonth ? 'bg-[var(--bg-secondary)]' : 'bg-[var(--bg-tertiary)]/30'} ${isToday ? 'border-blue-500' : 'border-transparent'}`}
+                    >
+                      <div className={`text-xs ${isCurrentMonth ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'} ${isToday ? 'font-bold text-blue-400' : ''}`}>
+                        {format(day, 'd')}
+                      </div>
+                      <div className="space-y-0.5 mt-0.5">
+                        {dayConges.slice(0, 2).map(c => (
+                          <div 
+                            key={c.id} 
+                            className="text-[9px] px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80"
+                            style={{ background: `${typeColors[c.type]}30`, color: typeColors[c.type] }}
+                            onClick={() => {
+                              setEditingConge(c);
+                              setTechId(c.technicien_id);
+                              setDateDebut(c.date_debut);
+                              setDateFin(c.date_fin);
+                              setType(c.type);
+                            }}
+                          >
+                            {c.technicien?.prenom?.charAt(0)}.{c.technicien?.nom?.charAt(0)}
+                          </div>
+                        ))}
+                        {dayConges.length > 2 && (
+                          <div className="text-[9px] text-[var(--text-muted)]">+{dayConges.length - 2}</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Formulaire */}
+            <div className="w-64 flex flex-col">
+              <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl space-y-3">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                  {editingConge ? 'Modifier' : 'Ajouter'} un congé
+                </h3>
+                <Select value={techId} onChange={e => setTechId(e.target.value)}>
+                  <option value="">Technicien...</option>
+                  {techniciens.map(t => <option key={t.id} value={t.id}>{t.prenom} {t.nom}</option>)}
+                </Select>
+                <Select value={type} onChange={e => setType(e.target.value)}>
+                  {Object.entries(typeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </Select>
+                <Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
+                <Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} />
+                <div className="flex gap-2">
+                  {editingConge && (
+                    <Button variant="secondary" size="sm" onClick={resetForm}>Annuler</Button>
+                  )}
+                  <Button 
+                    variant="primary" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => {
+                      if (!techId || !dateDebut || !dateFin) return toast.error('Remplir tous les champs');
+                      createMutation.mutate({ technicien_id: techId, date_debut: dateDebut, date_fin: dateFin, type, valide: true });
+                    }}
+                  >
+                    {editingConge ? 'Modifier' : 'Ajouter'}
+                  </Button>
+                </div>
+                {editingConge && (
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    className="w-full text-red-400 hover:bg-red-500/20"
+                    onClick={() => { deleteMutation.mutate(editingConge.id); resetForm(); }}
+                  >
+                    <Trash2 className="w-4 h-4" /> Supprimer
+                  </Button>
+                )}
+              </div>
+
+              {/* Légende */}
+              <div className="mt-3 p-3 bg-[var(--bg-tertiary)] rounded-xl">
+                <h4 className="text-xs font-semibold text-[var(--text-secondary)] mb-2">Légende</h4>
+                <div className="space-y-1">
+                  {Object.entries(typeLabels).map(([k, v]) => (
+                    <div key={k} className="flex items-center gap-2 text-xs">
+                      <div className="w-3 h-3 rounded" style={{ background: typeColors[k] }} />
+                      <span className="text-[var(--text-tertiary)]">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </CardBody>
       </Card>
@@ -240,49 +449,242 @@ function CongesModal({ onClose, techniciens }: { onClose: () => void; technicien
   );
 }
 
-// Modal astreintes
+// Modal astreintes avec calendrier (jeudi à jeudi)
 function AstreintesModal({ onClose, techniciens }: { onClose: () => void; techniciens: any[] }) {
   const queryClient = useQueryClient();
-  const [semaine, setSemaine] = useState(format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [techId, setTechId] = useState('');
+  const [dateDebut, setDateDebut] = useState('');
+  const [dateFin, setDateFin] = useState('');
+  const [editingAstreinte, setEditingAstreinte] = useState<PlanningAstreinte | null>(null);
 
   const { data: astreintes } = useQuery({ queryKey: ['planning-astreintes'], queryFn: getPlanningAstreintes });
-  const createMutation = useMutation({ mutationFn: createPlanningAstreinte, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['planning-astreintes'] }); queryClient.invalidateQueries({ queryKey: ['astreinte-semaine'] }); toast.success('Astreinte assignée'); } });
-
-  const semaines = useMemo(() => {
-    const result = [];
-    const today = startOfWeek(new Date(), { weekStartsOn: 1 });
-    for (let i = 0; i < 12; i++) {
-      const s = addWeeks(today, i);
-      const astr = astreintes?.find(a => a.semaine_debut === format(s, 'yyyy-MM-dd'));
-      result.push({ date: s, astreinte: astr });
+  
+  const createMutation = useMutation({ 
+    mutationFn: createPlanningAstreinte, 
+    onSuccess: () => { 
+      queryClient.invalidateQueries({ queryKey: ['planning-astreintes'] }); 
+      queryClient.invalidateQueries({ queryKey: ['astreinte-encours'] }); 
+      toast.success('Astreinte ajoutée'); 
+      resetForm();
+    },
+    onError: (e: any) => toast.error(e.message || 'Erreur')
+  });
+  
+  const updateMutation = useMutation({ 
+    mutationFn: ({ id, data }: { id: string; data: Partial<PlanningAstreinte> }) => updatePlanningAstreinte(id, data), 
+    onSuccess: () => { 
+      queryClient.invalidateQueries({ queryKey: ['planning-astreintes'] }); 
+      queryClient.invalidateQueries({ queryKey: ['astreinte-encours'] }); 
+      toast.success('Astreinte modifiée'); 
+      resetForm();
     }
-    return result;
-  }, [astreintes]);
+  });
+  
+  const deleteMutation = useMutation({ 
+    mutationFn: deletePlanningAstreinte, 
+    onSuccess: () => { 
+      queryClient.invalidateQueries({ queryKey: ['planning-astreintes'] }); 
+      toast.success('Astreinte supprimée'); 
+      resetForm();
+    } 
+  });
+
+  const resetForm = () => {
+    setTechId('');
+    setDateDebut('');
+    setDateFin('');
+    setEditingAstreinte(null);
+  };
+
+  // Trouver le prochain jeudi à partir d'une date
+  const getNextThursday = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = (4 - day + 7) % 7; // 4 = jeudi
+    d.setDate(d.getDate() + diff);
+    return d;
+  };
+
+  // Quand on sélectionne une date de début, auto-remplir +7 jours
+  const handleDateDebutChange = (value: string) => {
+    setDateDebut(value);
+    if (value) {
+      const debut = parseISO(value);
+      setDateFin(format(addDays(debut, 7), 'yyyy-MM-dd'));
+    }
+  };
+
+  // Générer les jours du mois
+  const monthStart = startOfWeek(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1), { weekStartsOn: 1 });
+  const daysInView = Array.from({ length: 42 }, (_, i) => addDays(monthStart, i));
+
+  // Astreinte pour un jour donné
+  const getAstreinteForDay = (date: Date) => {
+    return astreintes?.find(a => {
+      const start = parseISO(a.date_debut);
+      const end = parseISO(a.date_fin);
+      return isWithinInterval(date, { start, end });
+    });
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <Card className="w-[600px] max-h-[85vh] overflow-hidden flex flex-col">
-        <CardBody className="flex flex-col h-full">
+      <Card className="w-[900px] max-h-[90vh] overflow-hidden flex flex-col">
+        <CardBody className="flex flex-col h-full p-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2"><Phone className="w-6 h-6 text-red-400" /> Planning astreintes</h2>
-            <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"><X className="w-5 h-5" /></button>
+            <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+              <Phone className="w-6 h-6 text-red-400" /> Planning des astreintes
+            </h2>
+            <div className="flex items-center gap-2">
+              <Badge variant="amber">Jeudi → Jeudi</Badge>
+              <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"><X className="w-5 h-5" /></button>
+            </div>
           </div>
-          <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl mb-4 flex gap-3">
-            <Input type="date" value={semaine} onChange={e => setSemaine(e.target.value)} className="w-40" />
-            <Select value={techId} onChange={e => setTechId(e.target.value)} className="flex-1"><option value="">Technicien...</option>{techniciens.map(t => <option key={t.id} value={t.id}>{t.prenom} {t.nom}</option>)}</Select>
-            <Button variant="primary" onClick={() => techId && createMutation.mutate({ technicien_id: techId, semaine_debut: semaine, type: 'semaine' })}><Plus className="w-4 h-4" /></Button>
-          </div>
-          <div className="flex-1 overflow-y-auto space-y-2">
-            {semaines.map(({ date, astreinte }) => {
-              const isNow = format(date, 'yyyy-MM-dd') === format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-              return (
-                <div key={format(date, 'yyyy-MM-dd')} className={`flex items-center justify-between p-3 rounded-lg ${isNow ? 'bg-red-500/10 border border-red-500/30' : 'bg-[var(--bg-secondary)]'}`}>
-                  <div><div className="text-sm font-medium text-[var(--text-primary)]">Sem. du {format(date, 'd MMM', { locale: fr })} {isNow && <Badge variant="red" className="ml-2">En cours</Badge>}</div><div className="text-xs text-[var(--text-tertiary)]">{format(date, 'd/MM')} → {format(addDays(date, 6), 'd/MM')}</div></div>
-                  {astreinte ? <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 rounded-lg"><Phone className="w-4 h-4 text-red-400" /><span className="text-sm text-red-300">{astreinte.technicien?.prenom} {astreinte.technicien?.nom}</span></div> : <span className="text-sm text-[var(--text-muted)] italic">Non assignée</span>}
+
+          <div className="flex gap-4 flex-1 min-h-0">
+            {/* Calendrier */}
+            <div className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <button onClick={() => setCurrentMonth(addDays(currentMonth, -30))} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <span className="text-lg font-semibold text-[var(--text-primary)]">
+                  {format(currentMonth, 'MMMM yyyy', { locale: fr })}
+                </span>
+                <button onClick={() => setCurrentMonth(addDays(currentMonth, 30))} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 text-center text-xs text-[var(--text-tertiary)] mb-1">
+                {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(d => (
+                  <div key={d} className={`py-1 ${d === 'Jeu' ? 'text-red-400 font-bold' : ''}`}>{d}</div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 flex-1">
+                {daysInView.map((day, i) => {
+                  const isCurrentMonth = day.getMonth() === currentMonth.getMonth();
+                  const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                  const isThursday = day.getDay() === 4;
+                  const astreinte = getAstreinteForDay(day);
+                  const isStartDay = astreinte && format(parseISO(astreinte.date_debut), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd');
+                  
+                  return (
+                    <div 
+                      key={i} 
+                      className={`min-h-[60px] p-1 rounded border transition-colors cursor-pointer
+                        ${isCurrentMonth ? 'bg-[var(--bg-secondary)]' : 'bg-[var(--bg-tertiary)]/30'} 
+                        ${isToday ? 'border-blue-500' : isThursday ? 'border-red-500/30' : 'border-transparent'}
+                        ${astreinte ? 'bg-red-500/10' : ''}
+                        hover:bg-[var(--bg-tertiary)]
+                      `}
+                      onClick={() => {
+                        if (astreinte) {
+                          setEditingAstreinte(astreinte);
+                          setTechId(astreinte.technicien_id);
+                          setDateDebut(astreinte.date_debut);
+                          setDateFin(astreinte.date_fin);
+                        } else if (isThursday) {
+                          handleDateDebutChange(format(day, 'yyyy-MM-dd'));
+                        }
+                      }}
+                    >
+                      <div className={`text-xs ${isCurrentMonth ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'} ${isToday ? 'font-bold text-blue-400' : ''} ${isThursday ? 'text-red-400' : ''}`}>
+                        {format(day, 'd')}
+                      </div>
+                      {astreinte && isStartDay && (
+                        <div className="text-[9px] px-1 py-0.5 rounded bg-red-500/30 text-red-300 truncate mt-0.5">
+                          <Phone className="w-2 h-2 inline mr-0.5" />
+                          {astreinte.technicien?.prenom?.charAt(0)}.{astreinte.technicien?.nom?.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Formulaire */}
+            <div className="w-64 flex flex-col">
+              <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl space-y-3">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                  {editingAstreinte ? 'Modifier' : 'Nouvelle'} astreinte
+                </h3>
+                <Select value={techId} onChange={e => setTechId(e.target.value)}>
+                  <option value="">Technicien...</option>
+                  {techniciens.map(t => <option key={t.id} value={t.id}>{t.prenom} {t.nom}</option>)}
+                </Select>
+                <div>
+                  <label className="text-xs text-[var(--text-tertiary)]">Début (jeudi)</label>
+                  <Input type="date" value={dateDebut} onChange={e => handleDateDebutChange(e.target.value)} />
                 </div>
-              );
-            })}
+                <div>
+                  <label className="text-xs text-[var(--text-tertiary)]">Fin (jeudi suivant)</label>
+                  <Input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} />
+                </div>
+                <div className="flex gap-2">
+                  {editingAstreinte && (
+                    <Button variant="secondary" size="sm" onClick={resetForm}>Annuler</Button>
+                  )}
+                  <Button 
+                    variant="primary" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => {
+                      if (!techId || !dateDebut || !dateFin) return toast.error('Remplir tous les champs');
+                      if (editingAstreinte) {
+                        updateMutation.mutate({ id: editingAstreinte.id, data: { technicien_id: techId, date_debut: dateDebut, date_fin: dateFin } });
+                      } else {
+                        createMutation.mutate({ technicien_id: techId, date_debut: dateDebut, date_fin: dateFin, type: 'semaine' });
+                      }
+                    }}
+                  >
+                    {editingAstreinte ? 'Modifier' : 'Ajouter'}
+                  </Button>
+                </div>
+                {editingAstreinte && (
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    className="w-full text-red-400 hover:bg-red-500/20"
+                    onClick={() => deleteMutation.mutate(editingAstreinte.id)}
+                  >
+                    <Trash2 className="w-4 h-4" /> Supprimer
+                  </Button>
+                )}
+              </div>
+
+              {/* Liste des prochaines astreintes */}
+              <div className="mt-3 p-3 bg-[var(--bg-tertiary)] rounded-xl flex-1 overflow-y-auto">
+                <h4 className="text-xs font-semibold text-[var(--text-secondary)] mb-2">Prochaines astreintes</h4>
+                <div className="space-y-2">
+                  {astreintes?.filter(a => parseISO(a.date_fin) >= new Date()).slice(0, 6).map(a => (
+                    <div 
+                      key={a.id} 
+                      className="p-2 bg-[var(--bg-secondary)] rounded-lg cursor-pointer hover:bg-[var(--bg-elevated)]"
+                      onClick={() => {
+                        setEditingAstreinte(a);
+                        setTechId(a.technicien_id);
+                        setDateDebut(a.date_debut);
+                        setDateFin(a.date_fin);
+                      }}
+                    >
+                      <div className="text-xs font-medium text-[var(--text-primary)]">
+                        {a.technicien?.prenom} {a.technicien?.nom}
+                      </div>
+                      <div className="text-[10px] text-[var(--text-tertiary)]">
+                        {format(parseISO(a.date_debut), 'd MMM', { locale: fr })} → {format(parseISO(a.date_fin), 'd MMM', { locale: fr })}
+                      </div>
+                    </div>
+                  ))}
+                  {(!astreintes || astreintes.length === 0) && (
+                    <div className="text-xs text-[var(--text-muted)] text-center py-2">Aucune astreinte</div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </CardBody>
       </Card>
@@ -326,10 +728,25 @@ function AstreinteBanner({ astreinte }: { astreinte: PlanningAstreinte | null })
   return (
     <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center"><Phone className="w-5 h-5 text-red-400" /></div>
-        <div><div className="text-sm font-semibold text-red-300">Astreinte cette semaine</div><div className="text-xs text-red-400/70">{astreinte.technicien?.prenom} {astreinte.technicien?.nom} • {astreinte.technicien?.telephone || 'N/A'}</div></div>
+        <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+          <Phone className="w-5 h-5 text-red-400" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-red-300">
+            Astreinte en cours
+          </div>
+          <div className="text-xs text-red-400/70">
+            {astreinte.technicien?.prenom} {astreinte.technicien?.nom} • {astreinte.technicien?.telephone || 'N/A'}
+          </div>
+          <div className="text-[10px] text-red-400/50 mt-0.5">
+            Du {format(parseISO(astreinte.date_debut), 'EEEE d MMM', { locale: fr })} au {format(parseISO(astreinte.date_fin), 'EEEE d MMM', { locale: fr })}
+          </div>
+        </div>
       </div>
-      <Badge variant="red"><Phone className="w-3 h-3 mr-1" />D'astreinte</Badge>
+      <Badge variant="red">
+        <Phone className="w-3 h-3 mr-1" />
+        D'astreinte
+      </Badge>
     </div>
   );
 }
@@ -358,7 +775,7 @@ export function PlanningPage() {
   const { data: mesNonPlanifiees } = useQuery({ queryKey: ['mes-non-planifiees'], queryFn: getMESNonPlanifiees });
   const { data: tournees } = useQuery({ queryKey: ['tournees-actives'], queryFn: getTourneesActives });
   const { data: conges } = useQuery({ queryKey: ['planning-conges'], queryFn: getPlanningConges });
-  const { data: astreinteSemaine } = useQuery({ queryKey: ['astreinte-semaine', dateDebut], queryFn: () => getAstreinteSemaine(dateDebut) });
+  const { data: astreinteEnCours } = useQuery({ queryKey: ['astreinte-encours', dateDebut], queryFn: () => getAstreinteEnCours(format(new Date(), 'yyyy-MM-dd')) });
 
   // Mutations
   const createMutation = useMutation({
@@ -426,6 +843,30 @@ export function PlanningPage() {
 
   const handleDeleteEvent = (id: string) => { if (confirm('Supprimer cet événement ?')) deleteMutation.mutate(id); };
 
+  const handleDuplicateEvent = (event: PlanningEvent) => {
+    // Dupliquer l'événement au jour suivant
+    const dateDebut = parseISO(event.date_debut);
+    const dateFin = parseISO(event.date_fin);
+    const newDateDebut = addDays(dateDebut, 1);
+    const newDateFin = addDays(dateFin, 1);
+    
+    createMutation.mutate({
+      titre: event.titre,
+      technicien_id: event.technicien_id,
+      type_event: event.type_event,
+      date_debut: newDateDebut.toISOString(),
+      date_fin: newDateFin.toISOString(),
+      couleur: event.couleur,
+      travaux_id: event.travaux_id,
+      mise_service_id: event.mise_service_id,
+      tournee_id: event.tournee_id,
+      est_manuel: (event as any).est_manuel,
+      description: (event as any).description,
+      lieu: (event as any).lieu,
+    });
+    toast.success('Événement dupliqué au jour suivant');
+  };
+
   const handleCellDoubleClick = (techId: string, date: Date) => {
     if (isEnConge(techId, date)) { toast.error('Ce technicien est en congé'); return; }
     setCreateEventDate(date);
@@ -439,7 +880,7 @@ export function PlanningPage() {
     <DndContext collisionDetection={pointerWithin} onDragStart={e => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
       <div className="h-full flex gap-4 p-4">
         <div className="flex-1 flex flex-col min-w-0">
-          <AstreinteBanner astreinte={astreinteSemaine} />
+          <AstreinteBanner astreinte={astreinteEnCours} />
 
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
@@ -483,7 +924,7 @@ export function PlanningPage() {
                       <div key={`${tech.id}-${jIdx}`} className={`border-b border-r last:border-r-0 ${isToday ? 'bg-blue-500/5' : ''}`} onDoubleClick={() => handleCellDoubleClick(tech.id, jour)}>
                         <DroppableCell id={cellId} isBlocked={!!conge}>
                           {conge && <CongeCard conge={conge} />}
-                          {!conge && cellEvents.map(evt => <EventCard key={evt.id} event={evt} onDelete={() => handleDeleteEvent(evt.id)} onClick={() => {}} />)}
+                          {!conge && cellEvents.map(evt => <EventCard key={evt.id} event={evt} onDelete={() => handleDeleteEvent(evt.id)} onDuplicate={() => handleDuplicateEvent(evt)} />)}
                         </DroppableCell>
                       </div>
                     );
