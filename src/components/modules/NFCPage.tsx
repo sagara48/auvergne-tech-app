@@ -225,7 +225,6 @@ function EncodeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
                 >
                   <ScanLine className="w-4 h-4" /> Scanner le tag
                 </Button>
-                </Button>
               </div>
             </div>
           )}
