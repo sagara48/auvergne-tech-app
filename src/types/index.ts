@@ -126,6 +126,22 @@ export interface Tournee {
   technicien?: Technicien;
 }
 
+// Types pour tâches et pièces de travaux
+export interface TravauxTache {
+  id?: string;
+  description: string;
+  statut: 'a_faire' | 'en_cours' | 'termine';
+  ordre: number;
+}
+
+export interface TravauxPiece {
+  id?: string;
+  article_id?: string;
+  designation: string;
+  reference?: string;
+  quantite: number;
+}
+
 export interface Travaux {
   id: string;
   code: string;
@@ -142,6 +158,8 @@ export interface Travaux {
   date_butoir?: string;
   progression: number;
   devis_montant?: number;
+  taches?: TravauxTache[];
+  pieces?: TravauxPiece[];
   client?: Client;
   ascenseur?: Ascenseur;
   technicien?: Technicien;

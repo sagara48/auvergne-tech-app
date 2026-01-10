@@ -261,6 +261,8 @@ CREATE TABLE IF NOT EXISTS travaux (
   date_butoir DATE,
   progression INTEGER DEFAULT 0,
   devis_montant DECIMAL(10,2),
+  taches JSONB DEFAULT '[]',           -- Liste des tâches à réaliser
+  pieces JSONB DEFAULT '[]',           -- Liste des pièces nécessaires
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
