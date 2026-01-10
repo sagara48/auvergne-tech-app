@@ -1570,7 +1570,7 @@ export async function affecterPiecesATravail(
   // Récupérer le travail
   const { data: travail, error: fetchError } = await supabase
     .from('travaux')
-    .select('pieces')
+    .select('pieces, code')
     .eq('id', travailId)
     .single();
   
@@ -1582,7 +1582,7 @@ export async function affecterPiecesATravail(
   // Mettre à jour les pièces correspondantes
   const updatedPieces = pieces.map((p: any) => {
     if (resteAAfecter <= 0) return p;
-    if (p.source !== 'commande' || p.consommee) return p;
+    if (p.source !== 'commande' || p.statut === 'en_stock' || p.consommee) return p;
     
     // Match par article_id ou designation
     const match = (articleId && p.article_id === articleId) || 
@@ -1593,10 +1593,14 @@ export async function affecterPiecesATravail(
       const qteAAffecter = Math.min(resteAAfecter, qteNecessaire);
       resteAAfecter -= qteAAffecter;
       
+      const newQteRecue = (p.quantite_recue || 0) + qteAAffecter;
+      const isComplete = newQteRecue >= p.quantite;
+      
       return {
         ...p,
-        quantite_recue: (p.quantite_recue || 0) + qteAAffecter,
-        consommee: (p.quantite_recue || 0) + qteAAffecter >= p.quantite,
+        quantite_recue: newQteRecue,
+        statut: isComplete ? 'en_stock' : 'en_attente',
+        consommee: false, // Pas encore consommée, juste en stock
       };
     }
     return p;
@@ -1609,6 +1613,17 @@ export async function affecterPiecesATravail(
     .eq('id', travailId);
   
   if (updateError) throw updateError;
+  
+  // Créer un mouvement de stock "sortie vers travaux" si on a un articleId
+  if (articleId && quantiteAffectee > 0) {
+    // On enregistre une sortie du stock vers le travail
+    await createStockMouvement(
+      articleId, 
+      'sortie', 
+      quantiteAffectee, 
+      `Affectation travaux ${travail.code}`
+    );
+  }
 }
 
 // Réceptionner une ligne de commande avec distribution intelligente
@@ -1626,15 +1641,83 @@ export async function receptionnerLigneCommande(
   // 1. Mettre à jour la ligne de commande
   await updateCommandeLigne(ligneId, { quantite_recue: quantiteRecue });
   
-  // 2. Affecter aux travaux
-  for (const aff of affectations) {
-    if (aff.quantite > 0) {
-      await affecterPiecesATravail(aff.travailId, validArticleId || undefined, designation, aff.quantite);
-    }
+  // 2. Entrée totale au stock d'abord (si on a un articleId)
+  if (quantiteRecue > 0 && validArticleId) {
+    await createStockMouvement(validArticleId, 'entree', quantiteRecue, 'Réception commande');
   }
   
-  // 3. Ajouter au stock si nécessaire (seulement si on a un articleId valide)
-  if (ajouterAuStock > 0 && validArticleId) {
-    await createStockMouvement(validArticleId, 'entree', ajouterAuStock, 'Réception commande');
+  // 3. Sorties vers travaux (les affectations créent des mouvements de sortie)
+  for (const aff of affectations) {
+    if (aff.quantite > 0) {
+      await affecterPiecesATravailSansMouvement(aff.travailId, validArticleId || undefined, designation, aff.quantite);
+      
+      // Créer le mouvement de sortie vers travaux
+      if (validArticleId) {
+        // Récupérer le code du travail pour le motif
+        const { data: travail } = await supabase
+          .from('travaux')
+          .select('code')
+          .eq('id', aff.travailId)
+          .single();
+        
+        await createStockMouvement(
+          validArticleId, 
+          'sortie', 
+          aff.quantite, 
+          `Affectation travaux ${travail?.code || aff.travailId}`
+        );
+      }
+    }
   }
+}
+
+// Version sans mouvement de stock (utilisée par receptionnerLigneCommande)
+async function affecterPiecesATravailSansMouvement(
+  travailId: string, 
+  articleId: string | undefined, 
+  designation: string,
+  quantiteAffectee: number
+): Promise<void> {
+  const { data: travail, error: fetchError } = await supabase
+    .from('travaux')
+    .select('pieces')
+    .eq('id', travailId)
+    .single();
+  
+  if (fetchError) throw fetchError;
+  
+  const pieces = travail.pieces || [];
+  let resteAAfecter = quantiteAffectee;
+  
+  const updatedPieces = pieces.map((p: any) => {
+    if (resteAAfecter <= 0) return p;
+    if (p.source !== 'commande' || p.statut === 'en_stock' || p.consommee) return p;
+    
+    const match = (articleId && p.article_id === articleId) || 
+                  (designation && p.designation?.toLowerCase() === designation.toLowerCase());
+    
+    if (match) {
+      const qteNecessaire = p.quantite - (p.quantite_recue || 0);
+      const qteAAffecter = Math.min(resteAAfecter, qteNecessaire);
+      resteAAfecter -= qteAAffecter;
+      
+      const newQteRecue = (p.quantite_recue || 0) + qteAAffecter;
+      const isComplete = newQteRecue >= p.quantite;
+      
+      return {
+        ...p,
+        quantite_recue: newQteRecue,
+        statut: isComplete ? 'en_stock' : 'en_attente',
+        consommee: false,
+      };
+    }
+    return p;
+  });
+  
+  const { error: updateError } = await supabase
+    .from('travaux')
+    .update({ pieces: updatedPieces, updated_at: new Date().toISOString() })
+    .eq('id', travailId);
+  
+  if (updateError) throw updateError;
 }

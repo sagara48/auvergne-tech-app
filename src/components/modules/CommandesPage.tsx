@@ -90,16 +90,19 @@ function ActionDropdown({
   onStatusChange, 
   onArchive,
   onOpenDetail,
-  onReception
+  onReception,
+  toutRecu = false
 }: { 
   commande: Commande; 
   onStatusChange: (statut: StatutCommande) => void;
   onArchive: () => void;
   onOpenDetail: () => void;
   onReception: () => void;
+  toutRecu?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const otherActions = getOtherActions(commande.statut);
+  const canReception = ['commandee', 'expediee'].includes(commande.statut) && !toutRecu;
 
   return (
     <div className="relative">
@@ -121,7 +124,7 @@ function ActionDropdown({
               <Eye className="w-4 h-4" /> Voir détails
             </button>
             
-            {['commandee', 'expediee'].includes(commande.statut) && (
+            {canReception && (
               <button
                 onClick={(e) => { e.stopPropagation(); onReception(); setIsOpen(false); }}
                 className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-green-500/10 flex items-center gap-2"
@@ -563,7 +566,7 @@ function ReceptionModal({
 }: {
   commande: Commande;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (toutRecu: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(true);
@@ -751,8 +754,13 @@ function ReceptionModal({
       queryClient.invalidateQueries({ queryKey: ['travaux'] });
       queryClient.invalidateQueries({ queryKey: ['stock'] });
       
+      // Calculer si tout est reçu
+      const totalCommande = commande.lignes?.reduce((sum: number, l: any) => sum + l.quantite, 0) || 0;
+      const totalRecu = Object.values(affectationsParLigne).reduce((sum, l) => sum + l.quantiteRecue, 0);
+      const toutRecu = totalRecu >= totalCommande && totalCommande > 0;
+      
       toast.success('Réception validée avec succès');
-      onSuccess();
+      onSuccess(toutRecu);
     } catch (err) {
       console.error('Erreur réception:', err);
       toast.error('Erreur lors de la réception');
@@ -1048,8 +1056,8 @@ function CommandeDetailModal({
     }
   };
 
-  // Peut-on réceptionner ?
-  const canReceptionner = ['commandee', 'expediee'].includes(commande.statut);
+  // Peut-on réceptionner ? Seulement si commandée/expédiée ET pas tout reçu
+  const canReceptionner = ['commandee', 'expediee'].includes(commande.statut) && !statsReception.complete;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -1421,7 +1429,16 @@ export function CommandesPage() {
               const config = STATUT_CONFIG[commande.statut];
               const prioriteConfig = PRIORITE_CONFIG[commande.priorite];
               const StatusIcon = config.icon;
-              const nextAction = getNextAction(commande.statut);
+              
+              // Calculer si tout est reçu
+              const totalCommande = commande.lignes?.reduce((sum: number, l: any) => sum + l.quantite, 0) || 0;
+              const totalRecu = commande.lignes?.reduce((sum: number, l: any) => sum + (l.quantite_recue || 0), 0) || 0;
+              const toutRecu = totalRecu >= totalCommande && totalCommande > 0;
+              
+              // Adapter nextAction si tout est reçu
+              const nextAction = toutRecu && commande.statut === 'expediee' 
+                ? null 
+                : getNextAction(commande.statut);
               
               return (
                 <div
@@ -1441,6 +1458,9 @@ export function CommandesPage() {
                           <span className="font-mono text-sm font-bold text-cyan-400">{commande.code}</span>
                           <Badge variant={config.color}>{config.label}</Badge>
                           <Badge variant={prioriteConfig.color}>{prioriteConfig.label}</Badge>
+                          {toutRecu && ['commandee', 'expediee'].includes(commande.statut) && (
+                            <Badge variant="green">Tout reçu</Badge>
+                          )}
                         </div>
                         <div className="text-sm text-[var(--text-primary)]">{commande.fournisseur}</div>
                         <div className="text-xs text-[var(--text-muted)]">
@@ -1480,6 +1500,7 @@ export function CommandesPage() {
                         onArchive={() => setArchiveItem(commande)}
                         onOpenDetail={() => setDetailCommande(commande)}
                         onReception={() => setReceptionCommande(commande)}
+                        toutRecu={toutRecu}
                       />
                     </div>
                   </div>
@@ -1513,11 +1534,7 @@ export function CommandesPage() {
         <ReceptionModal
           commande={receptionCommande}
           onClose={() => setReceptionCommande(null)}
-          onSuccess={() => {
-            // Vérifier si toutes les pièces sont reçues
-            const toutRecu = receptionCommande.lignes?.every((l: any) => 
-              (l.quantite_recue || 0) >= l.quantite
-            );
+          onSuccess={(toutRecu) => {
             if (toutRecu) {
               handleStatusChange(receptionCommande, 'recue');
             }

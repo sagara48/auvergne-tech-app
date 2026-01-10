@@ -145,6 +145,7 @@ export interface TravauxPiece {
   quantite_recue?: number;
   source?: 'stock' | 'commande';
   consommee?: boolean;
+  statut?: 'en_attente' | 'en_stock' | 'consommee';
 }
 
 export interface Travaux {
