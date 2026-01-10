@@ -270,6 +270,142 @@ export async function getStockVehiculeByTechnicien(technicienId: string) {
   return data || [];
 }
 
+// Ajouter du stock au véhicule (depuis dépôt)
+export async function ajouterStockVehicule(
+  vehiculeId: string, 
+  articleId: string, 
+  quantite: number, 
+  technicienId: string,
+  notes?: string
+): Promise<void> {
+  // 1. Vérifier/créer l'entrée stock_vehicule
+  const { data: existing } = await supabase
+    .from('stock_vehicule')
+    .select('id, quantite')
+    .eq('vehicule_id', vehiculeId)
+    .eq('article_id', articleId)
+    .single();
+
+  if (existing) {
+    // Mettre à jour la quantité
+    await supabase
+      .from('stock_vehicule')
+      .update({ quantite: existing.quantite + quantite })
+      .eq('id', existing.id);
+  } else {
+    // Créer l'entrée
+    await supabase
+      .from('stock_vehicule')
+      .insert({ vehicule_id: vehiculeId, article_id: articleId, quantite, quantite_min: 0 });
+  }
+
+  // 2. Réduire le stock dépôt
+  const { data: article } = await supabase
+    .from('stock_articles')
+    .select('quantite_stock')
+    .eq('id', articleId)
+    .single();
+
+  if (article) {
+    await supabase
+      .from('stock_articles')
+      .update({ quantite_stock: Math.max(0, article.quantite_stock - quantite) })
+      .eq('id', articleId);
+  }
+
+  // 3. Créer le mouvement de stock
+  await supabase.from('stock_mouvements').insert({
+    article_id: articleId,
+    type_mouvement: 'sortie',
+    quantite,
+    motif: 'transfert_vehicule',
+    vehicule_id: vehiculeId,
+    notes: notes || `Transfert vers véhicule`,
+    effectue_par: technicienId,
+  });
+}
+
+// Retirer du stock véhicule (vers dépôt)
+export async function retirerStockVehicule(
+  vehiculeId: string, 
+  articleId: string, 
+  quantite: number, 
+  technicienId: string,
+  notes?: string
+): Promise<void> {
+  // 1. Réduire le stock véhicule
+  const { data: existing } = await supabase
+    .from('stock_vehicule')
+    .select('id, quantite')
+    .eq('vehicule_id', vehiculeId)
+    .eq('article_id', articleId)
+    .single();
+
+  if (!existing) throw new Error('Article non trouvé dans le véhicule');
+
+  const newQty = existing.quantite - quantite;
+  if (newQty <= 0) {
+    // Supprimer l'entrée si quantité <= 0
+    await supabase.from('stock_vehicule').delete().eq('id', existing.id);
+  } else {
+    await supabase
+      .from('stock_vehicule')
+      .update({ quantite: newQty })
+      .eq('id', existing.id);
+  }
+
+  // 2. Augmenter le stock dépôt
+  const { data: article } = await supabase
+    .from('stock_articles')
+    .select('quantite_stock')
+    .eq('id', articleId)
+    .single();
+
+  if (article) {
+    await supabase
+      .from('stock_articles')
+      .update({ quantite_stock: article.quantite_stock + quantite })
+      .eq('id', articleId);
+  }
+
+  // 3. Créer le mouvement de stock
+  await supabase.from('stock_mouvements').insert({
+    article_id: articleId,
+    type_mouvement: 'entree',
+    quantite,
+    motif: 'retour_vehicule',
+    vehicule_id: vehiculeId,
+    notes: notes || `Retour depuis véhicule`,
+    effectue_par: technicienId,
+  });
+}
+
+// Définir le stock initial d'un véhicule (sans mouvement)
+export async function setStockVehicule(
+  vehiculeId: string, 
+  articleId: string, 
+  quantite: number,
+  quantiteMin: number = 0
+): Promise<void> {
+  const { data: existing } = await supabase
+    .from('stock_vehicule')
+    .select('id')
+    .eq('vehicule_id', vehiculeId)
+    .eq('article_id', articleId)
+    .single();
+
+  if (existing) {
+    await supabase
+      .from('stock_vehicule')
+      .update({ quantite, quantite_min: quantiteMin })
+      .eq('id', existing.id);
+  } else {
+    await supabase
+      .from('stock_vehicule')
+      .insert({ vehicule_id: vehiculeId, article_id: articleId, quantite, quantite_min: quantiteMin });
+  }
+}
+
 export async function getStockGlobal() {
   const { data, error } = await supabase.from('vue_stock_global').select('*').order('reference');
   if (error) throw error;
@@ -324,6 +460,194 @@ export async function validerTransfert(id: string, validePar: string, approuve: 
     .eq('id', id).select().single();
   if (error) throw error;
   return data;
+}
+
+// ================================================
+// ENTRETIENS VÉHICULES
+// ================================================
+
+export interface TypeEntretien {
+  id: string;
+  nom: string;
+  description?: string;
+  periodicite_km?: number;
+  periodicite_mois?: number;
+  icone: string;
+  couleur: string;
+  ordre: number;
+  actif: boolean;
+}
+
+export interface EntretienVehicule {
+  id: string;
+  vehicule_id: string;
+  type_entretien_id?: string;
+  type_personnalise?: string;
+  date_entretien: string;
+  kilometrage: number;
+  cout?: number;
+  garage?: string;
+  notes?: string;
+  prochain_km?: number;
+  prochaine_date?: string;
+  pieces_jointes?: { nom: string; url: string }[];
+  created_at: string;
+  created_by?: string;
+  type_entretien?: TypeEntretien;
+}
+
+export async function getTypesEntretien(): Promise<TypeEntretien[]> {
+  const { data, error } = await supabase
+    .from('vehicules_types_entretien')
+    .select('*')
+    .eq('actif', true)
+    .order('ordre');
+  if (error) {
+    console.warn('Table vehicules_types_entretien non disponible');
+    return [];
+  }
+  return data || [];
+}
+
+export async function getEntretiensVehicule(vehiculeId: string): Promise<EntretienVehicule[]> {
+  const { data, error } = await supabase
+    .from('vehicules_entretiens')
+    .select('*, type_entretien:vehicules_types_entretien(*)')
+    .eq('vehicule_id', vehiculeId)
+    .order('date_entretien', { ascending: false });
+  if (error) {
+    console.warn('Table vehicules_entretiens non disponible');
+    return [];
+  }
+  return data || [];
+}
+
+export async function createEntretien(entretien: Partial<EntretienVehicule>): Promise<EntretienVehicule> {
+  const { data, error } = await supabase
+    .from('vehicules_entretiens')
+    .insert(entretien)
+    .select('*, type_entretien:vehicules_types_entretien(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateEntretien(id: string, entretien: Partial<EntretienVehicule>): Promise<EntretienVehicule> {
+  const { data, error } = await supabase
+    .from('vehicules_entretiens')
+    .update(entretien)
+    .eq('id', id)
+    .select('*, type_entretien:vehicules_types_entretien(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteEntretien(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('vehicules_entretiens')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Récupérer les prochains entretiens à prévoir
+export async function getProchainEntretiens(vehiculeId: string): Promise<any[]> {
+  const { data, error } = await supabase
+    .from('vue_vehicules_prochains_entretiens')
+    .select('*')
+    .eq('vehicule_id', vehiculeId);
+  if (error) return [];
+  return data || [];
+}
+
+// ================================================
+// PLEINS CARBURANT
+// ================================================
+
+export interface PleinCarburant {
+  id: string;
+  vehicule_id: string;
+  date_plein: string;
+  kilometrage: number;
+  litres: number;
+  montant: number;
+  prix_litre?: number;
+  type_carburant: string;
+  plein_complet: boolean;
+  station?: string;
+  notes?: string;
+  created_at: string;
+  created_by?: string;
+}
+
+export async function getPleinsVehicule(vehiculeId: string): Promise<PleinCarburant[]> {
+  const { data, error } = await supabase
+    .from('vehicules_pleins')
+    .select('*')
+    .eq('vehicule_id', vehiculeId)
+    .order('date_plein', { ascending: false });
+  if (error) {
+    console.warn('Table vehicules_pleins non disponible');
+    return [];
+  }
+  return data || [];
+}
+
+export async function createPlein(plein: Partial<PleinCarburant>): Promise<PleinCarburant> {
+  const { data, error } = await supabase
+    .from('vehicules_pleins')
+    .insert(plein)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updatePlein(id: string, plein: Partial<PleinCarburant>): Promise<PleinCarburant> {
+  const { data, error } = await supabase
+    .from('vehicules_pleins')
+    .update(plein)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deletePlein(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('vehicules_pleins')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Statistiques carburant
+export async function getStatsCarburant(vehiculeId: string): Promise<{
+  totalLitres: number;
+  totalDepense: number;
+  prixMoyenLitre: number;
+  consommationMoyenne: number | null;
+  nbPleins: number;
+}> {
+  const { data, error } = await supabase
+    .from('vue_vehicules_stats_carburant')
+    .select('*')
+    .eq('vehicule_id', vehiculeId)
+    .single();
+  
+  if (error || !data) {
+    return { totalLitres: 0, totalDepense: 0, prixMoyenLitre: 0, consommationMoyenne: null, nbPleins: 0 };
+  }
+  
+  return {
+    totalLitres: data.total_litres || 0,
+    totalDepense: data.total_depense || 0,
+    prixMoyenLitre: data.prix_moyen_litre || 0,
+    consommationMoyenne: data.consommation_moyenne,
+    nbPleins: data.nb_pleins || 0,
+  };
 }
 
 // ================================================
