@@ -9,13 +9,12 @@ import {
   CheckSquare, Upload, Image, FileText, Layers
 } from 'lucide-react';
 import { Button, Card, CardBody, Badge, Input, Select } from '@/components/ui';
-import { supabase } from '@/services/supabase';
 import { 
-  getNotes, createNote, updateNote, deleteNote, toggleNotePin, archiveNote,
-  getNotesDossiers, createNoteDossier, updateNoteDossier, deleteNoteDossier,
+  getNotes, createNote, updateNote, deleteNote, toggleNotePin,
+  getNotesDossiers, createNoteDossier,
   getNoteCommentaires, createNoteCommentaire, deleteNoteCommentaire,
   getNotePiecesJointes, uploadNotePieceJointe, deleteNotePieceJointe,
-  getAscenseurs
+  getAscenseurs, getContextNotes
 } from '@/services/api';
 import type { Note, NoteCategorie } from '@/types';
 import type { NoteDossier, NoteCommentaire, NotePieceJointe, ChecklistItem } from '@/services/api';
@@ -842,3 +841,89 @@ export function NotesPage() {
 
 // Export pour utilisation contextuelle
 export { NoteFormModal };
+
+// ============================================
+// COMPOSANT NOTES CONTEXTUELLES
+// ============================================
+export function ContextNotes({ 
+  contextType, 
+  contextId, 
+  contextLabel 
+}: { 
+  contextType: 'ascenseur' | 'travaux' | 'client' | 'mise_service';
+  contextId: string;
+  contextLabel?: string;
+}) {
+  const queryClient = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+
+  const { data: notes, isLoading } = useQuery({
+    queryKey: ['context-notes', contextType, contextId],
+    queryFn: () => getContextNotes(contextType, contextId),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: createNote,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['context-notes', contextType, contextId] });
+      toast.success('Note créée');
+      setShowForm(false);
+    },
+  });
+
+  const handleSave = (data: Partial<Note>) => {
+    createMutation.mutate({
+      ...data,
+      [`${contextType}_id`]: contextId,
+    });
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-[var(--border-primary)]">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-secondary)]">
+          <FileText className="w-4 h-4" />
+          Notes {contextLabel && <span className="text-[var(--text-muted)]">({contextLabel})</span>}
+          <Badge variant="gray" className="text-[10px]">{notes?.length || 0}</Badge>
+        </div>
+        <Button variant="secondary" size="sm" onClick={() => setShowForm(true)}>
+          <Plus className="w-3 h-3" /> Note
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-4 text-[var(--text-muted)] text-sm">Chargement...</div>
+      ) : notes && notes.length > 0 ? (
+        <div className="space-y-2 max-h-48 overflow-y-auto">
+          {notes.map((note: any) => (
+            <div key={note.id} className="flex items-start gap-2 p-2 bg-[var(--bg-tertiary)] rounded-lg">
+              <div className="w-1 h-full rounded" style={{ backgroundColor: note.couleur || '#6366f1' }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  {note.epingle && <Pin className="w-3 h-3 text-purple-400" />}
+                  <span className="font-medium text-sm text-[var(--text-primary)] truncate">{note.titre}</span>
+                </div>
+                <p className="text-xs text-[var(--text-tertiary)] line-clamp-2">{note.contenu}</p>
+                <div className="flex items-center gap-2 mt-1 text-[10px] text-[var(--text-muted)]">
+                  <span>{note.technicien?.prenom}</span>
+                  <span>•</span>
+                  <span>{formatDistanceToNow(parseISO(note.updated_at), { addSuffix: true, locale: fr })}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-4 text-[var(--text-muted)] text-sm">Aucune note</div>
+      )}
+
+      {showForm && (
+        <NoteFormModal
+          onClose={() => setShowForm(false)}
+          onSave={handleSave}
+          defaultAscenseurId={contextType === 'ascenseur' ? contextId : undefined}
+        />
+      )}
+    </div>
+  );
+}

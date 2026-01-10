@@ -8,7 +8,7 @@ export { VehiculesPage } from './VehiculesPage';
 export { DemandesPage } from './DemandesPage';
 export { GEDPage } from './GEDPage';
 export { ChatPage, ContextChat } from './ChatPage';
-export { NotesPage, ContextNotes } from './NotesPage';
+export { NotesPage, NoteFormModal, ContextNotes } from './NotesPage';
 export { ArchivesPage, ArchiveModal } from './ArchivesPage';
 export { CommandesPage } from './CommandesPage';
 export { NFCPage } from './NFCPage';
