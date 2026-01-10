@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getSemaine,
+  updateSemaine,
   updateJour,
   creerTache,
   updateTache,
@@ -22,6 +23,30 @@ export function useSemaine(technicienId: string, annee: number, numeroSemaine: n
     queryFn: () => getSemaine(technicienId, annee, numeroSemaine),
     enabled: !!technicienId,
     staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+}
+
+// ================================================
+// HOOK: useUpdateSemaine (astreintes cochées)
+// ================================================
+export function useUpdateSemaine() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ semaineId, data }: { 
+      semaineId: string; 
+      data: { 
+        astreinte_semaine?: boolean; 
+        astreinte_weekend?: boolean; 
+        astreinte_ferie?: boolean;
+      } 
+    }) => updateSemaine(semaineId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['semaine'] });
+    },
+    onError: (error) => {
+      toast.error(`Erreur: ${error.message}`);
+    },
   });
 }
 

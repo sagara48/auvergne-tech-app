@@ -973,6 +973,22 @@ export async function deleteAstreinte(astreinteId: string): Promise<void> {
   if (error) throw error;
 }
 
+// Mettre à jour les infos de la semaine (astreintes cochées, etc.)
+export async function updateSemaine(
+  semaineId: string, 
+  data: { 
+    astreinte_semaine?: boolean; 
+    astreinte_weekend?: boolean; 
+    astreinte_ferie?: boolean;
+  }
+): Promise<void> {
+  const { error } = await supabase
+    .from('semaines')
+    .update(data)
+    .eq('id', semaineId);
+  if (error) throw error;
+}
+
 export async function validerSemaine(semaineId: string, validePar: string): Promise<{ deduction_rtt: number }> {
   // 1. Récupérer la semaine avec ses jours et astreintes
   const { data: semaine, error: fetchError } = await supabase

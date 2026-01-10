@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Download, Check, Calendar, TrendingUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Check, Calendar, TrendingUp, Phone, CalendarDays, Star } from 'lucide-react';
 import { Button, Skeleton } from '@/components/ui';
 import { JourRow } from './JourRow';
 import { AstreintesList } from './AstreintesList';
@@ -7,6 +7,7 @@ import { SidebarResume } from './SidebarResume';
 import { useAppStore } from '@/stores/appStore';
 import {
   useSemaine,
+  useUpdateSemaine,
   useUpdateJour,
   useCreerTache,
   useUpdateTache,
@@ -30,6 +31,7 @@ export function FeuilleHeuresPage() {
   const { data: semaine, isLoading, error } = useSemaine(technicienId, anneeActive, semaineActive);
 
   // Mutations
+  const updateSemaine = useUpdateSemaine();
   const updateJour = useUpdateJour();
   const creerTache = useCreerTache();
   const updateTache = useUpdateTache();
@@ -240,6 +242,105 @@ export function FeuilleHeuresPage() {
                   <Check className="w-4 h-4" /> Valider la semaine
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Cases à cocher Astreintes */}
+        <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-2xl p-4">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 text-[var(--text-tertiary)]">
+              <Phone className="w-4 h-4" />
+              <span className="text-xs font-semibold uppercase tracking-wider">Astreintes cette semaine</span>
+            </div>
+            
+            <div className="flex items-center gap-6">
+              {/* Astreinte Semaine */}
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <button
+                  type="button"
+                  onClick={() => semaine && updateSemaine.mutate({ 
+                    semaineId: semaine.id, 
+                    data: { astreinte_semaine: !semaine.astreinte_semaine } 
+                  })}
+                  className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${
+                    semaine?.astreinte_semaine 
+                      ? 'bg-blue-500 border-blue-500' 
+                      : 'border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:border-blue-400'
+                  }`}
+                >
+                  {semaine?.astreinte_semaine && <Check className="w-4 h-4 text-white" />}
+                </button>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <Phone className="w-4 h-4 text-blue-400" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-[var(--text-primary)] group-hover:text-blue-400 transition-colors">
+                      Semaine
+                    </span>
+                    <p className="text-[10px] text-[var(--text-muted)]">Lundi - Vendredi</p>
+                  </div>
+                </div>
+              </label>
+
+              {/* Astreinte Week-end */}
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <button
+                  type="button"
+                  onClick={() => semaine && updateSemaine.mutate({ 
+                    semaineId: semaine.id, 
+                    data: { astreinte_weekend: !semaine.astreinte_weekend } 
+                  })}
+                  className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${
+                    semaine?.astreinte_weekend 
+                      ? 'bg-purple-500 border-purple-500' 
+                      : 'border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:border-purple-400'
+                  }`}
+                >
+                  {semaine?.astreinte_weekend && <Check className="w-4 h-4 text-white" />}
+                </button>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <CalendarDays className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-[var(--text-primary)] group-hover:text-purple-400 transition-colors">
+                      Week-end
+                    </span>
+                    <p className="text-[10px] text-[var(--text-muted)]">Samedi - Dimanche</p>
+                  </div>
+                </div>
+              </label>
+
+              {/* Astreinte Jour férié */}
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <button
+                  type="button"
+                  onClick={() => semaine && updateSemaine.mutate({ 
+                    semaineId: semaine.id, 
+                    data: { astreinte_ferie: !semaine.astreinte_ferie } 
+                  })}
+                  className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${
+                    semaine?.astreinte_ferie 
+                      ? 'bg-amber-500 border-amber-500' 
+                      : 'border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:border-amber-400'
+                  }`}
+                >
+                  {semaine?.astreinte_ferie && <Check className="w-4 h-4 text-white" />}
+                </button>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <Star className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-[var(--text-primary)] group-hover:text-amber-400 transition-colors">
+                      Jour férié
+                    </span>
+                    <p className="text-[10px] text-[var(--text-muted)]">Si applicable</p>
+                  </div>
+                </div>
+              </label>
             </div>
           </div>
         </div>

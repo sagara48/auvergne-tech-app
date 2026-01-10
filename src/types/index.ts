@@ -393,6 +393,11 @@ export interface Semaine {
   date_debut: string;
   date_fin: string;
   statut: StatutSemaine;
+  // Astreintes cochées
+  astreinte_semaine: boolean;
+  astreinte_weekend: boolean;
+  astreinte_ferie: boolean;
+  // Relations
   jours?: Jour[];
   astreintes?: Astreinte[];
 }
