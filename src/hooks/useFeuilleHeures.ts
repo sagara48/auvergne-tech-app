@@ -150,9 +150,18 @@ export function useValiderSemaine() {
   return useMutation({
     mutationFn: ({ semaineId, validePar }: { semaineId: string; validePar: string }) =>
       validerSemaine(semaineId, validePar),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['semaine'] });
-      toast.success('Semaine soumise pour validation');
+      queryClient.invalidateQueries({ queryKey: ['soldes-conges'] });
+      
+      if (result.deduction_rtt > 0) {
+        toast.success(
+          `Semaine validée • ${result.deduction_rtt.toFixed(1)}h déduit des RTT`,
+          { duration: 5000 }
+        );
+      } else {
+        toast.success('Semaine validée avec succès');
+      }
     },
     onError: (error) => {
       toast.error(`Erreur: ${error.message}`);

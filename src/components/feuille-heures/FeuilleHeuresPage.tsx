@@ -55,6 +55,8 @@ export function FeuilleHeuresPage() {
         heures_astreinte_rtt: 0,
         heures_astreinte_paye: 0,
         progression: 0,
+        heures_manquantes: 39,
+        deduction_rtt: 0,
       };
     }
     return semaine.totaux;

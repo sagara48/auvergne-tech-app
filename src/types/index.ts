@@ -466,6 +466,8 @@ export interface TotauxSemaine {
   heures_astreinte_rtt: number;
   heures_astreinte_paye: number;
   progression: number;
+  heures_manquantes: number; // Différence avec objectif 39h (si négatif = manque)
+  deduction_rtt: number; // Heures à déduire des RTT (converti en jours)
 }
 
 export interface JourConfig {

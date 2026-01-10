@@ -973,9 +973,74 @@ export async function deleteAstreinte(astreinteId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function validerSemaine(semaineId: string, validePar: string): Promise<void> {
-  const { error } = await supabase.from('semaines').update({ statut: 'soumis', valide_par: validePar, valide_at: new Date().toISOString() }).eq('id', semaineId);
+export async function validerSemaine(semaineId: string, validePar: string): Promise<{ deduction_rtt: number }> {
+  // 1. Récupérer la semaine avec ses jours et astreintes
+  const { data: semaine, error: fetchError } = await supabase
+    .from('semaines')
+    .select('*, jours(*), astreintes(*)')
+    .eq('id', semaineId)
+    .single();
+  
+  if (fetchError) throw fetchError;
+  if (!semaine) throw new Error('Semaine non trouvée');
+
+  // 2. Calculer les totaux et heures manquantes
+  const totaux = calculerTotaux(semaine.jours || [], semaine.astreintes || []);
+  
+  // 3. Si heures manquantes, déduire du solde RTT
+  if (totaux.deduction_rtt > 0) {
+    const anneeConges = getAnneeConges(new Date(semaine.date_debut));
+    
+    // Récupérer ou créer le solde
+    let { data: solde } = await supabase
+      .from('soldes_conges')
+      .select('*')
+      .eq('technicien_id', semaine.technicien_id)
+      .eq('annee_conges', anneeConges)
+      .single();
+    
+    if (!solde) {
+      // Créer le solde s'il n'existe pas
+      const { data: newSolde, error: insertError } = await supabase
+        .from('soldes_conges')
+        .insert({
+          technicien_id: semaine.technicien_id,
+          annee_conges: anneeConges,
+          rtt_pris: totaux.deduction_rtt,
+        })
+        .select()
+        .single();
+      
+      if (insertError) console.warn('Erreur création solde:', insertError);
+      solde = newSolde;
+    } else {
+      // Mettre à jour le solde existant (ajouter les heures manquantes aux RTT pris)
+      const { error: updateError } = await supabase
+        .from('soldes_conges')
+        .update({ 
+          rtt_pris: (solde.rtt_pris || 0) + totaux.deduction_rtt,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', solde.id);
+      
+      if (updateError) console.warn('Erreur mise à jour solde RTT:', updateError);
+    }
+  }
+
+  // 4. Marquer la semaine comme validée
+  const { error } = await supabase
+    .from('semaines')
+    .update({ 
+      statut: 'soumis', 
+      valide_par: validePar, 
+      valide_at: new Date().toISOString(),
+      deduction_rtt_appliquee: totaux.deduction_rtt // Sauvegarder la déduction appliquée
+    })
+    .eq('id', semaineId);
+  
   if (error) throw error;
+  
+  return { deduction_rtt: totaux.deduction_rtt };
 }
 
 // ================================================
@@ -991,7 +1056,10 @@ export function parseIntervalToHours(interval: string): number {
 }
 
 function calculerTotaux(jours: Jour[], astreintes: Astreinte[]): TotauxSemaine {
+  const OBJECTIF_HEBDO = 39; // Heures par semaine
+  
   let heures_travail = 0, heures_trajet = 0, heures_rtt = 0;
+  
   for (const jour of jours) {
     // RTT et congés comptent comme heures de travail normales
     if (jour.type_jour === 'rtt' || jour.type_jour === 'conge' || jour.type_jour === 'ferie' || jour.type_jour === 'formation') {
@@ -1003,12 +1071,32 @@ function calculerTotaux(jours: Jour[], astreintes: Astreinte[]): TotauxSemaine {
     // Maladie ne compte pas dans les heures de travail
     heures_rtt += jour.heures_rtt || 0;
   }
+  
   let heures_astreinte_rtt = 0, heures_astreinte_paye = 0;
   for (const a of astreintes) {
     const t = parseIntervalToHours(a.temps_trajet) + parseIntervalToHours(a.temps_site);
     if (a.comptage === 'rtt') heures_astreinte_rtt += t; else heures_astreinte_paye += t;
   }
-  return { heures_travail, heures_trajet, heures_rtt, heures_astreinte_rtt, heures_astreinte_paye, progression: Math.min(100, (heures_travail / 39) * 100) };
+  
+  // Calcul des heures manquantes
+  const heures_manquantes = OBJECTIF_HEBDO - heures_travail;
+  
+  // Les RTT sont en heures, donc la déduction est directement en heures
+  // Arrondi à 0.5h près
+  const deduction_rtt = heures_manquantes > 0 
+    ? Math.round(heures_manquantes * 2) / 2 
+    : 0;
+  
+  return { 
+    heures_travail, 
+    heures_trajet, 
+    heures_rtt, 
+    heures_astreinte_rtt, 
+    heures_astreinte_paye, 
+    progression: Math.min(100, (heures_travail / OBJECTIF_HEBDO) * 100),
+    heures_manquantes: Math.max(0, heures_manquantes),
+    deduction_rtt // En heures
+  };
 }
 
 // ================================================

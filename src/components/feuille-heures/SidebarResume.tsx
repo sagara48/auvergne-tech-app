@@ -184,11 +184,11 @@ export function SidebarResume({
             <div className="bg-gradient-to-br from-emerald-500/20 to-green-500/20 rounded-xl p-4 text-center border border-emerald-500/30">
               <Clock className="w-5 h-5 mx-auto text-emerald-400 mb-2" />
               <div className="text-2xl font-extrabold text-emerald-400 font-mono">
-                {soldes?.rtt_solde?.toFixed(1) || '0'}
+                {soldes?.rtt_solde?.toFixed(1) || '0'}h
               </div>
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase mt-1">RTT restants</div>
               <div className="text-[9px] text-[var(--text-muted)] mt-1">
-                {soldes?.rtt_pris || 0} pris / {((soldes?.rtt_initial || 0) + (soldes?.rtt_acquis || 0)).toFixed(1)} acquis
+                {(soldes?.rtt_pris || 0).toFixed(1)}h pris / {((soldes?.rtt_initial || 0) + (soldes?.rtt_acquis || 0)).toFixed(1)}h acquis
               </div>
             </div>
           </div>
@@ -247,6 +247,47 @@ export function SidebarResume({
               <span>39h objectif</span>
             </div>
           </div>
+
+          {/* Alerte heures manquantes */}
+          {totaux.heures_manquantes > 0 && (
+            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+              <div className="flex items-center gap-2 text-red-400 mb-2">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-xs font-semibold uppercase">Heures manquantes</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="text-lg font-bold text-red-400 font-mono">
+                    -{totaux.heures_manquantes.toFixed(1)}h
+                  </div>
+                  <div className="text-[10px] text-red-400/70">
+                    sur objectif 39h
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-red-400 font-mono">
+                    -{totaux.deduction_rtt.toFixed(1)}h
+                  </div>
+                  <div className="text-[10px] text-red-400/70">
+                    déduit des RTT
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 text-[10px] text-red-400/60 text-center">
+                Sera appliqué à la validation de la semaine
+              </div>
+            </div>
+          )}
+
+          {/* Message si objectif atteint */}
+          {totaux.heures_manquantes === 0 && totaux.heures_travail > 0 && (
+            <div className="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
+              <div className="flex items-center gap-2 text-green-400">
+                <CheckCircle className="w-4 h-4" />
+                <span className="text-xs font-semibold">Objectif hebdomadaire atteint !</span>
+              </div>
+            </div>
+          )}
         </CardBody>
       </Card>
 
@@ -329,7 +370,7 @@ export function SidebarResume({
                 <div>
                   <label className="text-sm text-[var(--text-secondary)] mb-1 block flex items-center gap-2">
                     <Clock className="w-4 h-4 text-emerald-400" />
-                    RTT report (jours)
+                    RTT report (heures)
                   </label>
                   <Input
                     type="number"
@@ -339,7 +380,7 @@ export function SidebarResume({
                     placeholder="0"
                   />
                   <p className="text-xs text-[var(--text-muted)] mt-1">
-                    RTT non utilisés reportés de l'année précédente
+                    Heures RTT non utilisées reportées de l'année précédente
                   </p>
                 </div>
 
@@ -347,7 +388,7 @@ export function SidebarResume({
                 <div>
                   <label className="text-sm text-[var(--text-secondary)] mb-1 block flex items-center gap-2">
                     <Clock className="w-4 h-4 text-emerald-400" />
-                    RTT acquis cette année (jours)
+                    RTT acquis cette année (heures)
                   </label>
                   <Input
                     type="number"
@@ -357,18 +398,23 @@ export function SidebarResume({
                     placeholder="0"
                   />
                   <p className="text-xs text-[var(--text-muted)] mt-1">
-                    Nombre de RTT attribués pour cette année
+                    Nombre d'heures RTT attribuées pour cette année
                   </p>
                 </div>
 
-                <div className="bg-[var(--bg-tertiary)] rounded-lg p-3 text-sm">
-                  <div className="flex items-center gap-2 text-cyan-400 mb-1">
+                <div className="bg-[var(--bg-tertiary)] rounded-lg p-3 text-sm space-y-2">
+                  <div className="flex items-center gap-2 text-cyan-400">
                     <Palmtree className="w-4 h-4" />
                     <span>Congés acquis automatiquement : {soldes?.conges_acquis?.toFixed(2) || 0} j</span>
                   </div>
                   <p className="text-xs text-[var(--text-muted)]">
                     Calculé à 2,08 j/mois depuis mai {anneeConges}
                   </p>
+                  <div className="border-t border-[var(--border-primary)] pt-2 mt-2">
+                    <p className="text-xs text-amber-400">
+                      ⚠️ Les heures manquantes chaque semaine (&lt;39h) sont automatiquement déduites des RTT à la validation.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="flex gap-2 pt-2">
