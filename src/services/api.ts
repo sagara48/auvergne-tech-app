@@ -55,19 +55,15 @@ export async function updateAscenseur(id: string, data: Partial<Ascenseur>): Pro
 // ================================================
 export async function getTravaux(includeArchived = false): Promise<Travaux[]> {
   try {
-    let query = supabase
+    // Requête simplifiée sans jointure tournee ni filtre archive
+    const { data, error } = await supabase
       .from('travaux')
-      .select('*, client:clients(*), technicien:techniciens(*), ascenseur:ascenseurs(*), tournee:tournees(*)')
+      .select('*, client:clients(*), technicien:techniciens(*), ascenseur:ascenseurs(*)')
       .order('created_at', { ascending: false });
     
-    if (!includeArchived) {
-      query = query.or('archive.is.null,archive.eq.false');
-    }
-    
-    const { data, error } = await query;
     if (error) {
-      console.error('Erreur getTravaux:', error);
-      throw error;
+      console.error('Erreur getTravaux:', error.message, error.details, error.hint);
+      return [];
     }
     return data || [];
   } catch (err) {
