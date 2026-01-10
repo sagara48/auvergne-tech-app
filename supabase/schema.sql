@@ -1177,3 +1177,25 @@ INSERT INTO nfc_scans (tag_id, technicien_id, action, metadata) VALUES
   ((SELECT id FROM nfc_tags WHERE uid = '04:D6:E5:F4:A3:B2:C9'), '11111111-1111-1111-1111-111111111111', 'inventaire', '{"articles": 5}'),
   ((SELECT id FROM nfc_tags WHERE uid = '04:A9:B8:C7:D6:E5:F2'), '11111111-1111-1111-1111-111111111111', 'sortie_stock', '{"article": "Contacteur 40A", "quantite": 2}')
 ON CONFLICT DO NOTHING;
+
+-- ================================================
+-- DONNÉES DE TEST COMMANDES
+-- ================================================
+
+INSERT INTO commandes (id, code, technicien_id, fournisseur, statut, priorite, notes, date_commande) VALUES
+  ('cccc1111-1111-1111-1111-111111111111', 'CMD-001', '11111111-1111-1111-1111-111111111111', 'Schneider Electric', 'en_cours', 'haute', 'Commande urgente variateurs', NOW() - INTERVAL '5 days'),
+  ('cccc2222-2222-2222-2222-222222222222', 'CMD-002', '22222222-2222-2222-2222-222222222222', 'Legrand', 'brouillon', 'normale', 'Réapprovisionnement contacteurs', NOW() - INTERVAL '2 days'),
+  ('cccc3333-3333-3333-3333-333333333333', 'CMD-003', '11111111-1111-1111-1111-111111111111', 'ABB', 'commandee', 'normale', 'Capteurs de niveau', NOW() - INTERVAL '10 days'),
+  ('cccc4444-4444-4444-4444-444444444444', 'CMD-004', '33333333-3333-3333-3333-333333333333', 'Siemens', 'livree', 'basse', 'Boutons poussoirs', NOW() - INTERVAL '15 days'),
+  ('cccc5555-5555-5555-5555-555555555555', 'CMD-005', '22222222-2222-2222-2222-222222222222', 'Schneider Electric', 'recue', 'normale', 'Disjoncteurs', NOW() - INTERVAL '20 days')
+ON CONFLICT (id) DO NOTHING;
+
+-- Lignes de commandes
+INSERT INTO commande_lignes (commande_id, article_id, designation, reference, quantite) VALUES
+  ('cccc1111-1111-1111-1111-111111111111', (SELECT id FROM stock_articles WHERE reference = 'VAR-001'), 'Variateur de fréquence 5.5kW', 'VAR-001', 2),
+  ('cccc1111-1111-1111-1111-111111111111', (SELECT id FROM stock_articles WHERE reference = 'CAP-001'), 'Capteur photoélectrique', 'CAP-001', 5),
+  ('cccc2222-2222-2222-2222-222222222222', (SELECT id FROM stock_articles WHERE reference = 'CON-001'), 'Contacteur 40A', 'CON-001', 10),
+  ('cccc3333-3333-3333-3333-333333333333', (SELECT id FROM stock_articles WHERE reference = 'CAP-002'), 'Capteur de niveau', 'CAP-002', 3),
+  ('cccc4444-4444-4444-4444-444444444444', (SELECT id FROM stock_articles WHERE reference = 'BOU-001'), 'Bouton poussoir lumineux', 'BOU-001', 20),
+  ('cccc5555-5555-5555-5555-555555555555', (SELECT id FROM stock_articles WHERE reference = 'DIS-001'), 'Disjoncteur 16A', 'DIS-001', 15)
+ON CONFLICT DO NOTHING;

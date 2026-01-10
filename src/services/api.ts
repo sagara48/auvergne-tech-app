@@ -88,18 +88,26 @@ export async function updateTravaux(id: string, data: Partial<Travaux>): Promise
 // MISE EN SERVICE
 // ================================================
 export async function getMiseEnServices(includeArchived = false): Promise<MiseEnService[]> {
-  let query = supabase
-    .from('mise_en_service')
-    .select('*, ascenseur:ascenseurs(*), technicien:techniciens(*)')
-    .order('date_prevue');
-  
-  if (!includeArchived) {
-    query = query.or('archive.is.null,archive.eq.false');
+  try {
+    let query = supabase
+      .from('mise_en_service')
+      .select('*, ascenseur:ascenseurs(*), technicien:techniciens!mise_en_service_technicien_id_fkey(*)')
+      .order('date_prevue');
+    
+    if (!includeArchived) {
+      query = query.or('archive.is.null,archive.eq.false');
+    }
+    
+    const { data, error } = await query;
+    if (error) {
+      console.error('Erreur getMiseEnServices:', error.message, error.details, error.hint);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.error('Exception getMiseEnServices:', err);
+    return [];
   }
-  
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
 }
 
 export async function updateMiseEnService(id: string, data: Partial<MiseEnService>): Promise<MiseEnService> {
@@ -1159,24 +1167,30 @@ export async function getArchiveStats(): Promise<{
 import type { Commande, CommandeLigne, StatutCommande } from '@/types';
 
 export async function getCommandes(includeArchived = false): Promise<Commande[]> {
-  let query = supabase
-    .from('commandes')
-    .select('*, technicien:techniciens(*), lignes:commande_lignes(*)')
-    .order('created_at', { ascending: false });
-  
-  if (!includeArchived) {
-    query = query.or('archive.is.null,archive.eq.false');
+  try {
+    // Requête simplifiée pour diagnostiquer
+    const { data, error } = await supabase
+      .from('commandes')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Erreur getCommandes:', error.message, error.details, error.hint);
+      return [];
+    }
+    
+    console.log('Commandes récupérées:', data?.length || 0);
+    return data || [];
+  } catch (err) {
+    console.error('Exception getCommandes:', err);
+    return [];
   }
-  
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
 }
 
 export async function getCommande(id: string): Promise<Commande | null> {
   const { data, error } = await supabase
     .from('commandes')
-    .select('*, technicien:techniciens(*), lignes:commande_lignes(*, article:stock_articles(*))')
+    .select('*, technicien:techniciens!commandes_technicien_id_fkey(*), lignes:commande_lignes(*, article:stock_articles(*))')
     .eq('id', id)
     .single();
   if (error) throw error;
