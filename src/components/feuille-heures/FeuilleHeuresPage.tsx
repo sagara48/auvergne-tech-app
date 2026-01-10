@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Download, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Check, Calendar, TrendingUp } from 'lucide-react';
 import { Button, Skeleton } from '@/components/ui';
 import { JourRow } from './JourRow';
 import { AstreintesList } from './AstreintesList';
@@ -161,43 +161,84 @@ export function FeuilleHeuresPage() {
     );
   }
 
+  const moisDebut = datesSemaine[0]?.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  const moisFin = datesSemaine[4]?.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+
   return (
     <div className="flex gap-6">
       {/* Contenu principal */}
       <div className="flex-1 space-y-5">
-        {/* Navigation semaine */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => naviguerSemaine('precedent')}
-              className="w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] flex items-center justify-center hover:bg-[var(--bg-elevated)] hover:border-blue-500 transition-all"
-            >
-              <ChevronLeft className="w-5 h-5 text-[var(--text-secondary)]" />
-            </button>
-            <div>
-              <div className="text-xl font-bold text-[var(--text-primary)]">
-                Semaine {semaineActive} — {anneeActive}
+        {/* Header avec navigation */}
+        <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-2xl p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Bouton précédent */}
+              <button
+                onClick={() => naviguerSemaine('precedent')}
+                className="w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] flex items-center justify-center hover:bg-[var(--bg-elevated)] hover:border-blue-500 transition-all group"
+              >
+                <ChevronLeft className="w-5 h-5 text-[var(--text-secondary)] group-hover:text-blue-400" />
+              </button>
+
+              {/* Info semaine */}
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
+                  <Calendar className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-2xl font-black text-[var(--text-primary)]">
+                      Semaine {semaineActive}
+                    </h1>
+                    <span className="px-3 py-1 bg-[var(--bg-tertiary)] rounded-full text-sm font-medium text-[var(--text-secondary)]">
+                      {anneeActive}
+                    </span>
+                  </div>
+                  <p className="text-sm text-[var(--text-tertiary)] mt-0.5">
+                    Du {moisDebut} au {moisFin}
+                  </p>
+                </div>
               </div>
-              <div className="text-sm text-[var(--text-tertiary)]">
-                Du {datesSemaine[0]?.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} au{' '}
-                {datesSemaine[4]?.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
+
+              {/* Bouton suivant */}
+              <button
+                onClick={() => naviguerSemaine('suivant')}
+                className="w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] flex items-center justify-center hover:bg-[var(--bg-elevated)] hover:border-blue-500 transition-all group"
+              >
+                <ChevronRight className="w-5 h-5 text-[var(--text-secondary)] group-hover:text-blue-400" />
+              </button>
+            </div>
+
+            {/* Progression rapide */}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                  <TrendingUp className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <div className="text-2xl font-black text-[var(--text-primary)] font-mono">
+                    {totaux.heures_travail.toFixed(1)}h
+                  </div>
+                  <div className="text-xs text-[var(--text-muted)]">sur 39h</div>
+                </div>
+                <div className="w-24 h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all ${totaux.progression >= 100 ? 'bg-green-500' : 'bg-blue-500'}`}
+                    style={{ width: `${Math.min(100, totaux.progression)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm">
+                  <Download className="w-4 h-4" /> Exporter
+                </Button>
+                <Button variant="success" size="sm" onClick={handleValider}>
+                  <Check className="w-4 h-4" /> Valider la semaine
+                </Button>
               </div>
             </div>
-            <button
-              onClick={() => naviguerSemaine('suivant')}
-              className="w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] flex items-center justify-center hover:bg-[var(--bg-elevated)] hover:border-blue-500 transition-all"
-            >
-              <ChevronRight className="w-5 h-5 text-[var(--text-secondary)]" />
-            </button>
-          </div>
-
-          <div className="flex gap-3">
-            <Button variant="secondary">
-              <Download className="w-4 h-4" /> Exporter
-            </Button>
-            <Button variant="success" onClick={handleValider}>
-              <Check className="w-4 h-4" /> Valider
-            </Button>
           </div>
         </div>
 
