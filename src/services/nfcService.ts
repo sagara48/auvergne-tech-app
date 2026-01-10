@@ -1,9 +1,9 @@
 /**
  * Service NFC Unifié
- * Gère Web NFC (mobile Chrome) et WebUSB (lecteur USB bureau)
+ * Gère Web NFC (mobile Chrome) et WebSocket (serveur NFC local pour USB)
  */
 
-export type NFCDeviceType = 'web_nfc' | 'web_usb' | 'none';
+export type NFCDeviceType = 'web_nfc' | 'local_server' | 'none';
 
 export interface NFCReadResult {
   uid: string;
@@ -22,13 +22,17 @@ type NFCErrorCallback = (error: Error) => void;
 
 class NFCService {
   private webNFCSupported: boolean = false;
-  private webUSBSupported: boolean = false;
   private isReading: boolean = false;
   private abortController: AbortController | null = null;
-  private usbDevice: USBDevice | null = null;
   private onReadCallback: NFCCallback | null = null;
   private onErrorCallback: NFCErrorCallback | null = null;
   private pollingStop: (() => void) | null = null;
+  
+  // WebSocket pour serveur NFC local
+  private ws: WebSocket | null = null;
+  private wsConnected: boolean = false;
+  private wsServerUrl = 'ws://localhost:8765';
+  private lastUID: string | null = null;
 
   constructor() {
     this.checkSupport();
@@ -36,21 +40,20 @@ class NFCService {
 
   private checkSupport() {
     this.webNFCSupported = 'NDEFReader' in window;
-    this.webUSBSupported = 'usb' in navigator;
   }
 
-  getCapabilities(): { webNFC: boolean; webUSB: boolean; any: boolean } {
+  getCapabilities(): { webNFC: boolean; webUSB: boolean; localServer: boolean; any: boolean } {
     return {
       webNFC: this.webNFCSupported,
-      webUSB: this.webUSBSupported,
-      any: this.webNFCSupported || this.webUSBSupported,
+      webUSB: false, // WebUSB ne fonctionne pas avec les lecteurs NFC (classe protégée)
+      localServer: true, // Toujours disponible si le serveur Python tourne
+      any: this.webNFCSupported || true,
     };
   }
 
   getBestAvailableMode(): NFCDeviceType {
     if (this.webNFCSupported) return 'web_nfc';
-    if (this.webUSBSupported) return 'web_usb';
-    return 'none';
+    return 'local_server';
   }
 
   async startWebNFCReading(
@@ -149,69 +152,96 @@ class NFCService {
     }
   }
 
+  // ================================================
+  // SERVEUR NFC LOCAL (WebSocket)
+  // ================================================
+
   async connectUSBReader(): Promise<boolean> {
-    if (!this.webUSBSupported) {
-      throw new Error('WebUSB non supporté sur ce navigateur');
-    }
+    return new Promise((resolve, reject) => {
+      try {
+        this.ws = new WebSocket(this.wsServerUrl);
+        
+        this.ws.onopen = () => {
+          console.log('✅ Connecté au serveur NFC local');
+          this.wsConnected = true;
+          
+          // Envoyer une commande de connexion
+          this.ws?.send(JSON.stringify({ command: 'connect' }));
+          resolve(true);
+        };
 
-    try {
-      const filters = [
-        { vendorId: 0x072F }, // ACS (ACR122U)
-        { vendorId: 0x04E6 }, // SCM Microsystems
-        { vendorId: 0x076B }, // OmniKey
-        { vendorId: 0x1A86 }, // QinHeng (CH340)
-        { vendorId: 0x0403 }, // FTDI
-      ];
+        this.ws.onclose = () => {
+          console.log('❌ Déconnecté du serveur NFC local');
+          this.wsConnected = false;
+          this.stopReading();
+        };
 
-      this.usbDevice = await navigator.usb.requestDevice({ filters });
-      await this.usbDevice.open();
-      
-      if (this.usbDevice.configuration === null) {
-        await this.usbDevice.selectConfiguration(1);
+        this.ws.onerror = () => {
+          this.wsConnected = false;
+          reject(new Error(
+            'Impossible de se connecter au serveur NFC local.\n\n' +
+            '1. Installez pyscard: pip install pyscard websockets\n' +
+            '2. Lancez: python nfc_server.py\n' +
+            '3. Réessayez'
+          ));
+        };
+
+        // Timeout de connexion
+        setTimeout(() => {
+          if (!this.wsConnected) {
+            this.ws?.close();
+            reject(new Error('Timeout de connexion au serveur NFC'));
+          }
+        }, 5000);
+
+      } catch (error) {
+        reject(error);
       }
-      
-      await this.usbDevice.claimInterface(0);
-      
-      return true;
-    } catch (error: any) {
-      if (error.name === 'NotFoundError') {
-        throw new Error('Aucun lecteur NFC USB détecté. Connectez votre lecteur et réessayez.');
-      }
-      throw error;
-    }
+    });
   }
 
   async readUSBTag(): Promise<NFCReadResult | null> {
-    if (!this.usbDevice) {
-      throw new Error('Lecteur USB non connecté');
+    if (!this.ws || !this.wsConnected) {
+      throw new Error('Serveur NFC non connecté');
     }
 
-    try {
-      const command = new Uint8Array([0xFF, 0xCA, 0x00, 0x00, 0x00]);
-      
-      await this.usbDevice.transferOut(2, command);
-      const result = await this.usbDevice.transferIn(1, 64);
-      
-      if (result.data && result.data.byteLength >= 4) {
-        const uid = this.arrayToHex(new Uint8Array(result.data.buffer));
-        return {
-          uid,
-          deviceType: 'web_usb',
-          timestamp: new Date(),
-        };
-      }
-      
-      return null;
-    } catch (error) {
-      return null;
-    }
+    return new Promise((resolve) => {
+      const handleMessage = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.ws?.removeEventListener('message', handleMessage);
+          
+          if (data.success && data.uid) {
+            resolve({
+              uid: this.formatUID(data.uid),
+              deviceType: 'local_server',
+              timestamp: new Date(),
+            });
+          } else {
+            resolve(null);
+          }
+        } catch {
+          resolve(null);
+        }
+      };
+
+      this.ws?.addEventListener('message', handleMessage);
+      this.ws?.send(JSON.stringify({ command: 'getUID' }));
+
+      // Timeout
+      setTimeout(() => {
+        this.ws?.removeEventListener('message', handleMessage);
+        resolve(null);
+      }, 2000);
+    });
   }
 
   async writeUSBTag(data: NFCWriteData): Promise<string> {
-    if (!this.usbDevice) {
-      throw new Error('Lecteur USB non connecté');
+    if (!this.ws || !this.wsConnected) {
+      throw new Error('Serveur NFC non connecté');
     }
 
+    // D'abord lire l'UID
     const readResult = await this.readUSBTag();
     if (!readResult) {
       throw new Error('Aucun tag détecté. Placez un tag sur le lecteur.');
@@ -226,29 +256,35 @@ class NFCService {
       encoded: new Date().toISOString(),
     });
 
-    const textRecord = this.createNDEFTextRecord(payload);
-    
-    try {
-      const writeCommand = new Uint8Array([
-        0xFF, 0xD6, 0x00, 0x04,
-        textRecord.length,
-        ...textRecord
-      ]);
+    // Convertir en hex
+    const hexData = Array.from(new TextEncoder().encode(payload))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
 
-      await this.usbDevice.transferOut(2, writeCommand);
-      const result = await this.usbDevice.transferIn(1, 64);
-      
-      if (result.data) {
-        const response = new Uint8Array(result.data.buffer);
-        if (response[response.length - 2] === 0x90 && response[response.length - 1] === 0x00) {
-          return readResult.uid;
+    return new Promise((resolve, reject) => {
+      const handleMessage = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.ws?.removeEventListener('message', handleMessage);
+          
+          if (data.success) {
+            resolve(readResult.uid);
+          } else {
+            reject(new Error(data.error || 'Échec de l\'écriture'));
+          }
+        } catch (e) {
+          reject(e);
         }
-      }
-      
-      throw new Error('Échec de l\'écriture');
-    } catch (error) {
-      throw new Error('Erreur lors de l\'écriture du tag');
-    }
+      };
+
+      this.ws?.addEventListener('message', handleMessage);
+      this.ws?.send(JSON.stringify({ command: 'writeBlock', block: 4, data: hexData }));
+
+      setTimeout(() => {
+        this.ws?.removeEventListener('message', handleMessage);
+        reject(new Error('Timeout écriture NFC'));
+      }, 5000);
+    });
   }
 
   startUSBPolling(
@@ -256,23 +292,40 @@ class NFCService {
     onError?: NFCErrorCallback,
     intervalMs: number = 500
   ): () => void {
-    let lastUID: string | null = null;
     let polling = true;
+    this.lastUID = null;
 
-    const poll = async () => {
-      if (!polling) return;
-
-      try {
-        const result = await this.readUSBTag();
-        
-        if (result && result.uid !== lastUID) {
-          lastUID = result.uid;
-          onRead(result);
-        } else if (!result) {
-          lastUID = null;
+    if (this.ws) {
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.success && data.present && data.uid) {
+            const uid = this.formatUID(data.uid);
+            if (uid !== this.lastUID) {
+              this.lastUID = uid;
+              onRead({
+                uid,
+                deviceType: 'local_server',
+                timestamp: new Date(),
+              });
+            }
+          } else if (data.present === false) {
+            this.lastUID = null;
+          }
+        } catch (e) {
+          // Ignore
         }
-      } catch (error: any) {
-        if (onError) onError(error);
+      };
+    }
+
+    const poll = () => {
+      if (!polling || !this.ws || !this.wsConnected) return;
+      
+      try {
+        this.ws.send(JSON.stringify({ command: 'poll' }));
+      } catch (e) {
+        if (onError) onError(e as Error);
       }
 
       if (polling) {
@@ -282,7 +335,10 @@ class NFCService {
 
     poll();
 
-    const stopFn = () => { polling = false; };
+    const stopFn = () => { 
+      polling = false; 
+      this.lastUID = null;
+    };
     this.pollingStop = stopFn;
     return stopFn;
   }
@@ -299,13 +355,16 @@ class NFCService {
     this.isReading = false;
     this.onReadCallback = null;
     this.onErrorCallback = null;
+    this.lastUID = null;
   }
 
   async disconnectUSB(): Promise<void> {
-    if (this.usbDevice) {
-      await this.usbDevice.close();
-      this.usbDevice = null;
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
     }
+    this.wsConnected = false;
+    this.lastUID = null;
   }
 
   isCurrentlyReading(): boolean {
@@ -313,34 +372,16 @@ class NFCService {
   }
 
   isUSBConnected(): boolean {
-    return this.usbDevice !== null;
+    return this.wsConnected;
   }
 
   private formatUID(serialNumber: string): string {
+    if (!serialNumber) return 'UNKNOWN';
     return serialNumber
       .replace(/:/g, '')
       .match(/.{1,2}/g)
       ?.join(':')
       .toUpperCase() || serialNumber.toUpperCase();
-  }
-
-  private arrayToHex(array: Uint8Array): string {
-    return Array.from(array)
-      .map(b => b.toString(16).padStart(2, '0').toUpperCase())
-      .join(':');
-  }
-
-  private createNDEFTextRecord(text: string): Uint8Array {
-    const encoder = new TextEncoder();
-    const textBytes = encoder.encode(text);
-    const languageCode = encoder.encode('fr');
-    
-    const record = new Uint8Array(1 + languageCode.length + textBytes.length);
-    record[0] = languageCode.length;
-    record.set(languageCode, 1);
-    record.set(textBytes, 1 + languageCode.length);
-    
-    return record;
   }
 }
 

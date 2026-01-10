@@ -1025,8 +1025,8 @@ function CommandeDetailModal({
   onReception: () => void;
 }) {
   const queryClient = useQueryClient();
-  const config = STATUT_CONFIG[commande.statut];
-  const prioriteConfig = PRIORITE_CONFIG[commande.priorite];
+  const config = STATUT_CONFIG[commande.statut] || STATUT_CONFIG.brouillon;
+  const prioriteConfig = PRIORITE_CONFIG[commande.priorite] || PRIORITE_CONFIG.normale;
 
   const deleteLigneMutation = useMutation({
     mutationFn: deleteCommandeLigne,
@@ -1211,7 +1211,7 @@ function CommandeDetailModal({
               <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Changer le statut</h3>
               <div className="flex flex-wrap gap-2">
                 {getNextStatuts().map(statut => {
-                  const cfg = STATUT_CONFIG[statut];
+                  const cfg = STATUT_CONFIG[statut] || STATUT_CONFIG.brouillon;
                   return (
                     <Button
                       key={statut}
@@ -1426,8 +1426,8 @@ export function CommandesPage() {
             <div className="p-8 text-center text-[var(--text-muted)]">Aucune commande trouvée</div>
           ) : (
             filtered.map(commande => {
-              const config = STATUT_CONFIG[commande.statut];
-              const prioriteConfig = PRIORITE_CONFIG[commande.priorite];
+              const config = STATUT_CONFIG[commande.statut] || STATUT_CONFIG.brouillon;
+              const prioriteConfig = PRIORITE_CONFIG[commande.priorite] || PRIORITE_CONFIG.normale;
               const StatusIcon = config.icon;
               
               // Calculer si tout est reçu

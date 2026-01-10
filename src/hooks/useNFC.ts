@@ -34,7 +34,7 @@ export function useNFC() {
             setState(s => ({ ...s, error: error.message }));
           }
         );
-      } else if (mode === 'web_usb') {
+      } else if (mode === 'local_server') {
         if (!nfcService.isUSBConnected()) {
           await nfcService.connectUSBReader();
           setIsUSBConnected(true);
@@ -71,7 +71,7 @@ export function useNFC() {
       
       if (mode === 'web_nfc') {
         uid = await nfcService.writeWebNFC(data);
-      } else if (mode === 'web_usb') {
+      } else if (mode === 'local_server') {
         if (!nfcService.isUSBConnected()) {
           await nfcService.connectUSBReader();
           setIsUSBConnected(true);

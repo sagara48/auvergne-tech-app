@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Archive, Search, Filter, RotateCcw, Trash2, Eye, Calendar,
   Hammer, FileCheck, HelpCircle, ChevronRight, X, AlertTriangle,
-  Clock, User, FileText, ShoppingCart
+  Clock, User, FileText, ShoppingCart, Package
 } from 'lucide-react';
 import { Button, Card, CardBody, Badge, Input, Select } from '@/components/ui';
 import { 
@@ -12,7 +12,7 @@ import {
 } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import type { ArchiveItem } from '@/services/api';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, startOfMonth, endOfMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
@@ -132,10 +132,37 @@ function DetailsModal({
 }) {
   const config = TYPE_CONFIG[item.type];
   const Icon = config.icon;
+  const [pieces, setPieces] = useState<any[]>([]);
+  const [loadingPieces, setLoadingPieces] = useState(false);
+
+  // Charger les pièces si c'est un travail
+  useEffect(() => {
+    if (item.type === 'travaux') {
+      setLoadingPieces(true);
+      supabase
+        .from('travaux')
+        .select('pieces')
+        .eq('id', item.id)
+        .single()
+        .then(({ data }) => {
+          setPieces(data?.pieces || []);
+          setLoadingPieces(false);
+        })
+        .catch(() => setLoadingPieces(false));
+    }
+  }, [item.id, item.type]);
+
+  // Statut des pièces
+  const getStatutPiece = (piece: any) => {
+    if (piece.consommee) return { label: 'Consommée', color: 'gray' };
+    if (piece.statut === 'en_stock') return { label: 'En stock', color: 'green' };
+    if (piece.source === 'commande') return { label: 'En commande', color: 'amber' };
+    return { label: 'Stock', color: 'blue' };
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <Card className="w-[500px]">
+      <Card className="w-[550px] max-h-[90vh] overflow-y-auto">
         <CardBody>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
@@ -183,6 +210,60 @@ function DetailsModal({
                 <p className="text-[var(--text-primary)] mt-1">
                   {format(parseISO(item.date_cloture), 'dd/MM/yyyy', { locale: fr })}
                 </p>
+              </div>
+            )}
+
+            {/* Section Pièces pour les travaux */}
+            {item.type === 'travaux' && (
+              <div className="pt-4 border-t border-[var(--border-secondary)]">
+                <label className="text-xs font-medium text-[var(--text-tertiary)] uppercase flex items-center gap-2">
+                  <Package className="w-4 h-4" />
+                  Pièces ({pieces.length})
+                </label>
+                
+                {loadingPieces ? (
+                  <div className="mt-2 p-4 text-center">
+                    <div className="animate-spin w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full mx-auto" />
+                  </div>
+                ) : pieces.length === 0 ? (
+                  <div className="mt-2 p-3 rounded-lg bg-[var(--bg-tertiary)] text-sm text-[var(--text-muted)] text-center">
+                    Aucune pièce
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {pieces.map((piece: any, index: number) => {
+                      const statutPiece = getStatutPiece(piece);
+                      return (
+                        <div 
+                          key={piece.id || index} 
+                          className="p-3 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-between"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-[var(--text-primary)]">
+                                {piece.designation}
+                              </span>
+                              <Badge variant={statutPiece.color as any}>
+                                {statutPiece.label}
+                              </Badge>
+                            </div>
+                            {piece.reference && (
+                              <div className="text-xs text-[var(--text-muted)]">Réf: {piece.reference}</div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="font-mono font-bold text-[var(--text-primary)]">x{piece.quantite}</div>
+                            {piece.source === 'commande' && piece.quantite_recue > 0 && (
+                              <div className="text-xs text-green-400">
+                                {piece.quantite_recue} reçu(s)
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -295,6 +376,10 @@ export function ArchivesPage() {
   const [filterType, setFilterType] = useState<string>('all');
   const [restoreItem, setRestoreItem] = useState<ArchiveItem | null>(null);
   const [detailsItem, setDetailsItem] = useState<ArchiveItem | null>(null);
+  
+  // Dates du mois en cours par défaut
+  const [dateDebut, setDateDebut] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [dateFin, setDateFin] = useState(() => format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
   // Query archives
   const { data: archives, isLoading } = useQuery({
@@ -342,6 +427,13 @@ export function ArchivesPage() {
     if (!archives) return [];
     
     return archives.filter(item => {
+      // Filtre par date d'archivage
+      const archiveDate = item.archive_date?.split('T')[0];
+      if (archiveDate) {
+        if (dateDebut && archiveDate < dateDebut) return false;
+        if (dateFin && archiveDate > dateFin) return false;
+      }
+      
       // Filtre recherche
       if (search) {
         const searchLower = search.toLowerCase();
@@ -358,7 +450,7 @@ export function ArchivesPage() {
       
       return true;
     });
-  }, [archives, search, filterType]);
+  }, [archives, search, filterType, dateDebut, dateFin]);
 
   return (
     <div className="space-y-6">
@@ -413,7 +505,7 @@ export function ArchivesPage() {
         <CardBody className="p-4">
           <div className="flex flex-wrap items-center gap-4">
             {/* Recherche */}
-            <div className="relative flex-1 min-w-[250px]">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
               <Input
                 value={search}
@@ -427,13 +519,41 @@ export function ArchivesPage() {
             <Select
               value={filterType}
               onChange={e => setFilterType(e.target.value)}
-              className="w-48"
+              className="w-40"
             >
               <option value="all">Tous les types</option>
               {Object.entries(TYPE_CONFIG).map(([type, config]) => (
                 <option key={type} value={type}>{config.label}</option>
               ))}
             </Select>
+
+            {/* Filtre dates */}
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-[var(--text-tertiary)]" />
+              <input
+                type="date"
+                value={dateDebut}
+                onChange={e => setDateDebut(e.target.value)}
+                className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+              />
+              <span className="text-[var(--text-muted)]">→</span>
+              <input
+                type="date"
+                value={dateFin}
+                onChange={e => setDateFin(e.target.value)}
+                className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
+              />
+              <button
+                onClick={() => {
+                  setDateDebut(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+                  setDateFin(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+                }}
+                className="px-2 py-1.5 text-xs bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+                title="Mois en cours"
+              >
+                Ce mois
+              </button>
+            </div>
 
             {/* Compteur résultats */}
             <div className="text-sm text-[var(--text-tertiary)]">
