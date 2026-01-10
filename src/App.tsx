@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { Layout } from '@/components/Layout';
+import { AuthPage } from '@/components/AuthPage';
 import { FeuilleHeuresPage } from '@/components/feuille-heures';
 import { DashboardPage } from '@/components/dashboard';
 import {
@@ -21,6 +23,9 @@ import {
 } from '@/components/modules';
 import { useAppStore } from '@/stores/appStore';
 import { useRealtimeSubscriptions } from '@/hooks/useRealtimeSubscriptions';
+import { supabase } from '@/services/supabase';
+import type { Session } from '@supabase/supabase-js';
+import { Loader2 } from 'lucide-react';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -115,7 +120,48 @@ function AppContent() {
   );
 }
 
+// Écran de chargement
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="text-center">
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
+        <p className="text-slate-400">Chargement...</p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Vérifier la session actuelle
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    // Écouter les changements d'authentification
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Afficher l'écran de chargement pendant la vérification de session
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  // Si pas de session, afficher la page d'authentification
+  if (!session) {
+    return <AuthPage onAuthSuccess={() => {}} />;
+  }
+
+  // Utilisateur authentifié
   return (
     <QueryClientProvider client={queryClient}>
       <RealtimeProvider>
