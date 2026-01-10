@@ -10,13 +10,13 @@ export type TypeAstreinte = 'samedi_jour' | 'samedi_nuit' | 'dimanche_jour' | 'd
 export type ComptageAstreinte = 'rtt' | 'paye';
 
 // Labels pour les types de jour
-export const TYPES_JOUR_LABELS: Record<TypeJour, string> = {
-  travail: 'Travail',
-  conge: 'Congé',
-  rtt: 'RTT',
-  maladie: 'Maladie',
-  ferie: 'Férié',
-  formation: 'Formation'
+export const TYPES_JOUR_LABELS: Record<TypeJour, { label: string; emoji: string }> = {
+  travail: { label: 'Travail', emoji: '💼' },
+  conge: { label: 'Congé', emoji: '🏖️' },
+  rtt: { label: 'RTT', emoji: '🏠' },
+  maladie: { label: 'Maladie', emoji: '🤒' },
+  ferie: { label: 'Férié', emoji: '🎉' },
+  formation: { label: 'Formation', emoji: '📚' }
 };
 
 export type StatutAscenseur = 'en_service' | 'en_panne' | 'arrete' | 'en_travaux';
