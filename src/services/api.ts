@@ -1635,11 +1635,6 @@ export async function receptionnerLigneCommande(
   
   // 3. Ajouter au stock si nécessaire (seulement si on a un articleId valide)
   if (ajouterAuStock > 0 && validArticleId) {
-    await createStockMouvement({
-      article_id: validArticleId,
-      type_mouvement: 'entree',
-      quantite: ajouterAuStock,
-      motif: `Réception commande`,
-    });
+    await createStockMouvement(validArticleId, 'entree', ajouterAuStock, 'Réception commande');
   }
 }
