@@ -54,18 +54,26 @@ export async function updateAscenseur(id: string, data: Partial<Ascenseur>): Pro
 // TRAVAUX
 // ================================================
 export async function getTravaux(includeArchived = false): Promise<Travaux[]> {
-  let query = supabase
-    .from('travaux')
-    .select('*, client:clients(*), technicien:techniciens(*), ascenseur:ascenseurs(*), tournee:tournees(*)')
-    .order('created_at', { ascending: false });
-  
-  if (!includeArchived) {
-    query = query.or('archive.is.null,archive.eq.false');
+  try {
+    let query = supabase
+      .from('travaux')
+      .select('*, client:clients(*), technicien:techniciens(*), ascenseur:ascenseurs(*), tournee:tournees(*)')
+      .order('created_at', { ascending: false });
+    
+    if (!includeArchived) {
+      query = query.or('archive.is.null,archive.eq.false');
+    }
+    
+    const { data, error } = await query;
+    if (error) {
+      console.error('Erreur getTravaux:', error);
+      throw error;
+    }
+    return data || [];
+  } catch (err) {
+    console.error('Exception getTravaux:', err);
+    return [];
   }
-  
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
 }
 
 export async function createTravaux(travaux: Partial<Travaux>): Promise<Travaux> {
