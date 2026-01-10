@@ -31,11 +31,39 @@ class NFCService {
   // WebSocket pour serveur NFC local
   private ws: WebSocket | null = null;
   private wsConnected: boolean = false;
-  private wsServerUrl = 'ws://localhost:8765';
+  private wsServerUrl: string = 'ws://localhost:8765';
   private lastUID: string | null = null;
 
   constructor() {
     this.checkSupport();
+    this.loadServerUrl();
+  }
+
+  private loadServerUrl() {
+    // Charger l'URL depuis localStorage si disponible
+    if (typeof window !== 'undefined') {
+      const savedUrl = localStorage.getItem('nfc_server_url');
+      if (savedUrl) {
+        this.wsServerUrl = savedUrl;
+        console.log('🔌 NFC Server URL:', this.wsServerUrl);
+      } else if (window.location.protocol === 'https:') {
+        // En HTTPS sans URL configurée, proposer WSS localhost par défaut
+        this.wsServerUrl = 'wss://localhost:8765';
+      }
+    }
+  }
+
+  // Permet de changer l'URL du serveur
+  setServerUrl(url: string) {
+    this.wsServerUrl = url;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nfc_server_url', url);
+    }
+    console.log('🔌 NFC Server URL updated:', url);
+  }
+
+  getServerUrl(): string {
+    return this.wsServerUrl;
   }
 
   private checkSupport() {
@@ -159,10 +187,20 @@ class NFCService {
   async connectUSBReader(): Promise<boolean> {
     return new Promise((resolve, reject) => {
       try {
+        console.log('🔌 Connexion au serveur NFC local...');
         this.ws = new WebSocket(this.wsServerUrl);
         
+        const timeoutId = setTimeout(() => {
+          if (!this.wsConnected) {
+            console.error('❌ Timeout de connexion');
+            this.ws?.close();
+            reject(new Error('Timeout de connexion au serveur NFC. Vérifiez que nfc_server.py est lancé.'));
+          }
+        }, 5000);
+
         this.ws.onopen = () => {
-          console.log('✅ Connecté au serveur NFC local');
+          console.log('✅ WebSocket ouvert');
+          clearTimeout(timeoutId);
           this.wsConnected = true;
           
           // Envoyer une commande de connexion
@@ -170,29 +208,24 @@ class NFCService {
           resolve(true);
         };
 
-        this.ws.onclose = () => {
-          console.log('❌ Déconnecté du serveur NFC local');
+        this.ws.onclose = (event) => {
+          console.log('❌ WebSocket fermé:', event.code, event.reason);
+          clearTimeout(timeoutId);
           this.wsConnected = false;
           this.stopReading();
         };
 
-        this.ws.onerror = () => {
+        this.ws.onerror = (error) => {
+          console.error('❌ Erreur WebSocket:', error);
+          clearTimeout(timeoutId);
           this.wsConnected = false;
           reject(new Error(
             'Impossible de se connecter au serveur NFC local.\n\n' +
-            '1. Installez pyscard: pip install pyscard websockets\n' +
-            '2. Lancez: python nfc_server.py\n' +
-            '3. Réessayez'
+            '1. Vérifiez que nfc_server.py est lancé\n' +
+            '2. Si vous êtes sur HTTPS, testez en local (npm run dev)\n' +
+            '3. Vérifiez la console du serveur Python'
           ));
         };
-
-        // Timeout de connexion
-        setTimeout(() => {
-          if (!this.wsConnected) {
-            this.ws?.close();
-            reject(new Error('Timeout de connexion au serveur NFC'));
-          }
-        }, 5000);
 
       } catch (error) {
         reject(error);
