@@ -2,27 +2,22 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ShoppingCart, Plus, Search, Package, Truck, Check, X, Eye, Edit, 
-  Archive, Calendar, User, Clock, AlertTriangle,
-  ChevronRight, FileText, Trash2
+  Archive, Calendar, User, Clock, AlertTriangle, Minus,
+  ChevronRight, FileText, Trash2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
 import { 
   getCommandes, createCommande, updateCommande, archiveCommande,
-  addCommandeLigne, deleteCommandeLigne
+  addCommandeLigne, deleteCommandeLigne, getStockArticles, getAscenseurs
 } from '@/services/api';
-import { supabase } from '@/services/supabase';
 import { ArchiveModal } from './ArchivesPage';
-import { usePanierStore } from '@/stores/panierStore';
-import { AddToPanierModal } from '@/components/Panier';
 import type { Commande, CommandeLigne, StatutCommande, Priorite } from '@/types';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
-// ID utilisateur actuel
 const CURRENT_USER_ID = '11111111-1111-1111-1111-111111111111';
 
-// Configuration des statuts
 const STATUT_CONFIG: Record<StatutCommande, { label: string; color: 'gray' | 'amber' | 'blue' | 'purple' | 'cyan' | 'green' | 'red'; icon: any }> = {
   brouillon: { label: 'Brouillon', color: 'gray', icon: FileText },
   en_attente: { label: 'En attente', color: 'amber', icon: Clock },
@@ -41,15 +36,31 @@ const PRIORITE_CONFIG: Record<Priorite, { label: string; color: 'gray' | 'blue' 
 };
 
 const FOURNISSEURS = [
+  'Schneider Electric',
+  'Legrand',
+  'ABB',
+  'Siemens',
+  'Hager',
   'Otis Parts',
   'Schindler Supply',
   'Thyssen Parts',
   'Kone Express',
-  'Mitsubishi Electric',
   'Autre',
 ];
 
-// Modal création/édition commande
+// Types pour les lignes du formulaire
+interface LigneForm {
+  id: string;
+  type: 'stock' | 'manuel';
+  article_id?: string;
+  designation: string;
+  reference: string;
+  quantite: number;
+  ascenseur_id?: string;
+  detail?: string;
+}
+
+// Modal création/édition commande amélioré
 function CommandeFormModal({ 
   commande, 
   onClose, 
@@ -57,7 +68,7 @@ function CommandeFormModal({
 }: { 
   commande?: Commande; 
   onClose: () => void; 
-  onSave: (data: Partial<Commande>) => void;
+  onSave: (data: Partial<Commande>, lignes: LigneForm[]) => void;
 }) {
   const [form, setForm] = useState({
     fournisseur: commande?.fournisseur || '',
@@ -67,21 +78,95 @@ function CommandeFormModal({
     notes: commande?.notes || '',
   });
 
+  // Lignes de commande
+  const [lignes, setLignes] = useState<LigneForm[]>([]);
+  const [showAddLigne, setShowAddLigne] = useState(false);
+  const [ligneType, setLigneType] = useState<'stock' | 'manuel'>('stock');
+  const [articleSearch, setArticleSearch] = useState('');
+  const [newLigne, setNewLigne] = useState({
+    designation: '',
+    reference: '',
+    quantite: 1,
+    ascenseur_id: '',
+    detail: '',
+  });
+
+  // Queries
+  const { data: articles } = useQuery({ queryKey: ['stock-articles'], queryFn: getStockArticles });
+  const { data: ascenseurs } = useQuery({ queryKey: ['ascenseurs'], queryFn: getAscenseurs });
+
+  // Filtrer les articles
+  const filteredArticles = articles?.filter(a => 
+    articleSearch.length >= 2 && (
+      a.designation?.toLowerCase().includes(articleSearch.toLowerCase()) ||
+      a.reference?.toLowerCase().includes(articleSearch.toLowerCase())
+    )
+  ).slice(0, 10) || [];
+
+  const addLigneFromStock = (article: any) => {
+    // Vérifier si déjà ajouté
+    if (lignes.some(l => l.article_id === article.id)) {
+      toast.error('Cet article est déjà dans la liste');
+      return;
+    }
+    setLignes([...lignes, {
+      id: `ligne-${Date.now()}`,
+      type: 'stock',
+      article_id: article.id,
+      designation: article.designation,
+      reference: article.reference || '',
+      quantite: 1,
+      ascenseur_id: '',
+      detail: '',
+    }]);
+    setArticleSearch('');
+  };
+
+  const addLigneManuelle = () => {
+    if (!newLigne.designation.trim()) {
+      toast.error('La désignation est requise');
+      return;
+    }
+    setLignes([...lignes, {
+      id: `ligne-${Date.now()}`,
+      type: 'manuel',
+      designation: newLigne.designation.trim(),
+      reference: newLigne.reference.trim(),
+      quantite: newLigne.quantite || 1,
+      ascenseur_id: newLigne.ascenseur_id || '',
+      detail: newLigne.detail || '',
+    }]);
+    setNewLigne({ designation: '', reference: '', quantite: 1, ascenseur_id: '', detail: '' });
+    setShowAddLigne(false);
+  };
+
+  const removeLigne = (id: string) => {
+    setLignes(lignes.filter(l => l.id !== id));
+  };
+
+  const updateLigne = (id: string, field: keyof LigneForm, value: any) => {
+    setLignes(lignes.map(l => l.id === id ? { ...l, [field]: value } : l));
+  };
+
   const handleSubmit = () => {
     if (!form.fournisseur) {
       toast.error('Veuillez sélectionner un fournisseur');
+      return;
+    }
+    if (lignes.length === 0) {
+      toast.error('Ajoutez au moins une pièce à commander');
       return;
     }
     onSave({
       ...form,
       technicien_id: CURRENT_USER_ID,
       statut: commande?.statut || 'brouillon',
-    });
+    }, lignes);
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <Card className="w-[500px]">
+      <Card className="w-[700px] max-h-[90vh] overflow-y-auto">
         <CardBody>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-[var(--text-primary)]">
@@ -93,21 +178,23 @@ function CommandeFormModal({
           </div>
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Fournisseur *</label>
-              <Select value={form.fournisseur} onChange={e => setForm({ ...form, fournisseur: e.target.value })}>
-                <option value="">Sélectionner...</option>
-                {FOURNISSEURS.map(f => <option key={f} value={f}>{f}</option>)}
-              </Select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Référence fournisseur</label>
-              <Input 
-                value={form.reference_fournisseur} 
-                onChange={e => setForm({ ...form, reference_fournisseur: e.target.value })}
-                placeholder="Ex: OT-2024-789"
-              />
+            {/* Infos commande */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Fournisseur *</label>
+                <Select value={form.fournisseur} onChange={e => setForm({ ...form, fournisseur: e.target.value })}>
+                  <option value="">Sélectionner...</option>
+                  {FOURNISSEURS.map(f => <option key={f} value={f}>{f}</option>)}
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Référence fournisseur</label>
+                <Input 
+                  value={form.reference_fournisseur} 
+                  onChange={e => setForm({ ...form, reference_fournisseur: e.target.value })}
+                  placeholder="Ex: OT-2024-789"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -129,12 +216,220 @@ function CommandeFormModal({
               </div>
             </div>
 
+            {/* Section Pièces à commander */}
+            <div className="border-t border-[var(--border-primary)] pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                  <Package className="w-4 h-4" /> Pièces à commander
+                  {lignes.length > 0 && <Badge variant="blue">{lignes.length}</Badge>}
+                </h3>
+                <button
+                  onClick={() => setShowAddLigne(!showAddLigne)}
+                  className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                >
+                  {showAddLigne ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  Ajouter une pièce
+                </button>
+              </div>
+
+              {/* Formulaire ajout pièce */}
+              {showAddLigne && (
+                <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl mb-4 space-y-3">
+                  {/* Tabs Stock / Manuel */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setLigneType('stock')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        ligneType === 'stock'
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                      }`}
+                    >
+                      <Package className="w-4 h-4 inline mr-2" />Depuis le stock
+                    </button>
+                    <button
+                      onClick={() => setLigneType('manuel')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        ligneType === 'manuel'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                      }`}
+                    >
+                      <Edit className="w-4 h-4 inline mr-2" />Saisie manuelle
+                    </button>
+                  </div>
+
+                  {ligneType === 'stock' ? (
+                    <div>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
+                        <Input
+                          value={articleSearch}
+                          onChange={e => setArticleSearch(e.target.value)}
+                          placeholder="Rechercher un article (min. 2 car.)..."
+                          className="pl-10"
+                        />
+                      </div>
+                      {filteredArticles.length > 0 && (
+                        <div className="mt-2 max-h-40 overflow-y-auto border border-[var(--border-primary)] rounded-lg divide-y divide-[var(--border-primary)]">
+                          {filteredArticles.map(article => (
+                            <button
+                              key={article.id}
+                              onClick={() => addLigneFromStock(article)}
+                              className="w-full p-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between"
+                            >
+                              <div>
+                                <div className="text-sm font-medium text-[var(--text-primary)]">{article.designation}</div>
+                                <div className="text-xs text-[var(--text-muted)]">{article.reference}</div>
+                              </div>
+                              <div className="text-xs text-[var(--text-tertiary)]">
+                                Stock: {article.quantite_stock}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Désignation *</label>
+                          <Input
+                            value={newLigne.designation}
+                            onChange={e => setNewLigne({ ...newLigne, designation: e.target.value })}
+                            placeholder="Nom de la pièce"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Référence</label>
+                          <Input
+                            value={newLigne.reference}
+                            onChange={e => setNewLigne({ ...newLigne, reference: e.target.value })}
+                            placeholder="Réf. fournisseur"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Quantité</label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={newLigne.quantite}
+                            onChange={e => setNewLigne({ ...newLigne, quantite: parseInt(e.target.value) || 1 })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Ascenseur (opt.)</label>
+                          <Select
+                            value={newLigne.ascenseur_id}
+                            onChange={e => setNewLigne({ ...newLigne, ascenseur_id: e.target.value })}
+                          >
+                            <option value="">Aucun</option>
+                            {ascenseurs?.map(a => (
+                              <option key={a.id} value={a.id}>{a.code} - {a.adresse?.slice(0, 30)}</option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Détail (opt.)</label>
+                          <Input
+                            value={newLigne.detail}
+                            onChange={e => setNewLigne({ ...newLigne, detail: e.target.value })}
+                            placeholder="Infos supp."
+                          />
+                        </div>
+                      </div>
+                      <Button variant="primary" className="w-full" onClick={addLigneManuelle}>
+                        <Plus className="w-4 h-4" /> Ajouter cette pièce
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Liste des lignes */}
+              {lignes.length > 0 ? (
+                <div className="space-y-2">
+                  {lignes.map((ligne, index) => (
+                    <div 
+                      key={ligne.id} 
+                      className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-primary)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium text-[var(--text-primary)]">{ligne.designation}</span>
+                            {ligne.type === 'stock' && <Badge variant="blue" className="text-xs">Stock</Badge>}
+                            {ligne.type === 'manuel' && <Badge variant="amber" className="text-xs">Manuel</Badge>}
+                          </div>
+                          {ligne.reference && (
+                            <div className="text-xs text-[var(--text-muted)]">Réf: {ligne.reference}</div>
+                          )}
+                        </div>
+                        
+                        {/* Quantité */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => updateLigne(ligne.id, 'quantite', Math.max(1, ligne.quantite - 1))}
+                            className="w-7 h-7 rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] flex items-center justify-center hover:bg-[var(--bg-hover)]"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-8 text-center font-mono text-sm text-[var(--text-primary)]">{ligne.quantite}</span>
+                          <button
+                            onClick={() => updateLigne(ligne.id, 'quantite', ligne.quantite + 1)}
+                            className="w-7 h-7 rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] flex items-center justify-center hover:bg-[var(--bg-hover)]"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                        
+                        <button
+                          onClick={() => removeLigne(ligne.id)}
+                          className="p-1.5 hover:bg-red-500/20 rounded text-red-400"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      
+                      {/* Options ascenseur et détail */}
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <Select
+                          value={ligne.ascenseur_id || ''}
+                          onChange={e => updateLigne(ligne.id, 'ascenseur_id', e.target.value)}
+                          className="text-xs py-1"
+                        >
+                          <option value="">Ascenseur (opt.)</option>
+                          {ascenseurs?.map(a => (
+                            <option key={a.id} value={a.id}>{a.code}</option>
+                          ))}
+                        </Select>
+                        <Input
+                          value={ligne.detail || ''}
+                          onChange={e => updateLigne(ligne.id, 'detail', e.target.value)}
+                          placeholder="Détail (opt.)"
+                          className="text-xs py-1"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 text-center text-[var(--text-muted)] text-sm border border-dashed border-[var(--border-primary)] rounded-lg">
+                  Aucune pièce ajoutée. Cliquez sur "Ajouter une pièce" ci-dessus.
+                </div>
+              )}
+            </div>
+
+            {/* Notes */}
             <div>
               <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Notes</label>
               <textarea
                 value={form.notes}
                 onChange={e => setForm({ ...form, notes: e.target.value })}
-                rows={3}
+                rows={2}
                 className="w-full px-3 py-2 rounded-lg text-sm resize-none bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-primary)]"
                 placeholder="Notes ou commentaires..."
               />
@@ -144,7 +439,7 @@ function CommandeFormModal({
           <div className="flex gap-3 mt-6">
             <Button variant="secondary" className="flex-1" onClick={onClose}>Annuler</Button>
             <Button variant="primary" className="flex-1" onClick={handleSubmit}>
-              {commande ? 'Enregistrer' : 'Créer'}
+              {commande ? 'Enregistrer' : 'Créer la commande'}
             </Button>
           </div>
         </CardBody>
@@ -153,196 +448,64 @@ function CommandeFormModal({
   );
 }
 
-// Modal pour ajouter un article manuellement à une commande
-function AddLigneModal({
-  commandeId,
+// Modal détail commande
+function CommandeDetailModal({
+  commande,
   onClose,
-  onSuccess
-}: {
-  commandeId: string;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const [form, setForm] = useState({
-    designation: '',
-    reference: '',
-    quantite: 1,
-    notes: '',
-  });
-
-  const addMutation = useMutation({
-    mutationFn: () => addCommandeLigne({
-      commande_id: commandeId,
-      designation: form.designation,
-      reference: form.reference,
-      quantite: form.quantite,
-      notes: form.notes,
-    }),
-    onSuccess: () => {
-      toast.success('Article ajouté');
-      onSuccess();
-      onClose();
-    },
-    onError: () => {
-      toast.error("Erreur lors de l'ajout");
-    },
-  });
-
-  const handleSubmit = () => {
-    if (!form.designation) {
-      toast.error('Veuillez saisir une désignation');
-      return;
-    }
-    addMutation.mutate();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <Card className="w-[450px]">
-        <CardBody>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-[var(--text-primary)]">Ajouter un article</h3>
-            <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
-              <X className="w-5 h-5 text-[var(--text-tertiary)]" />
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Désignation *</label>
-              <Input
-                value={form.designation}
-                onChange={e => setForm({ ...form, designation: e.target.value })}
-                placeholder="Ex: Contacteur 40A"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Référence</label>
-              <Input
-                value={form.reference}
-                onChange={e => setForm({ ...form, reference: e.target.value })}
-                placeholder="Ex: CT-40A-01"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Quantité</label>
-              <Input
-                type="number"
-                min={1}
-                value={form.quantite}
-                onChange={e => setForm({ ...form, quantite: parseInt(e.target.value) || 1 })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Notes</label>
-              <Input
-                value={form.notes}
-                onChange={e => setForm({ ...form, notes: e.target.value })}
-                placeholder="Remarques..."
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-3 mt-6">
-            <Button variant="secondary" className="flex-1" onClick={onClose}>Annuler</Button>
-            <Button 
-              variant="primary" 
-              className="flex-1" 
-              onClick={handleSubmit}
-              disabled={addMutation.isPending}
-            >
-              <Plus className="w-4 h-4" /> Ajouter
-            </Button>
-          </div>
-        </CardBody>
-      </Card>
-    </div>
-  );
-}
-
-// Modal détail commande avec lignes
-function CommandeDetailModal({ 
-  commande, 
-  onClose, 
   onEdit,
   onArchive,
   onStatusChange,
-  onRefresh
-}: { 
-  commande: Commande; 
-  onClose: () => void; 
+}: {
+  commande: Commande;
+  onClose: () => void;
   onEdit: () => void;
   onArchive: () => void;
   onStatusChange: (statut: StatutCommande) => void;
-  onRefresh: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [showAddLigne, setShowAddLigne] = useState(false);
+  const config = STATUT_CONFIG[commande.statut];
+  const prioriteConfig = PRIORITE_CONFIG[commande.priorite];
 
-  const statusConfig = STATUT_CONFIG[commande.statut];
-  const StatusIcon = statusConfig.icon;
-
-  // Supprimer ligne
   const deleteLigneMutation = useMutation({
-    mutationFn: (ligneId: string) => deleteCommandeLigne(ligneId, commande.id),
+    mutationFn: deleteCommandeLigne,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['commandes'] });
-      toast.success('Article supprimé');
-      onRefresh();
-    },
-  });
-
-  // Marquer ligne comme reçue
-  const markReceivedMutation = useMutation({
-    mutationFn: async ({ ligneId, quantite }: { ligneId: string; quantite: number }) => {
-      const { error } = await supabase
-        .from('commande_lignes')
-        .update({ quantite_recue: quantite })
-        .eq('id', ligneId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['commandes'] });
-      toast.success('Quantité reçue mise à jour');
-      onRefresh();
+      toast.success('Ligne supprimée');
     },
   });
 
   // Workflow des statuts
-  const getNextStatus = (): StatutCommande | null => {
+  const getNextStatuts = (): StatutCommande[] => {
     switch (commande.statut) {
-      case 'brouillon': return 'en_attente';
-      case 'en_attente': return 'validee';
-      case 'validee': return 'commandee';
-      case 'commandee': return 'expediee';
-      case 'expediee': return 'recue';
-      default: return null;
+      case 'brouillon': return ['en_attente', 'annulee'];
+      case 'en_attente': return ['validee', 'annulee'];
+      case 'validee': return ['commandee', 'annulee'];
+      case 'commandee': return ['expediee', 'annulee'];
+      case 'expediee': return ['recue'];
+      default: return [];
     }
   };
-
-  const nextStatus = getNextStatus();
-  const totalArticles = commande.lignes?.reduce((sum, l) => sum + l.quantite, 0) || 0;
-  const totalRecus = commande.lignes?.reduce((sum, l) => sum + (l.quantite_recue || 0), 0) || 0;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <Card className="w-[650px] max-h-[90vh] overflow-y-auto">
         <CardBody>
           {/* Header */}
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start justify-between mb-6">
             <div>
-              <div className="text-sm text-cyan-400 font-semibold">{commande.code}</div>
-              <h2 className="text-xl font-bold text-[var(--text-primary)]">{commande.fournisseur}</h2>
-              {commande.reference_fournisseur && (
-                <div className="text-sm text-[var(--text-tertiary)]">Réf: {commande.reference_fournisseur}</div>
-              )}
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-mono text-lg font-bold text-cyan-400">{commande.code}</span>
+                <Badge variant={config.color}>{config.label}</Badge>
+                <Badge variant={prioriteConfig.color}>{prioriteConfig.label}</Badge>
+              </div>
+              <div className="text-[var(--text-secondary)]">{commande.fournisseur}</div>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={onArchive} className="p-2 hover:bg-amber-500/20 rounded-lg" title="Archiver">
-                <Archive className="w-5 h-5 text-[var(--text-tertiary)] hover:text-amber-400" />
-              </button>
-              <button onClick={onEdit} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg" title="Modifier">
+              <button onClick={onEdit} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
                 <Edit className="w-5 h-5 text-[var(--text-tertiary)]" />
+              </button>
+              <button onClick={onArchive} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                <Archive className="w-5 h-5 text-[var(--text-tertiary)]" />
               </button>
               <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
                 <X className="w-5 h-5 text-[var(--text-tertiary)]" />
@@ -350,117 +513,62 @@ function CommandeDetailModal({
             </div>
           </div>
 
-          {/* Badges */}
-          <div className="flex items-center gap-2 flex-wrap mb-4">
-            <Badge variant={statusConfig.color} className="flex items-center gap-1">
-              <StatusIcon className="w-3 h-3" />
-              {statusConfig.label}
-            </Badge>
-            <Badge variant={PRIORITE_CONFIG[commande.priorite].color}>
-              {PRIORITE_CONFIG[commande.priorite].label}
-            </Badge>
-            <Badge variant="cyan" className="flex items-center gap-1">
-              <Package className="w-3 h-3" />
-              {totalArticles} article(s)
-            </Badge>
-            {totalRecus > 0 && (
-              <Badge variant="green" className="flex items-center gap-1">
-                <Check className="w-3 h-3" />
-                {totalRecus} reçu(s)
-              </Badge>
-            )}
-          </div>
-
           {/* Infos */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            {commande.technicien && (
-              <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                <User className="w-4 h-4 text-[var(--text-tertiary)]" />
-                {commande.technicien.prenom} {commande.technicien.nom}
-              </div>
-            )}
-            {commande.date_livraison_prevue && (
-              <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                <Calendar className="w-4 h-4 text-[var(--text-tertiary)]" />
-                Livraison: {format(parseISO(commande.date_livraison_prevue), 'd MMM yyyy', { locale: fr })}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            {commande.reference_fournisseur && (
+              <div>
+                <div className="text-xs text-[var(--text-muted)]">Réf. fournisseur</div>
+                <div className="text-sm text-[var(--text-primary)]">{commande.reference_fournisseur}</div>
               </div>
             )}
             {commande.date_commande && (
-              <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                <ShoppingCart className="w-4 h-4 text-[var(--text-tertiary)]" />
-                Commandé: {format(parseISO(commande.date_commande), 'd MMM yyyy', { locale: fr })}
+              <div>
+                <div className="text-xs text-[var(--text-muted)]">Date commande</div>
+                <div className="text-sm text-[var(--text-primary)]">
+                  {format(new Date(commande.date_commande), 'dd/MM/yyyy', { locale: fr })}
+                </div>
+              </div>
+            )}
+            {commande.date_livraison_prevue && (
+              <div>
+                <div className="text-xs text-[var(--text-muted)]">Livraison prévue</div>
+                <div className="text-sm text-[var(--text-primary)]">
+                  {format(new Date(commande.date_livraison_prevue), 'dd/MM/yyyy', { locale: fr })}
+                </div>
               </div>
             )}
             {commande.date_reception && (
-              <div className="flex items-center gap-2 text-sm text-green-400">
-                <Check className="w-4 h-4" />
-                Reçu: {format(parseISO(commande.date_reception), 'd MMM yyyy', { locale: fr })}
+              <div>
+                <div className="text-xs text-[var(--text-muted)]">Date réception</div>
+                <div className="text-sm text-[var(--text-primary)]">
+                  {format(new Date(commande.date_reception), 'dd/MM/yyyy', { locale: fr })}
+                </div>
               </div>
             )}
           </div>
 
-          {commande.notes && (
-            <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] mb-4 text-sm text-[var(--text-secondary)]">
-              {commande.notes}
-            </div>
-          )}
-
-          {/* Lignes de commande */}
-          <div className="border-t border-[var(--border-secondary)] pt-4 mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-[var(--text-primary)]">
-                Articles ({commande.lignes?.length || 0})
-              </h3>
-              {commande.statut === 'brouillon' && (
-                <Button variant="secondary" size="sm" onClick={() => setShowAddLigne(true)}>
-                  <Plus className="w-4 h-4" /> Ajouter
-                </Button>
-              )}
-            </div>
-
+          {/* Lignes */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+              <Package className="w-4 h-4" /> Articles ({commande.lignes?.length || 0})
+            </h3>
             {commande.lignes && commande.lignes.length > 0 ? (
               <div className="space-y-2">
-                {commande.lignes.map(ligne => (
-                  <div 
-                    key={ligne.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)] group"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-[var(--text-primary)]">{ligne.designation}</span>
-                        {ligne.reference && (
-                          <span className="text-xs text-[var(--text-tertiary)]">({ligne.reference})</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <Badge variant="cyan">{ligne.quantite} demandé(s)</Badge>
-                        {ligne.quantite_recue > 0 && (
-                          <Badge variant="green">{ligne.quantite_recue} reçu(s)</Badge>
-                        )}
-                        {ligne.notes && (
-                          <span className="text-xs text-amber-400">💬 {ligne.notes}</span>
-                        )}
-                      </div>
+                {commande.lignes.map((ligne: any) => (
+                  <div key={ligne.id} className="p-3 bg-[var(--bg-tertiary)] rounded-lg flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-[var(--text-primary)]">{ligne.designation}</div>
+                      {ligne.reference && <div className="text-xs text-[var(--text-muted)]">Réf: {ligne.reference}</div>}
+                      {ligne.detail && <div className="text-xs text-[var(--text-tertiary)]">{ligne.detail}</div>}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {commande.statut === 'expediee' && ligne.quantite_recue < ligne.quantite && (
-                        <Button
-                          variant="success"
-                          size="sm"
-                          onClick={() => markReceivedMutation.mutate({ 
-                            ligneId: ligne.id, 
-                            quantite: ligne.quantite 
-                          })}
-                        >
-                          <Check className="w-3 h-3" /> Reçu
-                        </Button>
-                      )}
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-bold text-[var(--text-primary)]">x{ligne.quantite}</span>
                       {commande.statut === 'brouillon' && (
-                        <button 
+                        <button
                           onClick={() => deleteLigneMutation.mutate(ligne.id)}
-                          className="p-1.5 hover:bg-red-500/20 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="p-1.5 hover:bg-red-500/20 rounded text-red-400"
                         >
-                          <Trash2 className="w-4 h-4 text-red-400" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>
@@ -468,47 +576,43 @@ function CommandeDetailModal({
                 ))}
               </div>
             ) : (
-              <div className="text-center py-6 text-[var(--text-muted)]">
-                Aucun article dans cette commande
-              </div>
+              <div className="p-4 text-center text-[var(--text-muted)] text-sm">Aucun article</div>
             )}
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-[var(--border-primary)]">
-            <Button variant="secondary" className="flex-1" onClick={onClose}>Fermer</Button>
-            {nextStatus && commande.statut !== 'annulee' && (
-              <Button 
-                variant="primary" 
-                className="flex-1"
-                onClick={() => onStatusChange(nextStatus)}
-              >
-                <ChevronRight className="w-4 h-4" />
-                {STATUT_CONFIG[nextStatus].label}
-              </Button>
-            )}
-            {commande.statut !== 'annulee' && commande.statut !== 'recue' && (
-              <Button 
-                variant="danger" 
-                size="sm"
-                onClick={() => onStatusChange('annulee')}
-              >
-                Annuler
-              </Button>
-            )}
-          </div>
+          {/* Notes */}
+          {commande.notes && (
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2">Notes</h3>
+              <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg text-sm text-[var(--text-secondary)]">
+                {commande.notes}
+              </div>
+            </div>
+          )}
+
+          {/* Actions statut */}
+          {getNextStatuts().length > 0 && (
+            <div className="border-t border-[var(--border-primary)] pt-4">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Changer le statut</h3>
+              <div className="flex flex-wrap gap-2">
+                {getNextStatuts().map(statut => {
+                  const cfg = STATUT_CONFIG[statut];
+                  return (
+                    <Button
+                      key={statut}
+                      variant="secondary"
+                      onClick={() => onStatusChange(statut)}
+                      className={statut === 'annulee' ? 'text-red-400 hover:bg-red-500/20' : ''}
+                    >
+                      <cfg.icon className="w-4 h-4" /> {cfg.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </CardBody>
       </Card>
-
-      {showAddLigne && (
-        <AddLigneModal
-          commandeId={commande.id}
-          onClose={() => setShowAddLigne(false)}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ['commandes'] });
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -521,21 +625,37 @@ export function CommandesPage() {
   const [editCommande, setEditCommande] = useState<Commande | null>(null);
   const [detailCommande, setDetailCommande] = useState<Commande | null>(null);
   const [archiveItem, setArchiveItem] = useState<Commande | null>(null);
-  const [showAddToPanier, setShowAddToPanier] = useState(false);
   const queryClient = useQueryClient();
-  const { items: panierItems, openPanier } = usePanierStore();
 
-  const { data: commandes, isLoading, refetch } = useQuery({
+  const { data: commandes, isLoading } = useQuery({
     queryKey: ['commandes'],
     queryFn: () => getCommandes(),
   });
 
   const createMutation = useMutation({
-    mutationFn: createCommande,
+    mutationFn: async ({ data, lignes }: { data: Partial<Commande>; lignes: LigneForm[] }) => {
+      const commande = await createCommande(data);
+      // Ajouter les lignes
+      for (const ligne of lignes) {
+        await addCommandeLigne({
+          commande_id: commande.id,
+          article_id: ligne.article_id,
+          designation: ligne.designation,
+          reference: ligne.reference,
+          quantite: ligne.quantite,
+          ascenseur_id: ligne.ascenseur_id || null,
+          detail: ligne.detail || null,
+        });
+      }
+      return commande;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['commandes'] });
       toast.success('Commande créée');
       setShowForm(false);
+    },
+    onError: (err: any) => {
+      toast.error('Erreur: ' + err.message);
     },
   });
 
@@ -563,7 +683,7 @@ export function CommandesPage() {
   const filtered = useMemo(() => {
     if (!commandes) return [];
     return commandes.filter(c => {
-      const matchSearch = c.code.toLowerCase().includes(search.toLowerCase()) || 
+      const matchSearch = c.code?.toLowerCase().includes(search.toLowerCase()) || 
                           c.fournisseur?.toLowerCase().includes(search.toLowerCase()) ||
                           c.reference_fournisseur?.toLowerCase().includes(search.toLowerCase());
       const matchStatut = filterStatut === 'all' || c.statut === filterStatut;
@@ -602,20 +722,9 @@ export function CommandesPage() {
             Gestion des commandes de pièces et matériel
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {panierItems.length > 0 && (
-            <Button variant="secondary" onClick={openPanier}>
-              <ShoppingCart className="w-4 h-4" />
-              Panier ({panierItems.length})
-            </Button>
-          )}
-          <Button variant="secondary" onClick={() => setShowAddToPanier(true)}>
-            <Plus className="w-4 h-4" /> Ajouter au panier
-          </Button>
-          <Button variant="primary" onClick={() => setShowForm(true)}>
-            <Plus className="w-4 h-4" /> Nouvelle commande
-          </Button>
-        </div>
+        <Button variant="primary" onClick={() => setShowForm(true)}>
+          <Plus className="w-4 h-4" /> Nouvelle commande
+        </Button>
       </div>
 
       {/* Stats */}
@@ -700,52 +809,34 @@ export function CommandesPage() {
             <div className="p-8 text-center text-[var(--text-muted)]">Aucune commande trouvée</div>
           ) : (
             filtered.map(commande => {
-              const statusConfig = STATUT_CONFIG[commande.statut];
-              const StatusIcon = statusConfig.icon;
-              const totalArticles = commande.lignes?.reduce((sum, l) => sum + l.quantite, 0) || 0;
-              
+              const config = STATUT_CONFIG[commande.statut];
+              const prioriteConfig = PRIORITE_CONFIG[commande.priorite];
+              const StatusIcon = config.icon;
               return (
-                <div 
+                <div
                   key={commande.id}
-                  className="p-4 hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer"
+                  className="p-4 hover:bg-[var(--bg-tertiary)]/30 cursor-pointer transition-colors"
                   onClick={() => setDetailCommande(commande)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                        <StatusIcon className="w-5 h-5 text-cyan-400" />
+                      <div className={`w-12 h-12 rounded-xl bg-${config.color}-500/20 flex items-center justify-center`}>
+                        <StatusIcon className={`w-6 h-6 text-${config.color}-400`} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-cyan-400">{commande.code}</span>
-                          <Badge variant={statusConfig.color}>{statusConfig.label}</Badge>
-                          <Badge variant={PRIORITE_CONFIG[commande.priorite].color}>
-                            {PRIORITE_CONFIG[commande.priorite].label}
-                          </Badge>
+                          <span className="font-mono text-sm font-bold text-cyan-400">{commande.code}</span>
+                          <Badge variant={config.color}>{config.label}</Badge>
+                          <Badge variant={prioriteConfig.color}>{prioriteConfig.label}</Badge>
                         </div>
                         <div className="text-sm text-[var(--text-primary)]">{commande.fournisseur}</div>
-                        <div className="flex items-center gap-4 text-xs text-[var(--text-tertiary)] mt-1">
-                          <span>{totalArticles} article(s)</span>
-                          {commande.date_livraison_prevue && (
-                            <span>Livraison: {format(parseISO(commande.date_livraison_prevue), 'd MMM', { locale: fr })}</span>
-                          )}
+                        <div className="text-xs text-[var(--text-muted)]">
+                          {commande.lignes?.length || 0} article(s)
+                          {commande.date_commande && ` • Commandé le ${format(new Date(commande.date_commande), 'dd/MM/yyyy', { locale: fr })}`}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <Badge variant="cyan" className="text-lg">{totalArticles} pièce(s)</Badge>
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={e => { e.stopPropagation(); setArchiveItem(commande); }}
-                          className="p-2 hover:bg-amber-500/20 rounded-lg text-[var(--text-tertiary)] hover:text-amber-400"
-                        >
-                          <Archive className="w-4 h-4" />
-                        </button>
-                        <button className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
-                          <Eye className="w-4 h-4 text-[var(--text-tertiary)]" />
-                        </button>
-                      </div>
-                    </div>
+                    <ChevronRight className="w-5 h-5 text-[var(--text-muted)]" />
                   </div>
                 </div>
               );
@@ -756,34 +847,28 @@ export function CommandesPage() {
 
       {/* Modals */}
       {showForm && (
-        <CommandeFormModal onClose={() => setShowForm(false)} onSave={data => createMutation.mutate(data)} />
+        <CommandeFormModal
+          onClose={() => setShowForm(false)}
+          onSave={(data, lignes) => createMutation.mutate({ data, lignes })}
+        />
       )}
-      {editCommande && (
-        <CommandeFormModal commande={editCommande} onClose={() => setEditCommande(null)} onSave={data => updateMutation.mutate({ id: editCommande.id, data })} />
-      )}
+
       {detailCommande && (
-        <CommandeDetailModal 
+        <CommandeDetailModal
           commande={detailCommande}
           onClose={() => setDetailCommande(null)}
           onEdit={() => { setEditCommande(detailCommande); setDetailCommande(null); }}
-          onArchive={() => setArchiveItem(detailCommande)}
+          onArchive={() => { setArchiveItem(detailCommande); }}
           onStatusChange={(statut) => handleStatusChange(detailCommande, statut)}
-          onRefresh={() => refetch().then(r => { const u = r.data?.find(c => c.id === detailCommande.id); if (u) setDetailCommande(u); })}
         />
       )}
+
       {archiveItem && (
         <ArchiveModal
-          type="commande"
-          code={archiveItem.code}
-          libelle={`${archiveItem.fournisseur} - ${archiveItem.lignes?.length || 0} article(s)`}
-          onClose={() => setArchiveItem(null)}
+          itemType="commande"
+          itemCode={archiveItem.code}
           onConfirm={(raison) => archiveMutation.mutate({ id: archiveItem.id, raison })}
-          isLoading={archiveMutation.isPending}
-        />
-      )}
-      {showAddToPanier && (
-        <AddToPanierModal
-          onClose={() => setShowAddToPanier(false)}
+          onClose={() => setArchiveItem(null)}
         />
       )}
     </div>

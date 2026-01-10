@@ -1199,3 +1199,7 @@ INSERT INTO commande_lignes (commande_id, article_id, designation, reference, qu
   ('cccc4444-4444-4444-4444-444444444444', (SELECT id FROM stock_articles WHERE reference = 'BOU-001'), 'Bouton poussoir lumineux', 'BOU-001', 20),
   ('cccc5555-5555-5555-5555-555555555555', (SELECT id FROM stock_articles WHERE reference = 'DIS-001'), 'Disjoncteur 16A', 'DIS-001', 15)
 ON CONFLICT DO NOTHING;
+
+-- Ajout colonnes commande_lignes pour ascenseur et détail
+ALTER TABLE commande_lignes ADD COLUMN IF NOT EXISTS ascenseur_id UUID REFERENCES ascenseurs(id);
+ALTER TABLE commande_lignes ADD COLUMN IF NOT EXISTS detail TEXT;

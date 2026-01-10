@@ -673,9 +673,12 @@ export interface CommandeLigne {
   quantite: number;
   quantite_recue: number;
   notes?: string;
+  ascenseur_id?: string;
+  detail?: string;
   created_at: string;
   // Relations
   article?: StockArticle;
+  ascenseur?: Ascenseur;
 }
 
 // === CONSTANTES ===
