@@ -1168,18 +1168,22 @@ import type { Commande, CommandeLigne, StatutCommande } from '@/types';
 
 export async function getCommandes(includeArchived = false): Promise<Commande[]> {
   try {
-    // Requête simplifiée pour diagnostiquer
-    const { data, error } = await supabase
+    let query = supabase
       .from('commandes')
-      .select('*')
+      .select('*, technicien:techniciens!commandes_technicien_id_fkey(*), lignes:commande_lignes(*)')
       .order('created_at', { ascending: false });
+    
+    if (!includeArchived) {
+      query = query.or('archive.is.null,archive.eq.false');
+    }
+    
+    const { data, error } = await query;
     
     if (error) {
       console.error('Erreur getCommandes:', error.message, error.details, error.hint);
       return [];
     }
     
-    console.log('Commandes récupérées:', data?.length || 0);
     return data || [];
   } catch (err) {
     console.error('Exception getCommandes:', err);
@@ -1199,12 +1203,18 @@ export async function getCommande(id: string): Promise<Commande | null> {
 
 export async function createCommande(commande: Partial<Commande>): Promise<Commande> {
   const code = `CMD-${String(Date.now()).slice(-6)}`;
+  console.log('createCommande - données envoyées:', { ...commande, code });
+  
   const { data, error } = await supabase
     .from('commandes')
     .insert({ ...commande, code })
     .select()
     .single();
-  if (error) throw error;
+  
+  if (error) {
+    console.error('createCommande - erreur:', error.message, error.details, error.hint);
+    throw error;
+  }
   return data;
 }
 

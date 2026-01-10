@@ -158,7 +158,11 @@ function CommandeFormModal({
       return;
     }
     onSave({
-      ...form,
+      fournisseur: form.fournisseur,
+      reference_fournisseur: form.reference_fournisseur || null,
+      priorite: form.priorite as Priorite,
+      date_livraison_prevue: form.date_livraison_prevue || null,
+      notes: form.notes || null,
       technicien_id: CURRENT_USER_ID,
       statut: commande?.statut || 'brouillon',
     }, lignes);
@@ -639,9 +643,9 @@ export function CommandesPage() {
       for (const ligne of lignes) {
         await addCommandeLigne({
           commande_id: commande.id,
-          article_id: ligne.article_id,
+          article_id: ligne.article_id || null,
           designation: ligne.designation,
-          reference: ligne.reference,
+          reference: ligne.reference || null,
           quantite: ligne.quantite,
           ascenseur_id: ligne.ascenseur_id || null,
           detail: ligne.detail || null,
@@ -655,6 +659,7 @@ export function CommandesPage() {
       setShowForm(false);
     },
     onError: (err: any) => {
+      console.error('Erreur création commande:', err);
       toast.error('Erreur: ' + err.message);
     },
   });
