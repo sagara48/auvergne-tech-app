@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Nfc, Plus, Search, Smartphone, Usb, Radio, Building2, Package, Box,
+  Nfc, Plus, Search, Smartphone, Radio, Building2, Package, Box,
   Check, X, Edit, Trash2, History, AlertTriangle, Wifi, WifiOff,
-  RefreshCw, Tag, ScanLine, Link2, Link2Off
+  RefreshCw, Tag, ScanLine, Link2, Link2Off, Monitor
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
 import {
@@ -108,16 +108,38 @@ function EncodeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
           </div>
 
           <div className="flex items-center gap-4 mb-6 p-3 rounded-lg bg-[var(--bg-tertiary)]">
-            <div className="flex items-center gap-2">
-              <Smartphone className={`w-5 h-5 ${nfc.capabilities.webNFC ? 'text-green-400' : 'text-red-400'}`} />
-              <span className="text-sm text-[var(--text-secondary)]">Mobile {nfc.capabilities.webNFC ? '✓' : '✗'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Usb className={`w-5 h-5 ${nfc.capabilities.webUSB ? 'text-green-400' : 'text-red-400'}`} />
-              <span className="text-sm text-[var(--text-secondary)]">USB {nfc.capabilities.webUSB ? '✓' : '✗'}</span>
-            </div>
-            {nfc.isUSBConnected && <Badge variant="green" className="ml-auto">USB connecté</Badge>}
+            {nfc.capabilities.isMobile ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Smartphone className={`w-5 h-5 ${nfc.capabilities.webNFC ? 'text-green-400' : 'text-amber-400'}`} />
+                  <span className="text-sm text-[var(--text-secondary)]">
+                    {nfc.capabilities.webNFC ? 'NFC disponible' : 'NFC non supporté'}
+                  </span>
+                </div>
+                {nfc.capabilities.webNFC && <Badge variant="green" className="ml-auto">Prêt</Badge>}
+              </>
+            ) : (
+              <div className="flex items-center gap-2 text-amber-400">
+                <Monitor className="w-5 h-5" />
+                <span className="text-sm">NFC disponible uniquement sur mobile (Chrome Android)</span>
+              </div>
+            )}
           </div>
+
+          {!nfc.capabilities.isMobile && (
+            <div className="mb-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <div className="flex items-start gap-3">
+                <Smartphone className="w-5 h-5 text-amber-400 mt-0.5" />
+                <div>
+                  <p className="text-sm text-amber-200 font-medium">Fonctionnalité mobile</p>
+                  <p className="text-xs text-amber-200/70 mt-1">
+                    L'encodage et le scan NFC nécessitent un smartphone Android avec Chrome.
+                    Ouvrez cette page sur votre téléphone pour utiliser le NFC.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {step === 'config' && (
             <div className="space-y-4">
@@ -195,8 +217,14 @@ function EncodeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
 
               <div className="flex gap-3 pt-4">
                 <Button variant="secondary" className="flex-1" onClick={onClose}>Annuler</Button>
-                <Button variant="primary" className="flex-1" onClick={handleStartScan} disabled={!canProceed() || !nfc.capabilities.any}>
+                <Button 
+                  variant="primary" 
+                  className="flex-1" 
+                  onClick={handleStartScan} 
+                  disabled={!canProceed() || !nfc.capabilities.webNFC}
+                >
                   <ScanLine className="w-4 h-4" /> Scanner le tag
+                </Button>
                 </Button>
               </div>
             </div>
@@ -209,7 +237,7 @@ function EncodeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
               </div>
               <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">En attente d'un tag NFC...</h3>
               <p className="text-sm text-[var(--text-tertiary)] mb-6">
-                {nfc.capabilities.webNFC ? 'Approchez votre téléphone du tag' : 'Placez le tag sur le lecteur USB'}
+                {nfc.capabilities.webNFC ? 'Approchez votre téléphone du tag' : 'NFC non disponible'}
               </p>
               <Button variant="secondary" onClick={() => { nfc.stopReading(); setStep('config'); }}>Annuler</Button>
             </div>
@@ -535,12 +563,16 @@ export function NFCPage() {
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)]">
-            {nfc.capabilities.webNFC && <><Smartphone className="w-4 h-4 text-green-400" /><span className="text-xs text-[var(--text-tertiary)]">Mobile</span></>}
-            {nfc.capabilities.webUSB && <><Usb className={`w-4 h-4 ${nfc.isUSBConnected ? 'text-green-400' : 'text-[var(--text-tertiary)]'}`} /><span className="text-xs text-[var(--text-tertiary)]">USB</span></>}
-            {!nfc.capabilities.any && <><WifiOff className="w-4 h-4 text-amber-400" /><span className="text-xs text-amber-400">Indisponible</span></>}
+            {nfc.capabilities.webNFC ? (
+              <><Smartphone className="w-4 h-4 text-green-400" /><span className="text-xs text-green-400">NFC Prêt</span></>
+            ) : nfc.capabilities.isMobile ? (
+              <><Smartphone className="w-4 h-4 text-amber-400" /><span className="text-xs text-amber-400">NFC non supporté</span></>
+            ) : (
+              <><Monitor className="w-4 h-4 text-amber-400" /><span className="text-xs text-amber-400">Mobile uniquement</span></>
+            )}
           </div>
-          <Button variant="secondary" onClick={() => setShowTestScan(true)}><ScanLine className="w-4 h-4" /> Tester</Button>
-          <Button variant="primary" onClick={() => setShowEncode(true)} disabled={!nfc.capabilities.any}>
+          <Button variant="secondary" onClick={() => setShowTestScan(true)} disabled={!nfc.capabilities.webNFC}><ScanLine className="w-4 h-4" /> Tester</Button>
+          <Button variant="primary" onClick={() => setShowEncode(true)} disabled={!nfc.capabilities.webNFC}>
             <Plus className="w-4 h-4" /> Encoder
           </Button>
         </div>

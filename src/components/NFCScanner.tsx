@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Nfc, Radio, X, Building2, Box, Package, AlertTriangle,
-  Smartphone, Usb, WifiOff, ScanLine
+  Smartphone, WifiOff, ScanLine, Monitor
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button } from '@/components/ui';
 import { useNFC } from '@/hooks/useNFC';
@@ -154,16 +154,20 @@ export function NFCScanner({ autoStart = false, onClose, fullScreen = false }: N
                 </Button>
 
                 <div className="flex items-center justify-center gap-4 mt-6 text-sm">
-                  {nfc.capabilities.webNFC && (
+                  {nfc.capabilities.webNFC ? (
                     <div className="flex items-center gap-2">
                       <Smartphone className="w-4 h-4 text-green-400" />
-                      <span className="text-[var(--text-tertiary)]">Mobile NFC</span>
+                      <span className="text-green-400">NFC Prêt</span>
                     </div>
-                  )}
-                  {nfc.capabilities.webUSB && (
+                  ) : nfc.capabilities.isMobile ? (
                     <div className="flex items-center gap-2">
-                      <Usb className={`w-4 h-4 ${nfc.isUSBConnected ? 'text-green-400' : 'text-[var(--text-tertiary)]'}`} />
-                      <span className="text-[var(--text-tertiary)]">USB</span>
+                      <Smartphone className="w-4 h-4 text-amber-400" />
+                      <span className="text-amber-400">NFC non supporté sur ce téléphone</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Monitor className="w-4 h-4 text-amber-400" />
+                      <span className="text-amber-400">Disponible uniquement sur mobile</span>
                     </div>
                   )}
                 </div>
@@ -180,9 +184,7 @@ export function NFCScanner({ autoStart = false, onClose, fullScreen = false }: N
                   En attente...
                 </h2>
                 <p className="text-sm text-[var(--text-tertiary)] mb-6">
-                  {nfc.capabilities.webNFC
-                    ? 'Approchez votre téléphone du tag NFC'
-                    : 'Placez le tag sur le lecteur USB'}
+                  Approchez votre téléphone du tag NFC
                 </p>
                 <Button variant="secondary" onClick={() => { nfc.stopReading(); setScanning(false); }}>
                   Annuler
