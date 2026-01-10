@@ -195,46 +195,8 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
     setTaches(taches.filter(t => t.id !== id));
   };
 
-  const updateTacheStatut = async (id: string, newStatut: TacheForm['statut']) => {
-    const tache = taches.find(t => t.id === id);
-    const oldStatut = tache?.statut;
-    
-    // Mise à jour du statut
+  const updateTacheStatut = (id: string, newStatut: TacheForm['statut']) => {
     setTaches(taches.map(t => t.id === id ? { ...t, statut: newStatut } : t));
-
-    // Si la tâche passe à "terminé", consommer les pièces du stock
-    if (newStatut === 'termine' && oldStatut !== 'termine' && travaux) {
-      const piecesAConsommer = pieces.filter(p => 
-        p.source === 'stock' && 
-        p.article_id && 
-        !p.consommee && 
-        (p.stock_disponible || 0) >= p.quantite
-      );
-
-      for (const piece of piecesAConsommer) {
-        try {
-          await createStockMouvement({
-            article_id: piece.article_id!,
-            type_mouvement: 'sortie',
-            quantite: piece.quantite,
-            technicien_id: CURRENT_USER_ID,
-            source_type: 'depot',
-            motif: `Travaux: ${travaux.titre || form.titre}`,
-          });
-          
-          // Marquer comme consommée
-          setPieces(prev => prev.map(p => 
-            p.id === piece.id ? { ...p, consommee: true } : p
-          ));
-          
-          toast.success(`${piece.designation} déduit du stock`);
-        } catch (error) {
-          toast.error(`Erreur pour ${piece.designation}`);
-        }
-      }
-      
-      queryClient.invalidateQueries({ queryKey: ['stock-articles'] });
-    }
   };
 
   const updateTacheRemarque = (id: string, remarque: string) => {
@@ -366,11 +328,51 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
     (p.stock_disponible !== undefined && p.quantite > p.stock_disponible)
   );
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.titre) {
       toast.error('Le titre est requis');
       return;
     }
+
+    // Consommer le stock pour les pièces "en stock" non encore consommées
+    const piecesAConsommer = pieces.filter(p => 
+      p.source === 'stock' && 
+      p.article_id && 
+      !p.consommee &&
+      (p.stock_disponible === undefined || p.quantite <= p.stock_disponible)
+    );
+
+    const piecesUpdated = [...pieces];
+
+    for (const piece of piecesAConsommer) {
+      try {
+        // Utiliser la bonne signature: (articleId, type, quantite, motif)
+        await createStockMouvement(
+          piece.article_id!,
+          'sortie',
+          piece.quantite,
+          `Travaux: ${form.titre}`
+        );
+        
+        // Marquer comme consommée
+        const idx = piecesUpdated.findIndex(p => p.id === piece.id);
+        if (idx !== -1) {
+          piecesUpdated[idx] = { ...piecesUpdated[idx], consommee: true };
+        }
+        
+        toast.success(`${piece.designation} déduit du stock`);
+      } catch (error) {
+        console.error('Erreur consommation stock:', error);
+        toast.error(`Erreur pour ${piece.designation}`);
+      }
+    }
+
+    // Invalider le cache du stock
+    if (piecesAConsommer.length > 0) {
+      queryClient.invalidateQueries({ queryKey: ['stock-articles'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
+    }
+
     onSave({
       ...form,
       devis_montant: form.devis_montant ? parseFloat(form.devis_montant as string) : undefined,
@@ -383,7 +385,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
         remarque: t.remarque,
         photos: t.photos,
       })),
-      pieces: pieces.map(p => ({
+      pieces: piecesUpdated.map(p => ({
         id: p.id,
         article_id: p.article_id,
         designation: p.designation,

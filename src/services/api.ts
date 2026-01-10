@@ -132,6 +132,17 @@ export async function updateStockArticle(id: string, data: Partial<StockArticle>
   return result;
 }
 
+export async function createStockArticle(data: Partial<StockArticle>): Promise<StockArticle> {
+  const { data: result, error } = await supabase.from('stock_articles').insert(data).select().single();
+  if (error) throw error;
+  return result;
+}
+
+export async function deleteStockArticle(id: string): Promise<void> {
+  const { error } = await supabase.from('stock_articles').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function createStockMouvement(articleId: string, type: string, quantite: number, motif?: string) {
   const article = await supabase.from('stock_articles').select('quantite_stock').eq('id', articleId).single();
   if (article.error) throw article.error;
@@ -140,6 +151,82 @@ export async function createStockMouvement(articleId: string, type: string, quan
   
   await supabase.from('stock_mouvements').insert({ article_id: articleId, type_mouvement: type, quantite, motif, quantite_avant: article.data.quantite_stock, quantite_apres: newQty });
   await supabase.from('stock_articles').update({ quantite_stock: newQty }).eq('id', articleId);
+}
+
+export async function getStockMouvements(limit = 50) {
+  const { data, error } = await supabase
+    .from('stock_mouvements')
+    .select('*, article:stock_articles(id, designation, reference)')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getStockMouvementsFiltered(dateDebut?: string, dateFin?: string) {
+  let query = supabase
+    .from('stock_mouvements')
+    .select('*, article:stock_articles(id, designation, reference)')
+    .order('created_at', { ascending: false });
+  
+  if (dateDebut) {
+    query = query.gte('created_at', dateDebut);
+  }
+  if (dateFin) {
+    query = query.lte('created_at', dateFin + 'T23:59:59');
+  }
+  
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getStockMouvementsByArticle(articleId: string, dateDebut?: string, dateFin?: string) {
+  let query = supabase
+    .from('stock_mouvements')
+    .select('*')
+    .eq('article_id', articleId)
+    .order('created_at', { ascending: false });
+  
+  if (dateDebut) {
+    query = query.gte('created_at', dateDebut);
+  }
+  if (dateFin) {
+    query = query.lte('created_at', dateFin + 'T23:59:59');
+  }
+  
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+// ================================================
+// CATÉGORIES STOCK
+// ================================================
+export async function getStockCategories() {
+  const { data, error } = await supabase
+    .from('stock_categories')
+    .select('*')
+    .order('nom');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createStockCategorie(data: { nom: string; description?: string }) {
+  const { data: result, error } = await supabase.from('stock_categories').insert(data).select().single();
+  if (error) throw error;
+  return result;
+}
+
+export async function updateStockCategorie(id: string, data: { nom?: string; description?: string }) {
+  const { data: result, error } = await supabase.from('stock_categories').update(data).eq('id', id).select().single();
+  if (error) throw error;
+  return result;
+}
+
+export async function deleteStockCategorie(id: string) {
+  const { error } = await supabase.from('stock_categories').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ================================================

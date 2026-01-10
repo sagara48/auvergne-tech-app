@@ -1,25 +1,526 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Package, Search, AlertTriangle, TrendingDown, TrendingUp, Plus, Minus, ArrowLeftRight, Check, X, Car, Warehouse, ShoppingCart } from 'lucide-react';
+import { 
+  Package, Search, AlertTriangle, TrendingDown, TrendingUp, Plus, Minus, 
+  ArrowLeftRight, Check, X, Warehouse, ShoppingCart, History, Eye, Edit, 
+  Trash2, Tag, Calendar
+} from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
-import { getStockArticles, createStockMouvement, getStockGlobal, getTransferts, validerTransfert } from '@/services/api';
+import { 
+  getStockArticles, createStockMouvement, getStockGlobal, getTransferts, validerTransfert, 
+  getStockMouvementsFiltered, getStockMouvementsByArticle, createStockArticle, updateStockArticle,
+  deleteStockArticle, getStockCategories, createStockCategorie, updateStockCategorie, deleteStockCategorie
+} from '@/services/api';
 import { STATUT_TRANSFERT_CONFIG } from '@/types';
 import { AddToPanierModal } from '@/components/Panier';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
+// Obtenir les dates du mois en cours
+const getDefaultDates = () => {
+  const now = new Date();
+  return {
+    debut: format(startOfMonth(now), 'yyyy-MM-dd'),
+    fin: format(endOfMonth(now), 'yyyy-MM-dd'),
+  };
+};
+
+// ==================== MODAL DÉTAIL PIÈCE ====================
+function ArticleDetailModal({ article, onClose, onEdit }: { article: any; onClose: () => void; onEdit: () => void }) {
+  const queryClient = useQueryClient();
+  const [dateDebut, setDateDebut] = useState(getDefaultDates().debut);
+  const [dateFin, setDateFin] = useState(getDefaultDates().fin);
+  const [ajustementType, setAjustementType] = useState<'entree' | 'sortie'>('entree');
+  const [ajustementQte, setAjustementQte] = useState(1);
+  const [ajustementMotif, setAjustementMotif] = useState('');
+
+  const { data: mouvements, isLoading } = useQuery({
+    queryKey: ['stock-mouvements-article', article.id, dateDebut, dateFin],
+    queryFn: () => getStockMouvementsByArticle(article.id, dateDebut, dateFin),
+  });
+
+  const mouvementMutation = useMutation({
+    mutationFn: () => createStockMouvement(article.id, ajustementType, ajustementQte, ajustementMotif || `Ajustement ${ajustementType}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-mouvements-article'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-mouvements-filtered'] });
+      toast.success('Stock ajusté');
+      setAjustementQte(1);
+      setAjustementMotif('');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteStockArticle(article.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast.success('Article supprimé');
+      onClose();
+    },
+    onError: () => toast.error('Impossible de supprimer (mouvements existants)'),
+  });
+
+  const getNiveauAlerte = () => {
+    if (article.quantite_stock <= article.seuil_critique) return { label: 'Critique', color: 'red' };
+    if (article.quantite_stock <= article.seuil_alerte) return { label: 'Alerte', color: 'amber' };
+    return { label: 'OK', color: 'green' };
+  };
+
+  const niveau = getNiveauAlerte();
+
+  // Stats mouvements
+  const totalEntrees = mouvements?.filter((m: any) => m.type_mouvement === 'entree').reduce((acc: number, m: any) => acc + m.quantite, 0) || 0;
+  const totalSorties = mouvements?.filter((m: any) => m.type_mouvement === 'sortie').reduce((acc: number, m: any) => acc + m.quantite, 0) || 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Card className="w-[750px] max-h-[90vh] overflow-y-auto">
+        <CardBody>
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-mono text-blue-400">{article.reference}</span>
+                <Badge variant={niveau.color as any}>{niveau.label}</Badge>
+              </div>
+              <h2 className="text-xl font-bold text-[var(--text-primary)]">{article.designation}</h2>
+              {article.categorie && (
+                <span className="text-sm text-[var(--text-tertiary)]">
+                  <Tag className="w-3 h-3 inline mr-1" />{article.categorie.nom}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={onEdit} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg" title="Modifier">
+                <Edit className="w-5 h-5 text-[var(--text-tertiary)]" />
+              </button>
+              <button 
+                onClick={() => {
+                  if (confirm('Supprimer cet article ?')) deleteMutation.mutate();
+                }} 
+                className="p-2 hover:bg-red-500/20 rounded-lg" 
+                title="Supprimer"
+              >
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </button>
+              <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                <X className="w-5 h-5 text-[var(--text-tertiary)]" />
+              </button>
+            </div>
+          </div>
+
+          {/* Infos principales */}
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl text-center">
+              <div className="text-2xl font-extrabold text-[var(--text-primary)]">{article.quantite_stock}</div>
+              <div className="text-xs text-[var(--text-tertiary)]">Stock actuel</div>
+            </div>
+            <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl text-center">
+              <div className="text-2xl font-extrabold text-amber-400">{article.seuil_alerte}</div>
+              <div className="text-xs text-[var(--text-tertiary)]">Seuil alerte</div>
+            </div>
+            <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl text-center">
+              <div className="text-2xl font-extrabold text-red-400">{article.seuil_critique}</div>
+              <div className="text-xs text-[var(--text-tertiary)]">Seuil critique</div>
+            </div>
+            <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl text-center">
+              <div className="text-xs text-[var(--text-tertiary)] mb-1">Emplacement</div>
+              <div className="text-sm font-medium text-[var(--text-primary)]">{article.emplacement || '-'}</div>
+            </div>
+          </div>
+
+          {/* Ajustement stock */}
+          <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl mb-6">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" /> Ajuster le stock
+            </h3>
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => setAjustementType('entree')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  ajustementType === 'entree'
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4 inline mr-2" />Entrée
+              </button>
+              <button
+                onClick={() => setAjustementType('sortie')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  ajustementType === 'sortie'
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                }`}
+              >
+                <TrendingDown className="w-4 h-4 inline mr-2" />Sortie
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min="1"
+                value={ajustementQte}
+                onChange={e => setAjustementQte(parseInt(e.target.value) || 1)}
+                className="w-24"
+                placeholder="Qté"
+              />
+              <Input
+                value={ajustementMotif}
+                onChange={e => setAjustementMotif(e.target.value)}
+                placeholder="Motif (optionnel)"
+                className="flex-1"
+              />
+              <Button 
+                variant="primary" 
+                onClick={() => mouvementMutation.mutate()}
+                disabled={mouvementMutation.isPending || ajustementQte < 1}
+              >
+                Appliquer
+              </Button>
+            </div>
+          </div>
+
+          {/* Historique des mouvements */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                <History className="w-4 h-4" /> Historique des mouvements
+              </h3>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dateDebut}
+                  onChange={e => setDateDebut(e.target.value)}
+                  className="px-2 py-1 text-xs bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)]"
+                />
+                <span className="text-[var(--text-muted)]">→</span>
+                <input
+                  type="date"
+                  value={dateFin}
+                  onChange={e => setDateFin(e.target.value)}
+                  className="px-2 py-1 text-xs bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)]"
+                />
+              </div>
+            </div>
+
+            {/* Résumé période */}
+            <div className="flex gap-4 mb-3">
+              <div className="flex items-center gap-2 text-sm">
+                <TrendingUp className="w-4 h-4 text-green-400" />
+                <span className="text-[var(--text-tertiary)]">Entrées:</span>
+                <span className="font-bold text-green-400">+{totalEntrees}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <TrendingDown className="w-4 h-4 text-red-400" />
+                <span className="text-[var(--text-tertiary)]">Sorties:</span>
+                <span className="font-bold text-red-400">-{totalSorties}</span>
+              </div>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto rounded-lg border border-[var(--border-primary)]">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--bg-tertiary)] sticky top-0">
+                  <tr>
+                    <th className="text-left py-2 px-3 text-xs text-[var(--text-tertiary)]">Date</th>
+                    <th className="text-left py-2 px-3 text-xs text-[var(--text-tertiary)]">Type</th>
+                    <th className="text-right py-2 px-3 text-xs text-[var(--text-tertiary)]">Qté</th>
+                    <th className="text-right py-2 px-3 text-xs text-[var(--text-tertiary)]">Stock</th>
+                    <th className="text-left py-2 px-3 text-xs text-[var(--text-tertiary)]">Motif</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-primary)]">
+                  {isLoading ? (
+                    <tr><td colSpan={5} className="py-4 text-center text-[var(--text-muted)]">Chargement...</td></tr>
+                  ) : mouvements?.length === 0 ? (
+                    <tr><td colSpan={5} className="py-4 text-center text-[var(--text-muted)]">Aucun mouvement sur cette période</td></tr>
+                  ) : mouvements?.map((m: any) => (
+                    <tr key={m.id} className="hover:bg-[var(--bg-tertiary)]/30">
+                      <td className="py-2 px-3 text-[var(--text-tertiary)]">
+                        {format(new Date(m.created_at), 'dd/MM/yy HH:mm', { locale: fr })}
+                      </td>
+                      <td className="py-2 px-3">
+                        <Badge variant={m.type_mouvement === 'entree' ? 'green' : 'red'} className="text-xs">
+                          {m.type_mouvement === 'entree' ? 'Entrée' : 'Sortie'}
+                        </Badge>
+                      </td>
+                      <td className={`py-2 px-3 text-right font-mono font-bold ${m.type_mouvement === 'entree' ? 'text-green-400' : 'text-red-400'}`}>
+                        {m.type_mouvement === 'entree' ? '+' : '-'}{m.quantite}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono text-[var(--text-primary)]">{m.quantite_apres}</td>
+                      <td className="py-2 px-3 text-[var(--text-tertiary)] truncate max-w-[150px]" title={m.motif}>{m.motif || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4 mt-4 border-t border-[var(--border-primary)]">
+            <Button variant="secondary" className="flex-1" onClick={onClose}>Fermer</Button>
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+// ==================== MODAL CRÉATION/MODIFICATION PIÈCE ====================
+function ArticleFormModal({ article, categories, onClose, onSave }: { 
+  article?: any; 
+  categories: any[];
+  onClose: () => void; 
+  onSave: (data: any) => void;
+}) {
+  const [form, setForm] = useState({
+    reference: article?.reference || '',
+    designation: article?.designation || '',
+    categorie_id: article?.categorie_id || '',
+    quantite_stock: article?.quantite_stock ?? 0,
+    seuil_alerte: article?.seuil_alerte ?? 5,
+    seuil_critique: article?.seuil_critique ?? 2,
+    emplacement: article?.emplacement || '',
+    fournisseur: article?.fournisseur || '',
+  });
+
+  const handleSubmit = () => {
+    if (!form.reference || !form.designation) {
+      toast.error('Référence et désignation requises');
+      return;
+    }
+    onSave({
+      ...form,
+      quantite_stock: parseInt(form.quantite_stock as any) || 0,
+      seuil_alerte: parseInt(form.seuil_alerte as any) || 5,
+      seuil_critique: parseInt(form.seuil_critique as any) || 2,
+      categorie_id: form.categorie_id || null,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Card className="w-[500px] max-h-[90vh] overflow-y-auto">
+        <CardBody>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-[var(--text-primary)]">
+              {article ? 'Modifier l\'article' : 'Nouvel article'}
+            </h2>
+            <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+              <X className="w-5 h-5 text-[var(--text-tertiary)]" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Référence *</label>
+                <Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Catégorie</label>
+                <Select value={form.categorie_id} onChange={e => setForm({ ...form, categorie_id: e.target.value })}>
+                  <option value="">Sans catégorie</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Désignation *</label>
+              <Input value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Stock initial</label>
+                <Input type="number" min="0" value={form.quantite_stock} onChange={e => setForm({ ...form, quantite_stock: e.target.value as any })} />
+              </div>
+              <div>
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Seuil alerte</label>
+                <Input type="number" min="0" value={form.seuil_alerte} onChange={e => setForm({ ...form, seuil_alerte: e.target.value as any })} />
+              </div>
+              <div>
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Seuil critique</label>
+                <Input type="number" min="0" value={form.seuil_critique} onChange={e => setForm({ ...form, seuil_critique: e.target.value as any })} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Emplacement</label>
+                <Input value={form.emplacement} onChange={e => setForm({ ...form, emplacement: e.target.value })} placeholder="Ex: Étagère A3" />
+              </div>
+              <div>
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Fournisseur</label>
+                <Input value={form.fournisseur} onChange={e => setForm({ ...form, fournisseur: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-[var(--border-primary)]">
+              <Button variant="secondary" className="flex-1" onClick={onClose}>Annuler</Button>
+              <Button variant="primary" className="flex-1" onClick={handleSubmit}>
+                {article ? 'Enregistrer' : 'Créer'}
+              </Button>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+// ==================== MODAL GESTION CATÉGORIES ====================
+function CategoriesModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [newCategorie, setNewCategorie] = useState({ nom: '', description: '' });
+  const [editForm, setEditForm] = useState({ nom: '', description: '' });
+
+  const { data: categories } = useQuery({ queryKey: ['stock-categories'], queryFn: getStockCategories });
+
+  const createMutation = useMutation({
+    mutationFn: () => createStockCategorie(newCategorie),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-categories'] });
+      setNewCategorie({ nom: '', description: '' });
+      toast.success('Catégorie créée');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (id: string) => updateStockCategorie(id, editForm),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-categories'] });
+      setEditingId(null);
+      toast.success('Catégorie modifiée');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteStockCategorie,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-categories'] });
+      toast.success('Catégorie supprimée');
+    },
+    onError: () => toast.error('Impossible de supprimer (articles liés)'),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Card className="w-[500px] max-h-[90vh] overflow-y-auto">
+        <CardBody>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+              <Tag className="w-5 h-5" /> Gérer les catégories
+            </h2>
+            <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+              <X className="w-5 h-5 text-[var(--text-tertiary)]" />
+            </button>
+          </div>
+
+          {/* Formulaire ajout */}
+          <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl mb-4">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Nouvelle catégorie</h3>
+            <div className="flex gap-2">
+              <Input
+                value={newCategorie.nom}
+                onChange={e => setNewCategorie({ ...newCategorie, nom: e.target.value })}
+                placeholder="Nom de la catégorie"
+                className="flex-1"
+              />
+              <Button variant="primary" onClick={() => createMutation.mutate()} disabled={!newCategorie.nom.trim()}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Liste des catégories */}
+          <div className="space-y-2">
+            {categories?.map((cat: any) => (
+              <div key={cat.id} className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                {editingId === cat.id ? (
+                  <div className="flex gap-2">
+                    <Input
+                      value={editForm.nom}
+                      onChange={e => setEditForm({ ...editForm, nom: e.target.value })}
+                      className="flex-1"
+                    />
+                    <button onClick={() => updateMutation.mutate(cat.id)} className="p-2 hover:bg-green-500/20 rounded-lg text-green-400">
+                      <Check className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setEditingId(null)} className="p-2 hover:bg-[var(--bg-hover)] rounded-lg text-[var(--text-muted)]">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {cat.couleur && <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.couleur }} />}
+                      <span className="text-[var(--text-primary)]">{cat.nom}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => { setEditingId(cat.id); setEditForm({ nom: cat.nom, description: cat.description || '' }); }}
+                        className="p-1.5 hover:bg-[var(--bg-hover)] rounded-lg text-[var(--text-muted)]"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => { if (confirm('Supprimer cette catégorie ?')) deleteMutation.mutate(cat.id); }}
+                        className="p-1.5 hover:bg-red-500/20 rounded-lg text-red-400"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {(!categories || categories.length === 0) && (
+              <p className="text-center text-[var(--text-muted)] py-4">Aucune catégorie</p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-4 mt-4 border-t border-[var(--border-primary)]">
+            <Button variant="secondary" className="flex-1" onClick={onClose}>Fermer</Button>
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+// ==================== PAGE PRINCIPALE STOCK ====================
 export function StockPage() {
   const [search, setSearch] = useState('');
   const [filterAlerte, setFilterAlerte] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'depot' | 'global' | 'transferts'>('depot');
+  const [filterCategorie, setFilterCategorie] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<'depot' | 'global' | 'mouvements' | 'transferts'>('depot');
   const [filterTransfert, setFilterTransfert] = useState('en_attente');
   const [panierArticle, setPanierArticle] = useState<any>(null);
+  
+  // Modals
+  const [detailArticle, setDetailArticle] = useState<any>(null);
+  const [editArticle, setEditArticle] = useState<any>(null);
+  const [showNewArticle, setShowNewArticle] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
+  
+  // Filtres dates mouvements globaux
+  const [mouvDateDebut, setMouvDateDebut] = useState(getDefaultDates().debut);
+  const [mouvDateFin, setMouvDateFin] = useState(getDefaultDates().fin);
+  
   const queryClient = useQueryClient();
 
   const { data: articles } = useQuery({ queryKey: ['stock'], queryFn: getStockArticles });
   const { data: stockGlobal } = useQuery({ queryKey: ['stock-global'], queryFn: getStockGlobal });
   const { data: transferts } = useQuery({ queryKey: ['transferts', filterTransfert], queryFn: () => getTransferts(filterTransfert) });
+  const { data: mouvements } = useQuery({ 
+    queryKey: ['stock-mouvements-filtered', mouvDateDebut, mouvDateFin], 
+    queryFn: () => getStockMouvementsFiltered(mouvDateDebut, mouvDateFin) 
+  });
+  const { data: categories } = useQuery({ queryKey: ['stock-categories'], queryFn: getStockCategories });
 
   const mouvementMutation = useMutation({
     mutationFn: ({ articleId, type, quantite }: { articleId: string; type: string; quantite: number }) =>
@@ -27,19 +528,37 @@ export function StockPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
       queryClient.invalidateQueries({ queryKey: ['stock-global'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-mouvements-filtered'] });
       toast.success('Stock mis à jour');
     },
   });
 
   const validerMutation = useMutation({
     mutationFn: ({ id, approuve }: { id: string; approuve: boolean }) => 
-      validerTransfert(id, '44444444-4444-4444-4444-444444444444', approuve), // TODO: user courant
+      validerTransfert(id, '44444444-4444-4444-4444-444444444444', approuve),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transferts'] });
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-global'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-vehicule'] });
       toast.success('Transfert traité');
+    },
+  });
+
+  const createArticleMutation = useMutation({
+    mutationFn: createStockArticle,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      setShowNewArticle(false);
+      toast.success('Article créé');
+    },
+  });
+
+  const updateArticleMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => updateStockArticle(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      setEditArticle(null);
+      setDetailArticle(null);
+      toast.success('Article modifié');
     },
   });
 
@@ -50,17 +569,24 @@ export function StockPage() {
   };
 
   const filtered = articles?.filter(a => {
-    const matchSearch = a.reference.toLowerCase().includes(search.toLowerCase()) || a.designation.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = a.reference?.toLowerCase().includes(search.toLowerCase()) || a.designation?.toLowerCase().includes(search.toLowerCase());
     const niveau = getNiveauAlerte(a);
     const matchAlerte = filterAlerte === 'all' || (filterAlerte === 'alerte' && niveau !== 'ok') || (filterAlerte === 'critique' && niveau === 'critique');
-    return matchSearch && matchAlerte;
+    const matchCategorie = filterCategorie === 'all' || a.categorie_id === filterCategorie;
+    return matchSearch && matchAlerte && matchCategorie;
   }) || [];
 
   const stats = {
     total: articles?.length || 0,
     critique: articles?.filter(a => getNiveauAlerte(a) === 'critique').length || 0,
     alerte: articles?.filter(a => getNiveauAlerte(a) === 'alerte').length || 0,
-    transferts_attente: transferts?.filter(t => t.statut === 'en_attente').length || 0,
+    transferts_attente: transferts?.filter((t: any) => t.statut === 'en_attente').length || 0,
+  };
+
+  // Stats mouvements période
+  const mouvStats = {
+    entrees: mouvements?.filter((m: any) => m.type_mouvement === 'entree').reduce((acc: number, m: any) => acc + m.quantite, 0) || 0,
+    sorties: mouvements?.filter((m: any) => m.type_mouvement === 'sortie').reduce((acc: number, m: any) => acc + m.quantite, 0) || 0,
   };
 
   return (
@@ -76,25 +602,25 @@ export function StockPage() {
         <Card>
           <CardBody className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center"><AlertTriangle className="w-6 h-6 text-red-400" /></div>
-            <div><div className="text-2xl font-extrabold text-red-400">{stats.critique}</div><div className="text-xs text-[var(--text-tertiary)]">Critique</div></div>
+            <div><div className="text-2xl font-extrabold text-red-400">{stats.critique}</div><div className="text-xs text-[var(--text-tertiary)]">Critiques</div></div>
           </CardBody>
         </Card>
         <Card>
           <CardBody className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center"><TrendingDown className="w-6 h-6 text-amber-400" /></div>
+            <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center"><AlertTriangle className="w-6 h-6 text-amber-400" /></div>
             <div><div className="text-2xl font-extrabold text-amber-400">{stats.alerte}</div><div className="text-xs text-[var(--text-tertiary)]">En alerte</div></div>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center"><TrendingUp className="w-6 h-6 text-green-400" /></div>
-            <div><div className="text-2xl font-extrabold text-green-400">{stats.total - stats.critique - stats.alerte}</div><div className="text-xs text-[var(--text-tertiary)]">Stock OK</div></div>
           </CardBody>
         </Card>
         <Card>
           <CardBody className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center"><ArrowLeftRight className="w-6 h-6 text-purple-400" /></div>
             <div><div className="text-2xl font-extrabold text-purple-400">{stats.transferts_attente}</div><div className="text-xs text-[var(--text-tertiary)]">Transferts</div></div>
+          </CardBody>
+        </Card>
+        <Card className="cursor-pointer hover:bg-[var(--bg-tertiary)]" onClick={() => setShowCategories(true)}>
+          <CardBody className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center"><Tag className="w-6 h-6 text-green-400" /></div>
+            <div><div className="text-2xl font-extrabold text-green-400">{categories?.length || 0}</div><div className="text-xs text-[var(--text-tertiary)]">Catégories</div></div>
           </CardBody>
         </Card>
       </div>
@@ -104,6 +630,7 @@ export function StockPage() {
         {[
           { id: 'depot', label: 'Stock dépôt', icon: Warehouse },
           { id: 'global', label: 'Vue globale', icon: Package },
+          { id: 'mouvements', label: 'Mouvements', icon: History },
           { id: 'transferts', label: 'Transferts', icon: ArrowLeftRight },
         ].map(tab => (
           <button
@@ -133,64 +660,81 @@ export function StockPage() {
               <Select value={filterAlerte} onChange={e => setFilterAlerte(e.target.value)} className="w-40">
                 <option value="all">Tous</option>
                 <option value="alerte">En alerte</option>
-                <option value="critique">Critique</option>
+                <option value="critique">Critiques</option>
+              </Select>
+              <Select value={filterCategorie} onChange={e => setFilterCategorie(e.target.value)} className="w-48">
+                <option value="all">Toutes catégories</option>
+                {categories?.map((c: any) => <option key={c.id} value={c.id}>{c.nom}</option>)}
               </Select>
             </div>
-            <Button variant="primary"><Plus className="w-4 h-4" /> Nouvel article</Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => setShowCategories(true)}>
+                <Tag className="w-4 h-4" /> Catégories
+              </Button>
+              <Button variant="primary" onClick={() => setShowNewArticle(true)}>
+                <Plus className="w-4 h-4" /> Nouvel article
+              </Button>
+            </div>
           </div>
 
           <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-[var(--border-primary)]">
-                    <th className="text-left p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Référence</th>
-                    <th className="text-left p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Désignation</th>
-                    <th className="text-left p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Marque</th>
-                    <th className="text-center p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Dépôt</th>
-                    <th className="text-center p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Seuils</th>
-                    <th className="text-right p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Prix</th>
-                    <th className="text-center p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(article => {
-                    const niveau = getNiveauAlerte(article);
-                    return (
-                      <tr key={article.id} className="border-b border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]/30">
-                        <td className="p-4"><span className="font-mono text-sm font-semibold text-blue-400">{article.reference}</span></td>
-                        <td className="p-4">
-                          <div className="text-sm text-[var(--text-primary)]">{article.designation}</div>
-                          {article.categorie && <div className="text-xs text-[var(--text-muted)]">{article.categorie.nom}</div>}
-                        </td>
-                        <td className="p-4 text-sm text-[var(--text-secondary)]">{article.marque || '-'}</td>
-                        <td className="p-4 text-center">
-                          <span className={`text-lg font-bold ${niveau === 'critique' ? 'text-red-400' : niveau === 'alerte' ? 'text-amber-400' : 'text-green-400'}`}>
-                            {article.quantite_stock}
-                          </span>
-                        </td>
-                        <td className="p-4 text-center text-xs text-[var(--text-tertiary)]">
-                          <span className="text-amber-400">{article.seuil_alerte}</span> / <span className="text-red-400">{article.seuil_critique}</span>
-                        </td>
-                        <td className="p-4 text-right text-sm text-[var(--text-primary)] font-mono">{article.prix_unitaire ? `${article.prix_unitaire.toFixed(2)} €` : '-'}</td>
-                        <td className="p-4">
-                          <div className="flex items-center justify-center gap-2">
-                            <button 
-                              onClick={() => setPanierArticle(article)} 
-                              className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center hover:bg-cyan-500/30"
-                              title="Ajouter au panier"
-                            >
-                              <ShoppingCart className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => mouvementMutation.mutate({ articleId: article.id, type: 'sortie', quantite: 1 })} disabled={article.quantite_stock <= 0} className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/30 disabled:opacity-50"><Minus className="w-4 h-4" /></button>
-                            <button onClick={() => mouvementMutation.mutate({ articleId: article.id, type: 'entree', quantite: 1 })} className="w-8 h-8 rounded-lg bg-green-500/20 text-green-400 flex items-center justify-center hover:bg-green-500/30"><Plus className="w-4 h-4" /></button>
+            <div className="divide-y divide-[var(--border-primary)]">
+              {filtered.map(article => {
+                const niveau = getNiveauAlerte(article);
+                return (
+                  <div key={article.id} className="p-4 hover:bg-[var(--bg-tertiary)]/30 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4 cursor-pointer flex-1" onClick={() => setDetailArticle(article)}>
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                          niveau === 'critique' ? 'bg-red-500/20' : niveau === 'alerte' ? 'bg-amber-500/20' : 'bg-blue-500/20'
+                        }`}>
+                          <Package className={`w-6 h-6 ${
+                            niveau === 'critique' ? 'text-red-400' : niveau === 'alerte' ? 'text-amber-400' : 'text-blue-400'
+                          }`} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm text-blue-400">{article.reference}</span>
+                            {article.categorie && (
+                              <Badge variant="gray" className="text-xs">{article.categorie.nom}</Badge>
+                            )}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <div className="text-[var(--text-primary)] font-medium">{article.designation}</div>
+                          {article.emplacement && (
+                            <div className="text-xs text-[var(--text-muted)]">📍 {article.emplacement}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className={`text-2xl font-extrabold ${
+                            niveau === 'critique' ? 'text-red-400' : niveau === 'alerte' ? 'text-amber-400' : 'text-[var(--text-primary)]'
+                          }`}>{article.quantite_stock}</div>
+                          <div className="text-xs text-[var(--text-muted)]">min: {article.seuil_alerte}</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => mouvementMutation.mutate({ articleId: article.id, type: 'sortie', quantite: 1 })} disabled={article.quantite_stock <= 0} className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/30 disabled:opacity-50"><Minus className="w-4 h-4" /></button>
+                          <button onClick={() => mouvementMutation.mutate({ articleId: article.id, type: 'entree', quantite: 1 })} className="w-8 h-8 rounded-lg bg-green-500/20 text-green-400 flex items-center justify-center hover:bg-green-500/30"><Plus className="w-4 h-4" /></button>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setDetailArticle(article)} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-muted)]" title="Détails">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setEditArticle(article)} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-muted)]" title="Modifier">
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setPanierArticle(article)} className="p-2 hover:bg-cyan-500/20 rounded-lg text-cyan-400" title="Ajouter au panier">
+                            <ShoppingCart className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {filtered.length === 0 && (
+                <div className="p-8 text-center text-[var(--text-muted)]">Aucun article trouvé</div>
+              )}
             </div>
           </Card>
         </>
@@ -203,28 +747,117 @@ export function StockPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[var(--border-primary)]">
-                  <th className="text-left p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Référence</th>
-                  <th className="text-left p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Désignation</th>
-                  <th className="text-center p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase"><Warehouse className="w-4 h-4 inline" /> Dépôt</th>
-                  <th className="text-center p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase"><Car className="w-4 h-4 inline" /> Véhicules</th>
-                  <th className="text-center p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Total</th>
-                  <th className="text-right p-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Valeur</th>
+                  <th className="text-left py-4 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Article</th>
+                  <th className="text-right py-4 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Dépôt</th>
+                  <th className="text-right py-4 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Véhicules</th>
+                  <th className="text-right py-4 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Total</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[var(--border-primary)]">
                 {stockGlobal?.map((item: any) => (
-                  <tr key={item.article_id} className="border-b border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]/30">
-                    <td className="p-4"><span className="font-mono text-sm font-semibold text-blue-400">{item.reference}</span></td>
-                    <td className="p-4 text-sm text-[var(--text-primary)]">{item.designation}</td>
-                    <td className="p-4 text-center"><Badge variant="blue">{item.stock_depot}</Badge></td>
-                    <td className="p-4 text-center"><Badge variant="green">{item.stock_vehicules}</Badge></td>
-                    <td className="p-4 text-center text-lg font-bold text-[var(--text-primary)]">{item.stock_total}</td>
-                    <td className="p-4 text-right text-sm text-[var(--text-primary)] font-mono">{item.prix_unitaire ? `${(item.stock_total * item.prix_unitaire).toFixed(2)} €` : '-'}</td>
+                  <tr key={item.article_id} className="hover:bg-[var(--bg-tertiary)]/30">
+                    <td className="py-3 px-4">
+                      <span className="font-mono text-sm text-blue-400">{item.reference}</span>
+                      <div className="text-sm text-[var(--text-primary)]">{item.designation}</div>
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-[var(--text-primary)]">{item.stock_depot}</td>
+                    <td className="py-3 px-4 text-right font-mono text-[var(--text-primary)]">{item.stock_vehicules}</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-[var(--text-primary)]">{item.stock_total}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        </Card>
+      )}
+
+      {/* Mouvements */}
+      {activeTab === 'mouvements' && (
+        <Card>
+          <CardBody>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Historique global des mouvements</h3>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <TrendingUp className="w-4 h-4 text-green-400" />
+                  <span className="font-bold text-green-400">+{mouvStats.entrees}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <TrendingDown className="w-4 h-4 text-red-400" />
+                  <span className="font-bold text-red-400">-{mouvStats.sorties}</span>
+                </div>
+                <div className="h-4 w-px bg-[var(--border-primary)]" />
+                <Calendar className="w-4 h-4 text-[var(--text-muted)]" />
+                <input
+                  type="date"
+                  value={mouvDateDebut}
+                  onChange={e => setMouvDateDebut(e.target.value)}
+                  className="px-3 py-1.5 text-sm bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)]"
+                />
+                <span className="text-[var(--text-muted)]">→</span>
+                <input
+                  type="date"
+                  value={mouvDateFin}
+                  onChange={e => setMouvDateFin(e.target.value)}
+                  className="px-3 py-1.5 text-sm bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)]"
+                />
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-[var(--border-primary)]">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Date</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Article</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Type</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Qté</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Avant</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Après</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-tertiary)] uppercase">Motif</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-primary)]">
+                  {mouvements?.map((m: any) => (
+                    <tr key={m.id} className="hover:bg-[var(--bg-tertiary)]/30">
+                      <td className="py-3 px-4 text-sm text-[var(--text-tertiary)]">
+                        {format(new Date(m.created_at), 'dd/MM/yyyy HH:mm', { locale: fr })}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-sm font-medium text-[var(--text-primary)]">{m.article?.designation || '-'}</div>
+                        {m.article?.reference && <div className="text-xs text-[var(--text-muted)]">{m.article.reference}</div>}
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge variant={m.type_mouvement === 'entree' ? 'green' : 'red'}>
+                          {m.type_mouvement === 'entree' ? (
+                            <><TrendingUp className="w-3 h-3 mr-1" /> Entrée</>
+                          ) : (
+                            <><TrendingDown className="w-3 h-3 mr-1" /> Sortie</>
+                          )}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span className={`font-mono font-bold ${m.type_mouvement === 'entree' ? 'text-green-400' : 'text-red-400'}`}>
+                          {m.type_mouvement === 'entree' ? '+' : '-'}{m.quantite}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right text-sm text-[var(--text-muted)] font-mono">{m.quantite_avant ?? '-'}</td>
+                      <td className="py-3 px-4 text-right text-sm text-[var(--text-primary)] font-mono font-bold">{m.quantite_apres ?? '-'}</td>
+                      <td className="py-3 px-4 text-sm text-[var(--text-tertiary)] max-w-xs truncate" title={m.motif}>
+                        {m.motif || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                  {(!mouvements || mouvements.length === 0) && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-[var(--text-muted)]">
+                        Aucun mouvement sur cette période
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardBody>
         </Card>
       )}
 
@@ -252,46 +885,42 @@ export function StockPage() {
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-mono text-sm font-bold text-purple-400">{t.code}</span>
-                          <Badge variant={STATUT_TRANSFERT_CONFIG[t.statut as keyof typeof STATUT_TRANSFERT_CONFIG].color}>
-                            {STATUT_TRANSFERT_CONFIG[t.statut as keyof typeof STATUT_TRANSFERT_CONFIG].label}
+                          <Badge variant={STATUT_TRANSFERT_CONFIG[t.statut as keyof typeof STATUT_TRANSFERT_CONFIG]?.color as any}>
+                            {STATUT_TRANSFERT_CONFIG[t.statut as keyof typeof STATUT_TRANSFERT_CONFIG]?.label}
                           </Badge>
                         </div>
-                        <div className="text-sm text-[var(--text-primary)] mb-1">
-                          <span className="font-semibold">{t.article?.reference}</span> - {t.article?.designation}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-                          <span className={t.source_type === 'depot' ? 'text-blue-400' : 'text-green-400'}>
-                            {t.source_type === 'depot' ? 'Dépôt' : t.source_vehicule?.immatriculation}
-                          </span>
-                          <span>→</span>
-                          <span className={t.destination_type === 'depot' ? 'text-blue-400' : 'text-green-400'}>
-                            {t.destination_type === 'depot' ? 'Dépôt' : t.destination_vehicule?.immatriculation}
-                          </span>
-                          <span className="mx-2">•</span>
-                          <span>Qté: <strong>{t.quantite}</strong></span>
-                          <span className="mx-2">•</span>
-                          <span>Par: {t.demandeur?.prenom} {t.demandeur?.nom}</span>
-                          <span className="mx-2">•</span>
-                          <span>{format(new Date(t.date_demande), 'd MMM HH:mm', { locale: fr })}</span>
+                        <div className="text-sm text-[var(--text-primary)]">{t.article?.designation}</div>
+                        <div className="text-xs text-[var(--text-tertiary)]">
+                          {t.source_vehicule?.immatriculation || 'Dépôt'} → {t.destination_vehicule?.immatriculation || 'Dépôt'}
                         </div>
                       </div>
                     </div>
-
-                    {t.statut === 'en_attente' && (
-                      <div className="flex items-center gap-2">
-                        <Button variant="success" size="sm" onClick={() => validerMutation.mutate({ id: t.id, approuve: true })}>
-                          <Check className="w-4 h-4" /> Valider
-                        </Button>
-                        <Button variant="danger" size="sm" onClick={() => validerMutation.mutate({ id: t.id, approuve: false })}>
-                          <X className="w-4 h-4" /> Refuser
-                        </Button>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="text-2xl font-extrabold text-[var(--text-primary)]">{t.quantite}</div>
+                        <div className="text-xs text-[var(--text-muted)]">unités</div>
                       </div>
-                    )}
+                      {t.statut === 'en_attente' && (
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => validerMutation.mutate({ id: t.id, approuve: true })}
+                            className="w-10 h-10 rounded-lg bg-green-500/20 text-green-400 flex items-center justify-center hover:bg-green-500/30"
+                          >
+                            <Check className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={() => validerMutation.mutate({ id: t.id, approuve: false })}
+                            className="w-10 h-10 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/30"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </CardBody>
               </Card>
             ))}
-
             {(!transferts || transferts.length === 0) && (
               <Card><CardBody className="text-center py-8 text-[var(--text-muted)]">Aucun transfert</CardBody></Card>
             )}
@@ -299,17 +928,39 @@ export function StockPage() {
         </>
       )}
 
-      {/* Modal ajout au panier */}
+      {/* Modals */}
       {panierArticle && (
         <AddToPanierModal
-          article={{
-            id: panierArticle.id,
-            code: panierArticle.reference,
-            designation: panierArticle.designation,
-            reference: panierArticle.reference,
-          }}
+          article={panierArticle}
           onClose={() => setPanierArticle(null)}
         />
+      )}
+
+      {detailArticle && (
+        <ArticleDetailModal
+          article={detailArticle}
+          onClose={() => setDetailArticle(null)}
+          onEdit={() => { setEditArticle(detailArticle); setDetailArticle(null); }}
+        />
+      )}
+
+      {(showNewArticle || editArticle) && (
+        <ArticleFormModal
+          article={editArticle}
+          categories={categories || []}
+          onClose={() => { setShowNewArticle(false); setEditArticle(null); }}
+          onSave={(data) => {
+            if (editArticle) {
+              updateArticleMutation.mutate({ id: editArticle.id, data });
+            } else {
+              createArticleMutation.mutate(data);
+            }
+          }}
+        />
+      )}
+
+      {showCategories && (
+        <CategoriesModal onClose={() => setShowCategories(false)} />
       )}
     </div>
   );
