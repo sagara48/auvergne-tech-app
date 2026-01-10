@@ -55,10 +55,9 @@ export async function updateAscenseur(id: string, data: Partial<Ascenseur>): Pro
 // ================================================
 export async function getTravaux(includeArchived = false): Promise<Travaux[]> {
   try {
-    // Requête simplifiée sans jointure tournee ni filtre archive
     const { data, error } = await supabase
       .from('travaux')
-      .select('*, client:clients(*), technicien:techniciens(*), ascenseur:ascenseurs(*)')
+      .select('*, client:clients(*), technicien:techniciens!travaux_technicien_id_fkey(*), ascenseur:ascenseurs(*)')
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -344,7 +343,7 @@ export async function getTravauxNonPlanifies(): Promise<Travaux[]> {
   const { data: planifies } = await supabase.from('planning_events').select('travaux_id').not('travaux_id', 'is', null);
   const planifiesIds = planifies?.map(p => p.travaux_id).filter(Boolean) || [];
   
-  let query = supabase.from('travaux').select('*, client:clients(*), technicien:techniciens(*)')
+  let query = supabase.from('travaux').select('*, client:clients(*), technicien:techniciens!travaux_technicien_id_fkey(*)')
     .in('statut', ['planifie', 'en_cours']);
   
   if (planifiesIds.length > 0) {
