@@ -238,26 +238,27 @@ def run_cron_sync():
         
         pannes_list = []
         for p in items:
-            pid = safe_int(p.get('IDWPANNE'))
+            # L'ID unique est P0CLEUNIK, pas IDWPANNE
+            pid = safe_int(p.get('P0CLEUNIK'))
             if pid:
                 pannes_list.append({
                     'id_panne': pid,
                     'id_wsoucont': safe_int(p.get('IDWSOUCONT')),
                     'code_appareil': safe_str(p.get('ASCENSEUR'), 50),
-                    'adresse': safe_str(p.get('ADRES'), 200),
+                    'adresse': safe_str(p.get('LOCAL_'), 200),
                     'code_postal': safe_str(p.get('NUM'), 10),
-                    'date_appel': safe_date(p.get('DATEAPP')),
+                    'date_appel': safe_date(p.get('APPEL') or p.get('DATE')),
                     'heure_appel': safe_time(p.get('HEUREAPP')),
                     'date_arrivee': safe_date(p.get('DATEARR')),
                     'heure_arrivee': safe_time(p.get('HEUREARR')),
                     'date_depart': safe_date(p.get('DATEDEP')),
                     'heure_depart': safe_time(p.get('HEUREDEP')),
-                    'motif': safe_str(p.get('MOTIF'), 500),
+                    'motif': safe_str(p.get('PANNES'), 500),
                     'cause': safe_str(p.get('CAUSE'), 500),
                     'travaux': safe_str(p.get('TRAVAUX'), 1000),
                     'depanneur': safe_str(p.get('DEPANNEUR'), 100),
-                    'duree_minutes': safe_int(p.get('DUREE')),
-                    'type_panne': safe_str(p.get('TYPEPANNE'), 100),
+                    'duree_minutes': safe_int(p.get('DUREE') or p.get('NOMBRE')),
+                    'type_panne': safe_str(p.get('ENSEMBLE'), 100),
                     'etat': safe_str(p.get('ETAT'), 50),
                     'demandeur': safe_str(p.get('DEMANDEUR'), 100),
                     'personnes_bloquees': safe_int(p.get('PERSBLOQ')) or 0,

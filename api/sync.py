@@ -526,12 +526,13 @@ def sync_pannes(period_idx):
     
     # Debug: premier item
     first_item = items[0] if items else None
-    first_keys = list(first_item.keys())[:15] if first_item else []
+    first_keys = list(first_item.keys())[:20] if first_item else []
     
     # Préparer les données en batch
     batch = []
     for p in items:
-        id_panne = safe_int(p.get('IDWPANNE'))
+        # L'ID unique est P0CLEUNIK, pas IDWPANNE
+        id_panne = safe_int(p.get('P0CLEUNIK'))
         if not id_panne:
             skipped += 1
             continue
@@ -540,20 +541,20 @@ def sync_pannes(period_idx):
             'id_panne': id_panne,
             'id_wsoucont': safe_int(p.get('IDWSOUCONT')),
             'code_appareil': safe_str(p.get('ASCENSEUR'), 50),
-            'adresse': safe_str(p.get('ADRES'), 200),
+            'adresse': safe_str(p.get('LOCAL_'), 200),  # LOCAL_ au lieu de ADRES
             'code_postal': safe_str(p.get('NUM'), 10),
-            'date_appel': safe_date(p.get('DATEAPP')),
+            'date_appel': safe_date(p.get('APPEL') or p.get('DATE')),  # APPEL ou DATE
             'heure_appel': safe_time(p.get('HEUREAPP')),
             'date_arrivee': safe_date(p.get('DATEARR')),
             'heure_arrivee': safe_time(p.get('HEUREARR')),
             'date_depart': safe_date(p.get('DATEDEP')),
             'heure_depart': safe_time(p.get('HEUREDEP')),
-            'motif': safe_str(p.get('MOTIF'), 500),
+            'motif': safe_str(p.get('PANNES'), 500),  # PANNES au lieu de MOTIF
             'cause': safe_str(p.get('CAUSE'), 500),
             'travaux': safe_str(p.get('TRAVAUX'), 1000),
             'depanneur': safe_str(p.get('DEPANNEUR'), 100),
-            'duree_minutes': safe_int(p.get('DUREE')),
-            'type_panne': safe_str(p.get('TYPEPANNE'), 100),
+            'duree_minutes': safe_int(p.get('DUREE') or p.get('NOMBRE')),
+            'type_panne': safe_str(p.get('ENSEMBLE'), 100),  # ENSEMBLE au lieu de TYPEPANNE
             'etat': safe_str(p.get('ETAT'), 50),
             'demandeur': safe_str(p.get('DEMANDEUR'), 100),
             'personnes_bloquees': safe_int(p.get('PERSBLOQ')) or 0,
@@ -587,13 +588,13 @@ def sync_pannes(period_idx):
         "skipped": skipped,
         "upserted": upserted,
         "debug_keys": first_keys,
-        "debug_first_id": first_item.get('IDWPANNE') if first_item else None,
+        "debug_first_id": first_item.get('P0CLEUNIK') if first_item else None,
         "next": f"?step=3&period={next_period}" if next_period < len(PERIODS) else "?step=4"
     }
     if errors:
         result["errors"] = errors[:5]
     if first_batch:
-        result["debug_sample"] = {k: first_batch[k] for k in ['id_panne', 'code_appareil', 'date_appel'] if k in first_batch}
+        result["debug_sample"] = {k: first_batch[k] for k in ['id_panne', 'code_appareil', 'date_appel', 'motif'] if k in first_batch}
     return result
 
 # ============================================================
