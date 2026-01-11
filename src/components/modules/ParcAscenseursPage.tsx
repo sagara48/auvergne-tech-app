@@ -178,25 +178,30 @@ const getArrets = async () => {
   }
 };
 
-const getPannesRecentes = async (limit = 50, userSecteurs?: number[]) => {
+const getPannesRecentes = async (userSecteurs?: number[]) => {
   try {
-    // Récupérer beaucoup plus de pannes pour avoir assez après filtrage
+    // Récupérer TOUTES les pannes sans limite, triées par date
     const { data: pannes, error } = await supabase
       .from('parc_pannes')
       .select('*')
-      .order('date_appel', { ascending: false })
-      .limit(1000); // Récupérer beaucoup pour avoir assez après filtrage
+      .order('date_appel', { ascending: false });
     
     if (error) {
       console.warn('Table parc_pannes non disponible:', error.message);
       return [];
     }
     
-    if (!pannes || pannes.length === 0) return [];
+    if (!pannes || pannes.length === 0) {
+      console.log('Aucune panne trouvée');
+      return [];
+    }
+    
+    console.log(`Total pannes récupérées: ${pannes.length}`);
     
     // Si pas de filtrage par secteurs (undefined ou tableau vide = tous les secteurs)
     if (!userSecteurs || userSecteurs.length === 0) {
-      return pannes.slice(0, limit);
+      console.log('Pas de filtrage secteurs, retour de toutes les pannes');
+      return pannes;
     }
     
     // Récupérer les ascenseurs pour connaître leurs secteurs
@@ -205,8 +210,8 @@ const getPannesRecentes = async (limit = 50, userSecteurs?: number[]) => {
       .select('id_wsoucont, secteur');
     
     if (!ascenseurs || ascenseurs.length === 0) {
-      // Si pas d'ascenseurs, on ne peut pas filtrer, retourner tout
-      return pannes.slice(0, limit);
+      console.log('Pas d\'ascenseurs pour filtrer');
+      return pannes;
     }
     
     const secteursMap: Record<number, number> = {};
@@ -224,7 +229,8 @@ const getPannesRecentes = async (limit = 50, userSecteurs?: number[]) => {
       return userSecteurs.includes(secteur);
     });
     
-    return filtered.slice(0, limit);
+    console.log(`Pannes après filtrage secteurs: ${filtered.length}`);
+    return filtered;
   } catch (err) {
     console.error('Erreur getPannesRecentes:', err);
     return [];
@@ -1809,10 +1815,10 @@ export function ParcAscenseursPage() {
     refetchInterval: 60000 // Refresh toutes les minutes
   });
   
-  // Pannes récentes filtrées par secteurs (récupérer 200 pour avoir 30 vraies pannes après filtrage cause)
+  // Pannes récentes filtrées par secteurs
   const { data: pannesRecentes } = useQuery({
     queryKey: ['parc-pannes-recentes', userSecteurs],
-    queryFn: () => getPannesRecentes(200, userSecteurs || []),
+    queryFn: () => getPannesRecentes(userSecteurs || []),
     enabled: userSecteurs !== undefined
   });
   
@@ -1859,7 +1865,12 @@ export function ParcAscenseursPage() {
   
   // Enrichir les pannes avec les données des ascenseurs
   const enrichedPannes = useMemo(() => {
-    if (!pannesRecentes || !ascenseurs) return [];
+    if (!pannesRecentes || !ascenseurs) {
+      console.log('enrichedPannes: données manquantes');
+      return [];
+    }
+    
+    console.log(`enrichedPannes: ${pannesRecentes.length} pannes à enrichir`);
     
     const ascenseursMap: Record<number, any> = {};
     ascenseurs.forEach((a: any) => {
@@ -1884,22 +1895,33 @@ export function ParcAscenseursPage() {
   const vraisPannes = useMemo(() => {
     if (!enrichedPannes || enrichedPannes.length === 0) return [];
     
-    return enrichedPannes
-      .filter((p: any) => {
-        const data = p.data_wpanne || {};
-        const cause = data.CAUSE || p.cause;
-        // Convertir en string pour comparaison
-        const causeStr = String(cause);
-        const isVisite = causeStr === '99';
-        const isControle = causeStr === '0' || causeStr === '00';
-        return !isVisite && !isControle;
-      })
-      .sort((a: any, b: any) => {
-        // Trier par date_appel décroissante (plus récent en premier)
-        const dateA = a.date_appel ? new Date(a.date_appel).getTime() : 0;
-        const dateB = b.date_appel ? new Date(b.date_appel).getTime() : 0;
-        return dateB - dateA;
-      });
+    // Filtrer les vraies pannes
+    const filtered = enrichedPannes.filter((p: any) => {
+      const data = p.data_wpanne || {};
+      const cause = data.CAUSE || p.cause;
+      if (cause === undefined || cause === null) return true; // Garder si pas de cause
+      const causeStr = String(cause);
+      const isVisite = causeStr === '99';
+      const isControle = causeStr === '0' || causeStr === '00';
+      return !isVisite && !isControle;
+    });
+    
+    // Trier par date décroissante
+    const sorted = filtered.sort((a: any, b: any) => {
+      // Utiliser date_appel
+      const dateStrA = a.date_appel || '';
+      const dateStrB = b.date_appel || '';
+      // Comparaison string ISO fonctionne pour le tri
+      return dateStrB.localeCompare(dateStrA);
+    });
+    
+    console.log(`vraisPannes: ${sorted.length} pannes après filtrage cause`);
+    if (sorted.length > 0) {
+      console.log('Première panne (plus récente):', sorted[0].date_appel, sorted[0].code_appareil);
+      console.log('Dernière panne (plus ancienne):', sorted[sorted.length-1].date_appel);
+    }
+    
+    return sorted;
   }, [enrichedPannes]);
   
   const { data: secteurs } = useQuery({
@@ -1929,19 +1951,22 @@ export function ParcAscenseursPage() {
   
   // Compter les vraies pannes des 30 derniers jours
   const pannes30j = useMemo(() => {
-    if (!vraisPannes || vraisPannes.length === 0) return 0;
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    if (!vraisPannes || vraisPannes.length === 0) {
+      console.log('pannes30j: vraisPannes vide');
+      return 0;
+    }
     
-    return vraisPannes.filter((p: any) => {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    const count = vraisPannes.filter((p: any) => {
       if (!p.date_appel) return false;
-      try {
-        const dateAppel = new Date(p.date_appel);
-        return dateAppel >= thirtyDaysAgo;
-      } catch {
-        return false;
-      }
+      const dateAppel = new Date(p.date_appel);
+      return dateAppel >= thirtyDaysAgo;
     }).length;
+    
+    console.log(`pannes30j: ${count} pannes sur les 30 derniers jours (depuis ${thirtyDaysAgo.toISOString().split('T')[0]})`);
+    return count;
   }, [vraisPannes]);
   
   const filteredAscenseurs = useMemo(() => {
