@@ -1,26 +1,4 @@
 {
-   "version": 2,
-  "builds": [
-    { "src": "api/*.py", "use": "@vercel/python" }
-  ],
-  "routes": [
-    { "src": "/api/sync", "dest": "/api/sync.py" },
-    { "src": "/api/cron", "dest": "/api/cron.py" },
-    { "src": "/api/status", "dest": "/api/status.py" },
-    { "src": "/api/logs", "dest": "/api/logs.py" }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron",
-      "schedule": "0 * * * *"
-    }
-  ],
-  "env": {
-    "SUPABASE_URL": "@supabase-url",
-    "SUPABASE_KEY": "@supabase-key",
-    "PROGILIFT_CODE": "@progilift-code"
-  },
-
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]

@@ -1,15 +1,23 @@
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useMemo, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   Building2, MapPin, AlertTriangle, Clock, Search, Filter, RefreshCw,
   LayoutGrid, List, Map, ChevronDown, ChevronUp, Phone, Wrench,
   Calendar, User, Activity, TrendingUp, Zap, Timer, AlertCircle,
-  CheckCircle, XCircle, Settings, Eye, FileText, BarChart3
+  CheckCircle, XCircle, Settings, Eye, FileText, BarChart3, Play,
+  Pause, RotateCcw, Database, Cloud, CloudOff, Loader2, History,
+  Server, Wifi, WifiOff, Download, Upload, X
 } from 'lucide-react';
-import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
+import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
 import { format, formatDistanceToNow, parseISO, differenceInHours } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import toast from 'react-hot-toast';
+
+// =============================================
+// CONFIGURATION SYNC API
+// =============================================
+const SYNC_API_URL = import.meta.env.VITE_SYNC_API_URL || '';
 
 // =============================================
 // TYPES
@@ -60,12 +68,23 @@ interface Panne {
 }
 
 interface SyncLog {
+  id: string;
   sync_date: string;
+  sync_type: string;
   status: string;
   equipements_count: number;
   pannes_count: number;
   arrets_count: number;
   duration_seconds: number;
+  error_message?: string;
+}
+
+interface SyncStep {
+  id: string;
+  label: string;
+  endpoint: string;
+  status: 'pending' | 'running' | 'success' | 'error';
+  result?: any;
 }
 
 // =============================================
@@ -138,6 +157,532 @@ const getStats = async () => {
     pannes30j: pannesRes.count || 0
   };
 };
+
+const getSyncLogs = async (limit = 20): Promise<SyncLog[]> => {
+  const { data, error } = await supabase
+    .from('parc_sync_logs')
+    .select('*')
+    .order('sync_date', { ascending: false })
+    .limit(limit);
+  if (error) return [];
+  return data || [];
+};
+
+// =============================================
+// COMPOSANT: MODAL SYNCHRONISATION
+// =============================================
+const SYNC_STEPS_FULL: SyncStep[] = [
+  { id: 'step0', label: 'Types planning', endpoint: '?step=0', status: 'pending' },
+  { id: 'step1', label: 'Arrêts en cours', endpoint: '?step=1', status: 'pending' },
+  ...Array.from({ length: 22 }, (_, i) => ({ 
+    id: `step2-${i}`, 
+    label: `Équipements secteur ${i + 1}/22`, 
+    endpoint: `?step=2&sector=${i}`, 
+    status: 'pending' as const 
+  })),
+  ...Array.from({ length: 22 }, (_, i) => ({ 
+    id: `step2b-${i}`, 
+    label: `Passages secteur ${i + 1}/22`, 
+    endpoint: `?step=2b&sector=${i}`, 
+    status: 'pending' as const 
+  })),
+  ...Array.from({ length: 7 }, (_, i) => ({ 
+    id: `step3-${i}`, 
+    label: `Pannes période ${i + 1}/7`, 
+    endpoint: `?step=3&period=${i}`, 
+    status: 'pending' as const 
+  })),
+  { id: 'step4', label: 'Finalisation', endpoint: '?step=4', status: 'pending' },
+];
+
+function SyncModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'status' | 'sync' | 'logs'>('status');
+  const [syncMode, setSyncMode] = useState<'quick' | 'full'>('quick');
+  const [isRunning, setIsRunning] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [steps, setSteps] = useState<SyncStep[]>([]);
+  const [syncLog, setSyncLog] = useState<string[]>([]);
+  const [apiUrl, setApiUrl] = useState(SYNC_API_URL || localStorage.getItem('sync_api_url') || '');
+  
+  const { data: lastSync, refetch: refetchLastSync } = useQuery({
+    queryKey: ['last-sync'],
+    queryFn: getLastSync,
+    refetchInterval: isRunning ? 5000 : false
+  });
+  
+  const { data: syncLogs, refetch: refetchLogs } = useQuery({
+    queryKey: ['sync-logs'],
+    queryFn: () => getSyncLogs(20)
+  });
+  
+  const { data: stats, refetch: refetchStats } = useQuery({
+    queryKey: ['parc-stats-sync'],
+    queryFn: getStats
+  });
+
+  // Sauvegarder l'URL API
+  useEffect(() => {
+    if (apiUrl) {
+      localStorage.setItem('sync_api_url', apiUrl);
+    }
+  }, [apiUrl]);
+
+  const addLog = (message: string) => {
+    const timestamp = format(new Date(), 'HH:mm:ss');
+    setSyncLog(prev => [...prev, `[${timestamp}] ${message}`]);
+  };
+
+  const callSyncApi = async (endpoint: string): Promise<any> => {
+    if (!apiUrl) {
+      throw new Error('URL API non configurée');
+    }
+    
+    const url = `${apiUrl.replace(/\/$/, '')}/api/sync${endpoint}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    return response.json();
+  };
+
+  const runQuickSync = async () => {
+    setIsRunning(true);
+    setSyncLog([]);
+    addLog('🚀 Démarrage sync rapide...');
+    
+    try {
+      const url = `${apiUrl.replace(/\/$/, '')}/api/cron`;
+      addLog(`📡 Appel ${url}`);
+      
+      const response = await fetch(url);
+      const result = await response.json();
+      
+      if (result.status === 'success' || result.status === 'partial') {
+        addLog(`✅ Sync terminée en ${result.duration}s`);
+        addLog(`   📊 Arrêts: ${result.stats?.arrets || 0}`);
+        addLog(`   📊 Pannes: ${result.stats?.pannes || 0}`);
+        toast.success('Synchronisation rapide terminée');
+      } else {
+        addLog(`❌ Erreur: ${result.message || 'Erreur inconnue'}`);
+        toast.error('Erreur lors de la synchronisation');
+      }
+    } catch (error: any) {
+      addLog(`❌ Erreur: ${error.message}`);
+      toast.error(error.message);
+    } finally {
+      setIsRunning(false);
+      refetchLastSync();
+      refetchStats();
+      refetchLogs();
+      queryClient.invalidateQueries({ queryKey: ['parc-ascenseurs'] });
+      queryClient.invalidateQueries({ queryKey: ['parc-arrets'] });
+    }
+  };
+
+  const runFullSync = async () => {
+    setIsRunning(true);
+    setIsPaused(false);
+    setCurrentStepIndex(0);
+    setSyncLog([]);
+    
+    const stepsToRun = [...SYNC_STEPS_FULL].map(s => ({ ...s, status: 'pending' as const }));
+    setSteps(stepsToRun);
+    
+    addLog('🚀 Démarrage synchronisation complète...');
+    addLog(`   ${stepsToRun.length} étapes à exécuter`);
+    
+    for (let i = 0; i < stepsToRun.length; i++) {
+      // Vérifier si en pause
+      while (isPaused && isRunning) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      if (!isRunning) {
+        addLog('⏹️ Synchronisation annulée');
+        break;
+      }
+      
+      setCurrentStepIndex(i);
+      const step = stepsToRun[i];
+      
+      setSteps(prev => prev.map((s, idx) => 
+        idx === i ? { ...s, status: 'running' } : s
+      ));
+      
+      addLog(`▶️ ${step.label}...`);
+      
+      try {
+        const result = await callSyncApi(step.endpoint);
+        
+        setSteps(prev => prev.map((s, idx) => 
+          idx === i ? { ...s, status: 'success', result } : s
+        ));
+        
+        if (result.upserted || result.inserted || result.updated) {
+          addLog(`   ✓ ${result.upserted || result.inserted || result.updated} enregistrements`);
+        }
+        
+        // Petit délai entre les étapes
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error: any) {
+        setSteps(prev => prev.map((s, idx) => 
+          idx === i ? { ...s, status: 'error' } : s
+        ));
+        addLog(`   ❌ Erreur: ${error.message}`);
+      }
+    }
+    
+    addLog('🏁 Synchronisation complète terminée');
+    toast.success('Synchronisation complète terminée');
+    setIsRunning(false);
+    refetchLastSync();
+    refetchStats();
+    refetchLogs();
+    queryClient.invalidateQueries({ queryKey: ['parc-ascenseurs'] });
+    queryClient.invalidateQueries({ queryKey: ['parc-arrets'] });
+  };
+
+  const togglePause = () => {
+    setIsPaused(!isPaused);
+    addLog(isPaused ? '▶️ Reprise...' : '⏸️ Pause...');
+  };
+
+  const stopSync = () => {
+    setIsRunning(false);
+    setIsPaused(false);
+    addLog('⏹️ Arrêt demandé...');
+  };
+
+  const progress = steps.length > 0 
+    ? Math.round((steps.filter(s => s.status === 'success').length / steps.length) * 100)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Card className="w-[900px] max-h-[90vh] overflow-hidden flex flex-col">
+        <CardBody className="p-0 flex-1 overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="p-4 border-b border-[var(--border-primary)]">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                  <Cloud className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold">Synchronisation Progilift</h2>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    {stats?.total || 0} ascenseurs • {stats?.arrets || 0} arrêts • {stats?.pannes30j || 0} pannes (30j)
+                  </p>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Tabs */}
+            <div className="flex gap-2">
+              {[
+                { id: 'status', label: 'État', icon: Activity },
+                { id: 'sync', label: 'Synchroniser', icon: RefreshCw },
+                { id: 'logs', label: 'Historique', icon: History }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    activeTab === tab.id 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {/* TAB: État */}
+            {activeTab === 'status' && (
+              <div className="space-y-4">
+                {/* Dernière sync */}
+                <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-400" />
+                    Dernière synchronisation
+                  </h3>
+                  {lastSync ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-[var(--text-muted)]">Date</p>
+                        <p className="font-medium">
+                          {format(parseISO(lastSync.sync_date), 'dd/MM/yyyy HH:mm:ss', { locale: fr })}
+                        </p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          {formatDistanceToNow(parseISO(lastSync.sync_date), { addSuffix: true, locale: fr })}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-[var(--text-muted)]">Type</p>
+                        <Badge variant={lastSync.sync_type === 'cron' ? 'blue' : 'purple'}>
+                          {lastSync.sync_type === 'cron' ? 'Rapide' : 'Complète'}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-xs text-[var(--text-muted)]">Statut</p>
+                        <Badge variant={lastSync.status === 'success' ? 'green' : lastSync.status === 'partial' ? 'orange' : 'red'}>
+                          {lastSync.status === 'success' ? 'Succès' : lastSync.status === 'partial' ? 'Partiel' : 'Erreur'}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-xs text-[var(--text-muted)]">Durée</p>
+                        <p className="font-medium">{lastSync.duration_seconds}s</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[var(--text-muted)]">Aucune synchronisation enregistrée</p>
+                  )}
+                </div>
+                
+                {/* Stats */}
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl text-center">
+                    <Database className="w-6 h-6 mx-auto mb-2 text-blue-400" />
+                    <p className="text-2xl font-bold">{stats?.total || 0}</p>
+                    <p className="text-xs text-[var(--text-muted)]">Ascenseurs</p>
+                  </div>
+                  <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl text-center">
+                    <AlertTriangle className="w-6 h-6 mx-auto mb-2 text-red-400" />
+                    <p className="text-2xl font-bold">{stats?.arrets || 0}</p>
+                    <p className="text-xs text-[var(--text-muted)]">Arrêts</p>
+                  </div>
+                  <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl text-center">
+                    <Wrench className="w-6 h-6 mx-auto mb-2 text-orange-400" />
+                    <p className="text-2xl font-bold">{stats?.pannes30j || 0}</p>
+                    <p className="text-xs text-[var(--text-muted)]">Pannes (30j)</p>
+                  </div>
+                  <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl text-center">
+                    <Server className="w-6 h-6 mx-auto mb-2 text-green-400" />
+                    <p className="text-2xl font-bold">{syncLogs?.length || 0}</p>
+                    <p className="text-xs text-[var(--text-muted)]">Syncs</p>
+                  </div>
+                </div>
+                
+                {/* Config API */}
+                <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-gray-400" />
+                    Configuration API
+                  </h3>
+                  <div className="flex gap-2">
+                    <Input 
+                      value={apiUrl}
+                      onChange={e => setApiUrl(e.target.value)}
+                      placeholder="https://votre-projet.vercel.app"
+                      className="flex-1"
+                    />
+                    <Button 
+                      variant="secondary" 
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`${apiUrl}/api/sync`);
+                          const data = await res.json();
+                          if (data.status === 'ready') {
+                            toast.success('Connexion API OK');
+                          } else {
+                            toast.error('Réponse inattendue');
+                          }
+                        } catch {
+                          toast.error('Connexion impossible');
+                        }
+                      }}
+                    >
+                      <Wifi className="w-4 h-4" /> Tester
+                    </Button>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] mt-2">
+                    URL de base de l'API Vercel (sans /api/sync)
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {/* TAB: Synchroniser */}
+            {activeTab === 'sync' && (
+              <div className="space-y-4">
+                {/* Mode de sync */}
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setSyncMode('quick')}
+                    disabled={isRunning}
+                    className={`flex-1 p-4 rounded-xl border-2 transition-all ${
+                      syncMode === 'quick' 
+                        ? 'border-blue-500 bg-blue-500/10' 
+                        : 'border-[var(--border-primary)] hover:border-blue-500/50'
+                    }`}
+                  >
+                    <Zap className={`w-8 h-8 mx-auto mb-2 ${syncMode === 'quick' ? 'text-blue-500' : 'text-[var(--text-muted)]'}`} />
+                    <p className="font-semibold">Sync Rapide</p>
+                    <p className="text-xs text-[var(--text-muted)]">Arrêts + Pannes récentes (~10s)</p>
+                  </button>
+                  <button
+                    onClick={() => setSyncMode('full')}
+                    disabled={isRunning}
+                    className={`flex-1 p-4 rounded-xl border-2 transition-all ${
+                      syncMode === 'full' 
+                        ? 'border-purple-500 bg-purple-500/10' 
+                        : 'border-[var(--border-primary)] hover:border-purple-500/50'
+                    }`}
+                  >
+                    <Database className={`w-8 h-8 mx-auto mb-2 ${syncMode === 'full' ? 'text-purple-500' : 'text-[var(--text-muted)]'}`} />
+                    <p className="font-semibold">Sync Complète</p>
+                    <p className="text-xs text-[var(--text-muted)]">Tout le parc (~30 min)</p>
+                  </button>
+                </div>
+                
+                {/* Boutons de contrôle */}
+                <div className="flex gap-2">
+                  {!isRunning ? (
+                    <Button 
+                      variant="primary" 
+                      className="flex-1"
+                      onClick={syncMode === 'quick' ? runQuickSync : runFullSync}
+                      disabled={!apiUrl}
+                    >
+                      <Play className="w-4 h-4" />
+                      Démarrer {syncMode === 'quick' ? 'sync rapide' : 'sync complète'}
+                    </Button>
+                  ) : (
+                    <>
+                      {syncMode === 'full' && (
+                        <Button variant="secondary" onClick={togglePause}>
+                          {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                          {isPaused ? 'Reprendre' : 'Pause'}
+                        </Button>
+                      )}
+                      <Button variant="danger" onClick={stopSync}>
+                        <XCircle className="w-4 h-4" /> Arrêter
+                      </Button>
+                    </>
+                  )}
+                </div>
+                
+                {/* Progression (sync complète) */}
+                {syncMode === 'full' && steps.length > 0 && (
+                  <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Progression</span>
+                      <span className="text-sm font-bold text-blue-400">{progress}%</span>
+                    </div>
+                    <div className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden mb-3">
+                      <div 
+                        className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300" 
+                        style={{ width: `${progress}%` }} 
+                      />
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
+                      <span className="flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3 text-green-500" />
+                        {steps.filter(s => s.status === 'success').length} OK
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                        {steps.filter(s => s.status === 'running').length} En cours
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <XCircle className="w-3 h-3 text-red-500" />
+                        {steps.filter(s => s.status === 'error').length} Erreur
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {steps.filter(s => s.status === 'pending').length} En attente
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Log console */}
+                <div className="p-4 bg-black/80 rounded-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-green-400 font-mono">Console</span>
+                    <button 
+                      onClick={() => setSyncLog([])}
+                      className="text-xs text-[var(--text-muted)] hover:text-white"
+                    >
+                      Effacer
+                    </button>
+                  </div>
+                  <div className="h-48 overflow-y-auto font-mono text-xs text-green-400 space-y-0.5">
+                    {syncLog.length === 0 ? (
+                      <p className="text-gray-500">En attente...</p>
+                    ) : (
+                      syncLog.map((log, i) => (
+                        <p key={i} className={log.includes('❌') ? 'text-red-400' : log.includes('✅') || log.includes('✓') ? 'text-green-400' : 'text-gray-300'}>
+                          {log}
+                        </p>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* TAB: Historique */}
+            {activeTab === 'logs' && (
+              <div className="space-y-2">
+                {syncLogs && syncLogs.length > 0 ? (
+                  syncLogs.map((log) => (
+                    <div key={log.id} className="flex items-center gap-4 p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                      <div className={`w-2 h-2 rounded-full ${
+                        log.status === 'success' ? 'bg-green-500' : 
+                        log.status === 'partial' ? 'bg-orange-500' : 'bg-red-500'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">
+                            {format(parseISO(log.sync_date), 'dd/MM/yyyy HH:mm', { locale: fr })}
+                          </span>
+                          <Badge variant={log.sync_type === 'cron' ? 'blue' : 'purple'} className="text-[10px]">
+                            {log.sync_type === 'cron' ? 'Rapide' : 'Complète'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                          {log.equipements_count > 0 && <span>📦 {log.equipements_count}</span>}
+                          {log.pannes_count > 0 && <span>🔧 {log.pannes_count}</span>}
+                          {log.arrets_count > 0 && <span>⚠️ {log.arrets_count}</span>}
+                          <span>⏱️ {log.duration_seconds}s</span>
+                        </div>
+                      </div>
+                      <Badge variant={log.status === 'success' ? 'green' : log.status === 'partial' ? 'orange' : 'red'}>
+                        {log.status}
+                      </Badge>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-[var(--text-muted)]">
+                    <History className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>Aucun historique</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
 
 // =============================================
 // COMPOSANTS
@@ -478,6 +1023,7 @@ export function ParcAscenseursPage() {
   const [secteurFilter, setSecteurFilter] = useState<string>('');
   const [showArretOnly, setShowArretOnly] = useState(false);
   const [selectedAscenseur, setSelectedAscenseur] = useState<Ascenseur | null>(null);
+  const [showSyncModal, setShowSyncModal] = useState(false);
   
   const { data: ascenseurs, isLoading } = useQuery({
     queryKey: ['parc-ascenseurs'],
@@ -540,8 +1086,8 @@ export function ParcAscenseursPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm">
-              <RefreshCw className="w-4 h-4" /> Sync
+            <Button variant="secondary" size="sm" onClick={() => setShowSyncModal(true)}>
+              <Cloud className="w-4 h-4" /> Synchronisation
             </Button>
           </div>
         </div>
@@ -693,6 +1239,11 @@ export function ParcAscenseursPage() {
           ascenseur={selectedAscenseur}
           onClose={() => setSelectedAscenseur(null)}
         />
+      )}
+      
+      {/* Modal synchronisation */}
+      {showSyncModal && (
+        <SyncModal onClose={() => setShowSyncModal(false)} />
       )}
     </div>
   );
