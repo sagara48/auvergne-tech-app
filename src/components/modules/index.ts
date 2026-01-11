@@ -3,6 +3,7 @@ export { TravauxPage } from './TravauxPage';
 export { MiseEnServicePage } from './MiseEnServicePage';
 export { TourneesPage } from './TourneesPage';
 export { AscenseursPage } from './AscenseursPage';
+export { ParcAscenseursPage } from './ParcAscenseursPage';
 export { StockPage } from './StockPage';
 export { VehiculesPage } from './VehiculesPage';
 export { DemandesPage } from './DemandesPage';

@@ -11,6 +11,7 @@ import {
   MiseEnServicePage,
   TourneesPage,
   AscenseursPage,
+  ParcAscenseursPage,
   StockPage,
   VehiculesPage,
   DemandesPage,
@@ -59,7 +60,7 @@ function AppContent() {
       case 'tournees':
         return <TourneesPage />;
       case 'ascenseurs':
-        return <AscenseursPage />;
+        return <ParcAscenseursPage />;
       case 'stock':
         return <StockPage />;
       case 'vehicules':
