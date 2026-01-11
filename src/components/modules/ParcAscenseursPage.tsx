@@ -1880,6 +1880,28 @@ export function ParcAscenseursPage() {
     });
   }, [pannesRecentes, ascenseurs]);
   
+  // Filtrer les vraies pannes (exclure visites cause=99 et contrôles cause=0) et trier par date
+  const vraisPannes = useMemo(() => {
+    if (!enrichedPannes || enrichedPannes.length === 0) return [];
+    
+    return enrichedPannes
+      .filter((p: any) => {
+        const data = p.data_wpanne || {};
+        const cause = data.CAUSE || p.cause;
+        // Convertir en string pour comparaison
+        const causeStr = String(cause);
+        const isVisite = causeStr === '99';
+        const isControle = causeStr === '0' || causeStr === '00';
+        return !isVisite && !isControle;
+      })
+      .sort((a: any, b: any) => {
+        // Trier par date_appel décroissante (plus récent en premier)
+        const dateA = a.date_appel ? new Date(a.date_appel).getTime() : 0;
+        const dateB = b.date_appel ? new Date(b.date_appel).getTime() : 0;
+        return dateB - dateA;
+      });
+  }, [enrichedPannes]);
+  
   const { data: secteurs } = useQuery({
     queryKey: ['parc-secteurs'],
     queryFn: getSecteurs
@@ -1905,30 +1927,22 @@ export function ParcAscenseursPage() {
     return { sousContrat, horsContrat };
   }, [ascenseurs]);
   
-  // Compter les vraies pannes des 30 derniers jours (exclure visites et contrôles)
+  // Compter les vraies pannes des 30 derniers jours
   const pannes30j = useMemo(() => {
-    if (!enrichedPannes || enrichedPannes.length === 0) return 0;
+    if (!vraisPannes || vraisPannes.length === 0) return 0;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    return enrichedPannes.filter((p: any) => {
+    return vraisPannes.filter((p: any) => {
       if (!p.date_appel) return false;
-      
-      // Exclure les visites (cause 99) et contrôles (cause 0)
-      const data = p.data_wpanne || {};
-      const cause = data.CAUSE || p.cause;
-      const isVisite = cause === '99' || cause === 99;
-      const isControle = cause === '0' || cause === 0 || cause === '00';
-      if (isVisite || isControle) return false;
-      
-      // Vérifier la date
       try {
-        return parseISO(p.date_appel) >= thirtyDaysAgo;
+        const dateAppel = new Date(p.date_appel);
+        return dateAppel >= thirtyDaysAgo;
       } catch {
         return false;
       }
     }).length;
-  }, [enrichedPannes]);
+  }, [vraisPannes]);
   
   const filteredAscenseurs = useMemo(() => {
     if (!ascenseurs) return [];
@@ -2314,98 +2328,83 @@ export function ParcAscenseursPage() {
         {/* Onglet Pannes */}
         {mainTab === 'pannes' && (
           <div className="space-y-3">
-            {(() => {
-              // Filtrer les vraies pannes (exclure visites cause=99 et contrôles cause=0)
-              const vraisPannes = enrichedPannes.filter((panne: any) => {
+            <div className="text-sm text-[var(--text-muted)] mb-4">
+              {Math.min(vraisPannes.length, 30)} dernières pannes (filtrées par vos secteurs)
+            </div>
+            
+            {vraisPannes.length === 0 ? (
+              <div className="text-center py-12 text-[var(--text-muted)]">
+                <Wrench className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Aucune panne enregistrée</p>
+              </div>
+            ) : (
+              vraisPannes.slice(0, 30).map((panne: any) => {
                 const data = panne.data_wpanne || {};
+                const dateAppel = panne.date_appel ? parseISO(panne.date_appel) : null;
                 const cause = data.CAUSE || panne.cause;
-                const isVisite = cause === '99' || cause === 99;
-                const isControle = cause === '0' || cause === 0 || cause === '00';
-                return !isVisite && !isControle;
-              }).slice(0, 30);
-              
-              return (
-                <>
-                  <div className="text-sm text-[var(--text-muted)] mb-4">
-                    {vraisPannes.length} dernières pannes (filtrées par vos secteurs)
-                  </div>
-                  
-                  {vraisPannes.length === 0 ? (
-                    <div className="text-center py-12 text-[var(--text-muted)]">
-                      <Wrench className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p>Aucune panne enregistrée</p>
-                    </div>
-                  ) : (
-                    vraisPannes.map((panne: any) => {
-                      const data = panne.data_wpanne || {};
-                      const dateAppel = panne.date_appel ? parseISO(panne.date_appel) : null;
-                      const cause = data.CAUSE || panne.cause;
-                      const heureAppel = formatHeureHHMM(data.APPEL);
-                      const motif = data.Libelle || panne.motif;
-                      const panneType = data.PANNES;
-                      const depanneur = data.DEPANNEUR;
-                      const persBloquees = data.NOMBRE || panne.personnes_bloquees || 0;
+                const heureAppel = formatHeureHHMM(data.APPEL);
+                const motif = data.Libelle || panne.motif;
+                const panneType = data.PANNES;
+                const depanneur = data.DEPANNEUR;
+                const persBloquees = data.NOMBRE || panne.personnes_bloquees || 0;
+                
+                return (
+                  <Card 
+                    key={panne.id} 
+                    className="cursor-pointer hover:border-orange-500/50 transition-all"
+                    onClick={() => setSelectedPanne(panne)}
+                  >
+                    <CardBody className="p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            persBloquees > 0 ? 'bg-red-500/20' : 'bg-orange-500/20'
+                          }`}>
+                            <Wrench className={`w-5 h-5 ${
+                              persBloquees > 0 ? 'text-red-500' : 'text-orange-500'
+                            }`} />
+                          </div>
+                          <div>
+                            <p className="font-bold">{panne.code_appareil}</p>
+                            <p className="text-sm text-[var(--text-muted)]">{panne.adresse}, {panne.ville}</p>
+                          </div>
+                        </div>
+                        <div className="text-right flex flex-col items-end gap-1">
+                          {persBloquees > 0 && (
+                            <Badge variant="red" className="text-[10px] animate-pulse">
+                              {persBloquees} bloqué{persBloquees > 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                          {dateAppel && (
+                            <p className="text-sm font-medium">{format(dateAppel, 'dd/MM/yyyy', { locale: fr })}</p>
+                          )}
+                          {heureAppel && (
+                            <p className="text-xs text-[var(--text-muted)]">{heureAppel}</p>
+                          )}
+                        </div>
+                      </div>
                       
-                      return (
-                        <Card 
-                          key={panne.id} 
-                          className="cursor-pointer hover:border-orange-500/50 transition-all"
-                          onClick={() => setSelectedPanne(panne)}
-                        >
-                          <CardBody className="p-4">
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                                  persBloquees > 0 ? 'bg-red-500/20' : 'bg-orange-500/20'
-                                }`}>
-                                  <Wrench className={`w-5 h-5 ${
-                                    persBloquees > 0 ? 'text-red-500' : 'text-orange-500'
-                                  }`} />
-                                </div>
-                                <div>
-                                  <p className="font-bold">{panne.code_appareil}</p>
-                                  <p className="text-sm text-[var(--text-muted)]">{panne.adresse}, {panne.ville}</p>
-                                </div>
-                              </div>
-                              <div className="text-right flex flex-col items-end gap-1">
-                                {persBloquees > 0 && (
-                                  <Badge variant="red" className="text-[10px] animate-pulse">
-                                    {persBloquees} bloqué{persBloquees > 1 ? 's' : ''}
-                                  </Badge>
-                                )}
-                                {dateAppel && (
-                                  <p className="text-sm font-medium">{format(dateAppel, 'dd/MM/yyyy', { locale: fr })}</p>
-                                )}
-                                {heureAppel && (
-                                  <p className="text-xs text-[var(--text-muted)]">{heureAppel}</p>
-                                )}
-                              </div>
-                            </div>
-                            
-                            {motif && (
-                              <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg mb-2">
-                                <p className="text-sm truncate">{motif}</p>
-                              </div>
-                            )}
-                            
-                            {panneType && (
-                              <div className="p-2 bg-orange-500/10 rounded-lg border border-orange-500/20 mb-2">
-                                <p className="text-sm truncate">{panneType}</p>
-                              </div>
-                            )}
-                            
-                            <div className="flex flex-wrap gap-2">
-                              <Badge variant="gray" className="text-[10px]">Secteur {panne.secteur}</Badge>
-                              {depanneur && <Badge variant="blue" className="text-[10px]">{depanneur}</Badge>}
-                            </div>
-                          </CardBody>
-                        </Card>
-                      );
-                    })
-                  )}
-                </>
-              );
-            })()}
+                      {motif && (
+                        <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg mb-2">
+                          <p className="text-sm truncate">{motif}</p>
+                        </div>
+                      )}
+                      
+                      {panneType && (
+                        <div className="p-2 bg-orange-500/10 rounded-lg border border-orange-500/20 mb-2">
+                          <p className="text-sm truncate">{panneType}</p>
+                        </div>
+                      )}
+                      
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="gray" className="text-[10px]">Secteur {panne.secteur}</Badge>
+                        {depanneur && <Badge variant="blue" className="text-[10px]">{depanneur}</Badge>}
+                      </div>
+                    </CardBody>
+                  </Card>
+                );
+              })
+            )}
           </div>
         )}
       </div>
