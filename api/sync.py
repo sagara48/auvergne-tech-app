@@ -192,16 +192,18 @@ def supabase_insert(table, data):
     """Insert dans Supabase"""
     url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
     headers = supabase_headers()
-    headers['Prefer'] = 'resolution=merge-duplicates,return=minimal'
+    headers['Prefer'] = 'return=minimal'
     status, _ = http_request(url, 'POST', data, headers, 15)
     return status in [200, 201]
 
-def supabase_upsert(table, data):
-    """Upsert dans Supabase"""
+def supabase_upsert(table, data, on_conflict=None):
+    """Upsert dans Supabase avec colonne de conflit optionnelle"""
     url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
+    if on_conflict:
+        url += f"?on_conflict={on_conflict}"
     headers = supabase_headers()
     headers['Prefer'] = 'resolution=merge-duplicates,return=minimal'
-    status, _ = http_request(url, 'POST', data, headers, 15)
+    status, resp = http_request(url, 'POST', data, headers, 15)
     return status in [200, 201]
 
 def supabase_update(table, key_col, key_val, data):
@@ -408,7 +410,7 @@ def sync_equipements(sector_idx):
             'updated_at': datetime.now().isoformat()
         }
         
-        if supabase_upsert('parc_ascenseurs', data):
+        if supabase_upsert('parc_ascenseurs', data, 'id_wsoucont'):
             upserted += 1
     
     next_sector = sector_idx + 1
@@ -538,7 +540,7 @@ def sync_pannes(period_idx):
             'updated_at': datetime.now().isoformat()
         }
         
-        if supabase_upsert('parc_pannes', data):
+        if supabase_upsert('parc_pannes', data, 'id_panne'):
             upserted += 1
     
     next_period = period_idx + 1

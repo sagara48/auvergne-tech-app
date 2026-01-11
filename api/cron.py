@@ -91,10 +91,12 @@ def supabase_headers():
         'Prefer': 'return=minimal'
     }
 
-def supabase_upsert(table, data):
+def supabase_upsert(table, data, on_conflict=None):
     if not SUPABASE_URL or not data:
         return False
     url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
+    if on_conflict:
+        url += f"?on_conflict={on_conflict}"
     headers = supabase_headers()
     headers['Prefer'] = 'resolution=merge-duplicates,return=minimal'
     status, _ = http_request(url, 'POST', data, headers, 30)
@@ -266,7 +268,7 @@ def run_cron_sync():
         
         # Upsert par batch de 50
         for i in range(0, len(pannes_list), 50):
-            supabase_upsert('parc_pannes', pannes_list[i:i+50])
+            supabase_upsert('parc_pannes', pannes_list[i:i+50], 'id_panne')
         
         stats["pannes"] = len(pannes_list)
         
