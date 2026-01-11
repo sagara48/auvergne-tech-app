@@ -405,6 +405,9 @@ def sync_equipements(sector_idx):
             'securite': safe_int(e.get('SECURITE')),
             'securite2': safe_int(e.get('SECURITE2')),
             'type_planning': safe_str(e.get('TYPEPLANNING'), 50),
+            # Ordre de tournée
+            'wordre': safe_int(e.get('WORDRE')),
+            'ordre2': safe_int(e.get('ORDRE2')),
             # Planning mensuel (1 = mois prévu)
             'planning_jan': safe_int(e.get('JAN')) == 1,
             'planning_fev': safe_int(e.get('FEV')) == 1,
