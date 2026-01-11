@@ -860,6 +860,229 @@ function ArretsWidget({ count, onClick }: { count: number; onClick?: () => void 
   );
 }
 
+// Modal Détail Panne
+function PanneDetailModal({ panne, onClose }: { panne: any; onClose: () => void }) {
+  const data = panne.data_wpanne || {};
+  
+  // Fonction pour formater une date YYYYMMDD
+  const formatDateYYYYMMDD = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    const year = parseInt(dateStr.substring(0, 4));
+    const month = parseInt(dateStr.substring(4, 6)) - 1;
+    const day = parseInt(dateStr.substring(6, 8));
+    return new Date(year, month, day);
+  };
+  
+  // Fonction pour formater une heure HHMM
+  const formatHeureHHMM = (heureStr: string | null) => {
+    if (!heureStr) return null;
+    const h = heureStr.toString().padStart(4, '0');
+    return `${h.substring(0, 2)}h${h.substring(2, 4)}`;
+  };
+  
+  // Fonction pour décoder les entités HTML
+  const decodeHtml = (text: string | null) => {
+    if (!text) return null;
+    return text
+      .replace(/&#13;/g, '\n')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .trim();
+  };
+  
+  // Calculer la durée d'intervention
+  const calcDuree = (debut: string | null, fin: string | null) => {
+    if (!debut || !fin) return null;
+    const d = debut.toString().padStart(4, '0');
+    const f = fin.toString().padStart(4, '0');
+    const debutMin = parseInt(d.substring(0, 2)) * 60 + parseInt(d.substring(2, 4));
+    const finMin = parseInt(f.substring(0, 2)) * 60 + parseInt(f.substring(2, 4));
+    const duree = finMin - debutMin;
+    if (duree <= 0) return null;
+    const h = Math.floor(duree / 60);
+    const m = duree % 60;
+    return h > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${m}min`;
+  };
+  
+  const datePanne = formatDateYYYYMMDD(data.DATE) || (panne.date_appel ? parseISO(panne.date_appel) : null);
+  const heureAppel = formatHeureHHMM(data.APPEL);
+  const heureInter = formatHeureHHMM(data.INTER);
+  const heureFinInter = formatHeureHHMM(data.HRFININTER);
+  const dureeInter = calcDuree(data.INTER, data.HRFININTER);
+  const technicien = data.DEPANNEUR || data.CLEPERSO || panne.depanneur;
+  const notes = decodeHtml(data.NOTE2);
+  const motifAppel = data.Libelle || panne.motif;
+  const typePanne = data.PANNES;
+  const ensemble = data.ENSEMBLE;
+  const demandeur = data.DEMAND || panne.demandeur;
+  const telDemandeur = data.TELDEMAND;
+  const causeCode = data.CAUSE;
+  const persBloquees = data.NOMBRE || panne.personnes_bloquees || 0;
+  
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Card className="w-[800px] max-h-[90vh] overflow-hidden flex flex-col">
+        <CardBody className="p-0 flex-1 overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="p-4 border-b border-[var(--border-primary)] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                persBloquees > 0 ? 'bg-red-500/20' : 'bg-orange-500/20'
+              }`}>
+                <Wrench className={`w-6 h-6 ${persBloquees > 0 ? 'text-red-500' : 'text-orange-500'}`} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">{panne.code_appareil}</h2>
+                <p className="text-sm text-[var(--text-muted)]">{panne.adresse}, {panne.ville}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {persBloquees > 0 && (
+                <Badge variant="red" className="animate-pulse">
+                  {persBloquees} pers. bloquée{persBloquees > 1 ? 's' : ''}
+                </Badge>
+              )}
+              <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Date et heure */}
+            <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-orange-400" /> Date & Horaires
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-[var(--text-muted)]">Date</p>
+                  <p className="font-medium">
+                    {datePanne ? format(datePanne, 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
+                  </p>
+                </div>
+                {heureAppel && (
+                  <div>
+                    <p className="text-xs text-[var(--text-muted)]">Heure d'appel</p>
+                    <p className="font-medium">{heureAppel}</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Timeline intervention */}
+              {(heureAppel || heureInter || heureFinInter) && (
+                <div className="mt-4 pt-4 border-t border-[var(--border-secondary)]">
+                  <p className="text-xs text-[var(--text-muted)] mb-2">Timeline</p>
+                  <div className="flex items-center gap-2 text-sm">
+                    {heureAppel && (
+                      <div className="flex items-center gap-1 px-2 py-1 bg-[var(--bg-secondary)] rounded">
+                        <Phone className="w-3 h-3 text-blue-400" />
+                        <span>{heureAppel}</span>
+                      </div>
+                    )}
+                    {heureInter && (
+                      <>
+                        <span className="text-[var(--text-muted)]">→</span>
+                        <div className="flex items-center gap-1 px-2 py-1 bg-[var(--bg-secondary)] rounded">
+                          <User className="w-3 h-3 text-green-400" />
+                          <span>{heureInter}</span>
+                        </div>
+                      </>
+                    )}
+                    {heureFinInter && (
+                      <>
+                        <span className="text-[var(--text-muted)]">→</span>
+                        <div className="flex items-center gap-1 px-2 py-1 bg-[var(--bg-secondary)] rounded">
+                          <CheckCircle className="w-3 h-3 text-green-400" />
+                          <span>{heureFinInter}</span>
+                        </div>
+                      </>
+                    )}
+                    {dureeInter && (
+                      <Badge variant="blue" className="ml-2">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {dureeInter}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Motif d'appel */}
+            {motifAppel && (
+              <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-blue-400" /> Motif d'appel
+                </h3>
+                <p className="text-sm">{motifAppel}</p>
+              </div>
+            )}
+            
+            {/* Type de panne */}
+            {typePanne && (
+              <div className="p-4 bg-orange-500/10 rounded-xl border border-orange-500/20">
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-orange-400" /> Type de panne
+                </h3>
+                <p className="text-sm font-medium">{typePanne}</p>
+                {ensemble && (
+                  <p className="text-xs text-[var(--text-muted)] mt-1">Ensemble : {ensemble}</p>
+                )}
+              </div>
+            )}
+            
+            {/* Demandeur et technicien */}
+            <div className="grid grid-cols-2 gap-4">
+              {demandeur && (
+                <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                  <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-purple-400" /> Demandeur
+                  </h3>
+                  <p className="text-sm font-medium">{demandeur}</p>
+                  {telDemandeur && (
+                    <p className="text-xs text-[var(--text-muted)]">{telDemandeur}</p>
+                  )}
+                </div>
+              )}
+              
+              {technicien && (
+                <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                  <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <User className="w-4 h-4 text-green-400" /> Technicien
+                  </h3>
+                  <p className="text-sm font-medium">{technicien}</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Notes / Travaux */}
+            {notes && (
+              <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-yellow-400" /> Notes / Travaux effectués
+                </h3>
+                <p className="text-sm whitespace-pre-line text-[var(--text-secondary)]">{notes}</p>
+              </div>
+            )}
+            
+            {/* Infos techniques */}
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="gray">Secteur {panne.secteur}</Badge>
+              {panne.marque && <Badge variant="gray">{panne.marque}</Badge>}
+              {panne.type_planning && <Badge variant="blue">{panne.type_planning}</Badge>}
+              {causeCode && <Badge variant="orange">Cause {causeCode}</Badge>}
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
 // Carte Ascenseur
 function AscenseurCard({ ascenseur, onClick }: { ascenseur: any; onClick: () => void }) {
   const isHorsContrat = !ascenseur.type_planning;
@@ -1537,6 +1760,7 @@ export function ParcAscenseursPage() {
   const [contratFilter, setContratFilter] = useState<'all' | 'contrat' | 'hors_contrat'>('all');
   const [showArretOnly, setShowArretOnly] = useState(false);
   const [selectedAscenseur, setSelectedAscenseur] = useState<Ascenseur | null>(null);
+  const [selectedPanne, setSelectedPanne] = useState<any | null>(null);
   const [showSyncModal, setShowSyncModal] = useState(false);
   
   // Récupérer les secteurs autorisés de l'utilisateur
@@ -1575,10 +1799,10 @@ export function ParcAscenseursPage() {
     refetchInterval: 60000 // Refresh toutes les minutes
   });
   
-  // Pannes récentes filtrées par secteurs
+  // Pannes récentes filtrées par secteurs (30 dernières)
   const { data: pannesRecentes } = useQuery({
     queryKey: ['parc-pannes-recentes', userSecteurs],
-    queryFn: () => getPannesRecentes(100, userSecteurs || []),
+    queryFn: () => getPannesRecentes(30, userSecteurs || []),
     enabled: userSecteurs !== undefined
   });
   
@@ -2066,85 +2290,115 @@ export function ParcAscenseursPage() {
         {/* Onglet Pannes */}
         {mainTab === 'pannes' && (
           <div className="space-y-3">
-            <div className="text-sm text-[var(--text-muted)] mb-4">
-              {enrichedPannes.length} dernières pannes (filtrées par vos secteurs)
-            </div>
-            
-            {enrichedPannes.length === 0 ? (
-              <div className="text-center py-12 text-[var(--text-muted)]">
-                <Wrench className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>Aucune panne enregistrée</p>
-              </div>
-            ) : (
-              enrichedPannes.slice(0, 50).map((panne: any) => {
+            {(() => {
+              // Filtrer les vraies pannes (exclure visites cause=99 et contrôles cause=0)
+              const vraisPannes = enrichedPannes.filter((panne: any) => {
                 const data = panne.data_wpanne || {};
-                const dateAppel = panne.date_appel ? parseISO(panne.date_appel) : null;
                 const cause = data.CAUSE || panne.cause;
                 const isVisite = cause === '99' || cause === 99;
                 const isControle = cause === '0' || cause === 0 || cause === '00';
-                const heureAppel = formatHeureHHMM(data.APPEL);
-                const motif = data.Libelle || panne.motif;
-                const panneType = data.PANNES;
-                const depanneur = data.DEPANNEUR;
-                
-                // Skip les visites (cause 99) dans l'onglet pannes
-                if (isVisite || isControle) return null;
-                
-                return (
-                  <Card key={panne.id}>
-                    <CardBody className="p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                            <Wrench className="w-5 h-5 text-orange-500" />
-                          </div>
-                          <div>
-                            <p className="font-bold">{panne.code_appareil}</p>
-                            <p className="text-sm text-[var(--text-muted)]">{panne.adresse}, {panne.ville}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          {dateAppel && (
-                            <p className="text-sm font-medium">{format(dateAppel, 'dd/MM/yyyy', { locale: fr })}</p>
-                          )}
-                          {heureAppel && (
-                            <p className="text-xs text-[var(--text-muted)]">{heureAppel}</p>
-                          )}
-                        </div>
-                      </div>
+                return !isVisite && !isControle;
+              }).slice(0, 30);
+              
+              return (
+                <>
+                  <div className="text-sm text-[var(--text-muted)] mb-4">
+                    {vraisPannes.length} dernières pannes (filtrées par vos secteurs)
+                  </div>
+                  
+                  {vraisPannes.length === 0 ? (
+                    <div className="text-center py-12 text-[var(--text-muted)]">
+                      <Wrench className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p>Aucune panne enregistrée</p>
+                    </div>
+                  ) : (
+                    vraisPannes.map((panne: any) => {
+                      const data = panne.data_wpanne || {};
+                      const dateAppel = panne.date_appel ? parseISO(panne.date_appel) : null;
+                      const cause = data.CAUSE || panne.cause;
+                      const heureAppel = formatHeureHHMM(data.APPEL);
+                      const motif = data.Libelle || panne.motif;
+                      const panneType = data.PANNES;
+                      const depanneur = data.DEPANNEUR;
+                      const persBloquees = data.NOMBRE || panne.personnes_bloquees || 0;
                       
-                      {motif && (
-                        <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg mb-2">
-                          <p className="text-sm">{motif}</p>
-                        </div>
-                      )}
-                      
-                      {panneType && (
-                        <div className="p-2 bg-orange-500/10 rounded-lg border border-orange-500/20 mb-2">
-                          <p className="text-[10px] text-orange-400">Type de panne</p>
-                          <p className="text-sm">{panneType}</p>
-                        </div>
-                      )}
-                      
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="gray" className="text-[10px]">Secteur {panne.secteur}</Badge>
-                        {depanneur && <Badge variant="blue" className="text-[10px]">{depanneur}</Badge>}
-                        {cause && <Badge variant="orange" className="text-[10px]">Cause {cause}</Badge>}
-                      </div>
-                    </CardBody>
-                  </Card>
-                );
-              }).filter(Boolean)
-            )}
+                      return (
+                        <Card 
+                          key={panne.id} 
+                          className="cursor-pointer hover:border-orange-500/50 transition-all"
+                          onClick={() => setSelectedPanne(panne)}
+                        >
+                          <CardBody className="p-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                                  persBloquees > 0 ? 'bg-red-500/20' : 'bg-orange-500/20'
+                                }`}>
+                                  <Wrench className={`w-5 h-5 ${
+                                    persBloquees > 0 ? 'text-red-500' : 'text-orange-500'
+                                  }`} />
+                                </div>
+                                <div>
+                                  <p className="font-bold">{panne.code_appareil}</p>
+                                  <p className="text-sm text-[var(--text-muted)]">{panne.adresse}, {panne.ville}</p>
+                                </div>
+                              </div>
+                              <div className="text-right flex flex-col items-end gap-1">
+                                {persBloquees > 0 && (
+                                  <Badge variant="red" className="text-[10px] animate-pulse">
+                                    {persBloquees} bloqué{persBloquees > 1 ? 's' : ''}
+                                  </Badge>
+                                )}
+                                {dateAppel && (
+                                  <p className="text-sm font-medium">{format(dateAppel, 'dd/MM/yyyy', { locale: fr })}</p>
+                                )}
+                                {heureAppel && (
+                                  <p className="text-xs text-[var(--text-muted)]">{heureAppel}</p>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {motif && (
+                              <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg mb-2">
+                                <p className="text-sm truncate">{motif}</p>
+                              </div>
+                            )}
+                            
+                            {panneType && (
+                              <div className="p-2 bg-orange-500/10 rounded-lg border border-orange-500/20 mb-2">
+                                <p className="text-sm truncate">{panneType}</p>
+                              </div>
+                            )}
+                            
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="gray" className="text-[10px]">Secteur {panne.secteur}</Badge>
+                              {depanneur && <Badge variant="blue" className="text-[10px]">{depanneur}</Badge>}
+                            </div>
+                          </CardBody>
+                        </Card>
+                      );
+                    })
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
       
-      {/* Modal détail */}
+      {/* Modal détail ascenseur */}
       {selectedAscenseur && (
         <AscenseurDetailModal
           ascenseur={selectedAscenseur}
           onClose={() => setSelectedAscenseur(null)}
+        />
+      )}
+      
+      {/* Modal détail panne */}
+      {selectedPanne && (
+        <PanneDetailModal
+          panne={selectedPanne}
+          onClose={() => setSelectedPanne(null)}
         />
       )}
       
