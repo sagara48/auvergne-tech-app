@@ -522,12 +522,18 @@ def sync_pannes(period_idx):
     items = parse_items(resp, "tabListeWpanne")
     upserted = 0
     errors = []
+    skipped = 0
+    
+    # Debug: premier item
+    first_item = items[0] if items else None
+    first_keys = list(first_item.keys())[:15] if first_item else []
     
     # Préparer les données en batch
     batch = []
     for p in items:
         id_panne = safe_int(p.get('IDWPANNE'))
         if not id_panne:
+            skipped += 1
             continue
         
         data = {
@@ -557,6 +563,9 @@ def sync_pannes(period_idx):
         }
         batch.append(data)
     
+    # Debug: premier batch item
+    first_batch = batch[0] if batch else None
+    
     # Upsert par batch de 100
     batch_size = 100
     for i in range(0, len(batch), batch_size):
@@ -574,11 +583,17 @@ def sync_pannes(period_idx):
         "period": since_date,
         "period_idx": period_idx,
         "pannes_found": len(items),
+        "valid_batch": len(batch),
+        "skipped": skipped,
         "upserted": upserted,
+        "debug_keys": first_keys,
+        "debug_first_id": first_item.get('IDWPANNE') if first_item else None,
         "next": f"?step=3&period={next_period}" if next_period < len(PERIODS) else "?step=4"
     }
     if errors:
-        result["errors"] = errors[:5]  # Limiter à 5 erreurs
+        result["errors"] = errors[:5]
+    if first_batch:
+        result["debug_sample"] = {k: first_batch[k] for k in ['id_panne', 'code_appareil', 'date_appel'] if k in first_batch}
     return result
 
 # ============================================================
