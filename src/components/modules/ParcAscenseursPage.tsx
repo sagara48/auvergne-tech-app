@@ -6,7 +6,7 @@ import {
   Calendar, User, Activity, TrendingUp, Zap, Timer, AlertCircle,
   CheckCircle, XCircle, Settings, Eye, FileText, BarChart3, Play,
   Pause, RotateCcw, Database, Cloud, CloudOff, Loader2, History,
-  Server, Wifi, WifiOff, Download, Upload, X
+  Server, Wifi, WifiOff, Download, Upload, X, Route
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
@@ -234,6 +234,35 @@ const getSecteurs = async () => {
     if (error) return [];
     return data || [];
   } catch {
+    return [];
+  }
+};
+
+const getTournees = async (userSecteurs?: number[]) => {
+  try {
+    let query = supabase
+      .from('tournees')
+      .select('*, technicien:techniciens(*)')
+      .eq('actif', true)
+      .order('ordre', { ascending: true });
+    
+    // Si l'utilisateur a des secteurs restreints, filtrer
+    if (userSecteurs && userSecteurs.length > 0) {
+      // Convertir les numéros de secteur en strings pour la comparaison
+      const secteurStrings = userSecteurs.map(s => String(s));
+      query = query.in('secteur', secteurStrings);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.warn('Erreur tournées:', error.message);
+      return [];
+    }
+    
+    return data || [];
+  } catch (err) {
+    console.error('Erreur getTournees:', err);
     return [];
   }
 };
@@ -1757,7 +1786,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
 // PAGE PRINCIPALE
 // =============================================
 export function ParcAscenseursPage() {
-  const [mainTab, setMainTab] = useState<'parc' | 'arrets' | 'pannes'>('parc');
+  const [mainTab, setMainTab] = useState<'parc' | 'arrets' | 'pannes' | 'tournees'>('parc');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [secteurFilter, setSecteurFilter] = useState<string>('');
@@ -1771,6 +1800,13 @@ export function ParcAscenseursPage() {
   const { data: userSecteurs } = useQuery({
     queryKey: ['user-secteurs'],
     queryFn: getUserSecteurs
+  });
+  
+  // Récupérer les tournées filtrées par secteurs
+  const { data: tournees } = useQuery({
+    queryKey: ['tournees', userSecteurs],
+    queryFn: () => getTournees(userSecteurs || []),
+    enabled: userSecteurs !== undefined
   });
   
   // Récupérer les types de planning pour le nb de visites
@@ -2185,6 +2221,15 @@ export function ParcAscenseursPage() {
               <Wrench className="w-4 h-4 inline mr-1" />
               Pannes
             </button>
+            <button
+              onClick={() => setMainTab('tournees')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                mainTab === 'tournees' ? 'bg-lime-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Route className="w-4 h-4 inline mr-1" />
+              Tournées ({tournees?.length || 0})
+            </button>
           </div>
         </div>
         
@@ -2471,6 +2516,104 @@ export function ParcAscenseursPage() {
                 );
               })
             )}
+          </div>
+        )}
+        
+        {/* Onglet Tournées */}
+        {mainTab === 'tournees' && (
+          <div className="space-y-6">
+            {(() => {
+              // Grouper les tournées par secteur et trier par ordre
+              const tourneesBySecteur: Record<string, any[]> = {};
+              
+              (tournees || []).forEach((t: any) => {
+                const secteur = t.secteur || 'Non défini';
+                if (!tourneesBySecteur[secteur]) {
+                  tourneesBySecteur[secteur] = [];
+                }
+                tourneesBySecteur[secteur].push(t);
+              });
+              
+              // Trier chaque groupe par ordre
+              Object.keys(tourneesBySecteur).forEach(secteur => {
+                tourneesBySecteur[secteur].sort((a: any, b: any) => {
+                  const ordreA = a.ordre || 999;
+                  const ordreB = b.ordre || 999;
+                  return ordreA - ordreB;
+                });
+              });
+              
+              // Trier les secteurs
+              const secteursTriees = Object.keys(tourneesBySecteur).sort((a, b) => {
+                if (a === 'Non défini') return 1;
+                if (b === 'Non défini') return -1;
+                return a.localeCompare(b, 'fr', { numeric: true });
+              });
+              
+              if (secteursTriees.length === 0) {
+                return (
+                  <div className="text-center py-12 text-[var(--text-muted)]">
+                    <Route className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>Aucune tournée configurée</p>
+                  </div>
+                );
+              }
+              
+              return secteursTriees.map(secteur => (
+                <div key={secteur}>
+                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Badge variant="blue" className="text-sm">Secteur {secteur}</Badge>
+                    <span className="text-sm text-[var(--text-muted)]">
+                      {tourneesBySecteur[secteur].length} tournée{tourneesBySecteur[secteur].length > 1 ? 's' : ''}
+                    </span>
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    {tourneesBySecteur[secteur].map((tournee: any) => (
+                      <Card key={tournee.id} className="hover:border-lime-500/50 transition-colors">
+                        <CardBody className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-lime-500/20 flex items-center justify-center">
+                                <span className="text-lime-400 font-bold">{tournee.ordre || '-'}</span>
+                              </div>
+                              <div>
+                                <p className="font-bold">{tournee.nom}</p>
+                                <p className="text-sm text-lime-400 font-semibold">{tournee.code}</p>
+                              </div>
+                            </div>
+                            <Badge variant={tournee.actif ? 'green' : 'gray'} className="text-[10px]">
+                              {tournee.actif ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </div>
+                          
+                          <div className="space-y-2 text-sm text-[var(--text-muted)]">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-4 h-4" />
+                              <span>{tournee.nb_ascenseurs || 0} ascenseurs</span>
+                            </div>
+                            
+                            {tournee.technicien && (
+                              <div className="flex items-center gap-2">
+                                <User className="w-4 h-4" />
+                                <span>{tournee.technicien.prenom} {tournee.technicien.nom}</span>
+                              </div>
+                            )}
+                            
+                            {tournee.frequence && (
+                              <div className="flex items-center gap-2">
+                                <Calendar className="w-4 h-4" />
+                                <span className="capitalize">{tournee.frequence}</span>
+                              </div>
+                            )}
+                          </div>
+                        </CardBody>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         )}
       </div>
