@@ -1895,11 +1895,31 @@ export function ParcAscenseursPage() {
   const vraisPannes = useMemo(() => {
     if (!enrichedPannes || enrichedPannes.length === 0) return [];
     
+    // Fonction pour extraire la date (priorité data_wpanne.DATE format YYYYMMDD)
+    const getDateFromPanne = (p: any): Date | null => {
+      const data = p.data_wpanne || {};
+      // Essayer data_wpanne.DATE (format YYYYMMDD)
+      if (data.DATE) {
+        const dateStr = String(data.DATE);
+        if (dateStr.length === 8) {
+          const year = parseInt(dateStr.substring(0, 4));
+          const month = parseInt(dateStr.substring(4, 6)) - 1;
+          const day = parseInt(dateStr.substring(6, 8));
+          return new Date(year, month, day);
+        }
+      }
+      // Fallback sur date_appel (format ISO)
+      if (p.date_appel) {
+        return new Date(p.date_appel);
+      }
+      return null;
+    };
+    
     // Filtrer les vraies pannes
     const filtered = enrichedPannes.filter((p: any) => {
       const data = p.data_wpanne || {};
       const cause = data.CAUSE || p.cause;
-      if (cause === undefined || cause === null) return true; // Garder si pas de cause
+      if (cause === undefined || cause === null) return true;
       const causeStr = String(cause);
       const isVisite = causeStr === '99';
       const isControle = causeStr === '0' || causeStr === '00';
@@ -1908,17 +1928,19 @@ export function ParcAscenseursPage() {
     
     // Trier par date décroissante
     const sorted = filtered.sort((a: any, b: any) => {
-      // Utiliser date_appel
-      const dateStrA = a.date_appel || '';
-      const dateStrB = b.date_appel || '';
-      // Comparaison string ISO fonctionne pour le tri
-      return dateStrB.localeCompare(dateStrA);
+      const dateA = getDateFromPanne(a);
+      const dateB = getDateFromPanne(b);
+      const timeA = dateA ? dateA.getTime() : 0;
+      const timeB = dateB ? dateB.getTime() : 0;
+      return timeB - timeA;
     });
     
     console.log(`vraisPannes: ${sorted.length} pannes après filtrage cause`);
     if (sorted.length > 0) {
-      console.log('Première panne (plus récente):', sorted[0].date_appel, sorted[0].code_appareil);
-      console.log('Dernière panne (plus ancienne):', sorted[sorted.length-1].date_appel);
+      const firstDate = getDateFromPanne(sorted[0]);
+      const lastDate = getDateFromPanne(sorted[sorted.length-1]);
+      console.log('Première panne (plus récente):', firstDate?.toISOString().split('T')[0], sorted[0].code_appareil);
+      console.log('Dernière panne (plus ancienne):', lastDate?.toISOString().split('T')[0]);
     }
     
     return sorted;
@@ -1956,12 +1978,30 @@ export function ParcAscenseursPage() {
       return 0;
     }
     
+    // Fonction pour extraire la date
+    const getDateFromPanne = (p: any): Date | null => {
+      const data = p.data_wpanne || {};
+      if (data.DATE) {
+        const dateStr = String(data.DATE);
+        if (dateStr.length === 8) {
+          const year = parseInt(dateStr.substring(0, 4));
+          const month = parseInt(dateStr.substring(4, 6)) - 1;
+          const day = parseInt(dateStr.substring(6, 8));
+          return new Date(year, month, day);
+        }
+      }
+      if (p.date_appel) {
+        return new Date(p.date_appel);
+      }
+      return null;
+    };
+    
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     
     const count = vraisPannes.filter((p: any) => {
-      if (!p.date_appel) return false;
-      const dateAppel = new Date(p.date_appel);
+      const dateAppel = getDateFromPanne(p);
+      if (!dateAppel) return false;
       return dateAppel >= thirtyDaysAgo;
     }).length;
     
@@ -2365,8 +2405,21 @@ export function ParcAscenseursPage() {
             ) : (
               vraisPannes.slice(0, 30).map((panne: any) => {
                 const data = panne.data_wpanne || {};
-                const dateAppel = panne.date_appel ? parseISO(panne.date_appel) : null;
-                const cause = data.CAUSE || panne.cause;
+                
+                // Extraire la date depuis data.DATE (YYYYMMDD) ou date_appel
+                let dateAppel: Date | null = null;
+                if (data.DATE) {
+                  const dateStr = String(data.DATE);
+                  if (dateStr.length === 8) {
+                    const year = parseInt(dateStr.substring(0, 4));
+                    const month = parseInt(dateStr.substring(4, 6)) - 1;
+                    const day = parseInt(dateStr.substring(6, 8));
+                    dateAppel = new Date(year, month, day);
+                  }
+                } else if (panne.date_appel) {
+                  dateAppel = parseISO(panne.date_appel);
+                }
+                
                 const heureAppel = formatHeureHHMM(data.APPEL);
                 const motif = data.Libelle || panne.motif;
                 const panneType = data.PANNES;
