@@ -529,9 +529,11 @@ function ChecklistModal({ appareil, onClose, onSave }: { appareil: any; onClose:
                                 <Input value={cp.measurement} onChange={e => updateCheckpoint(item.code, 'measurement', e.target.value)} placeholder="Mesure / Valeur relevée" className="h-8 text-sm" />
                               </div>
                             )}
-                            <div className="mt-2">
-                              <Input value={cp.remarks} onChange={e => updateCheckpoint(item.code, 'remarks', e.target.value)} placeholder={cp.status === 'NC' ? 'Remarques (obligatoire pour NC)' : 'Remarques (optionnel)'} className={`h-8 text-sm ${cp.status === 'NC' && !cp.remarks ? 'border-red-500' : ''}`} />
-                            </div>
+                            {cp.status === 'NC' && (
+                              <div className="mt-2">
+                                <Input value={cp.remarks} onChange={e => updateCheckpoint(item.code, 'remarks', e.target.value)} placeholder="Remarques (obligatoire)" className={`h-8 text-sm ${!cp.remarks ? 'border-red-500' : ''}`} />
+                              </div>
+                            )}
                           </div>
                         );
                       })}

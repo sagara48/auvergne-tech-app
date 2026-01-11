@@ -275,12 +275,14 @@ function NoteFormModal({
   note, 
   onClose, 
   onSave,
-  defaultAscenseurId
+  defaultAscenseurId,
+  hideAscenseurSelect
 }: { 
   note?: Note; 
   onClose: () => void; 
   onSave: (data: Partial<Note>) => void;
   defaultAscenseurId?: string;
+  hideAscenseurSelect?: boolean;
 }) {
   const [titre, setTitre] = useState(note?.titre || '');
   const [contenu, setContenu] = useState(note?.contenu || '');
@@ -375,10 +377,12 @@ function NoteFormModal({
               <option value="">Sans dossier</option>
               {dossiers?.map(d => <option key={d.id} value={d.id}>{d.nom}</option>)}
             </Select>
-            <Select value={ascenseurId} onChange={e => setAscenseurId(e.target.value)} className="w-36">
-              <option value="">Aucun ascenseur</option>
-              {ascenseurs?.map(a => <option key={a.id} value={a.id}>{a.code} - {a.adresse?.substring(0, 20)}</option>)}
-            </Select>
+            {!hideAscenseurSelect && (
+              <Select value={ascenseurId} onChange={e => setAscenseurId(e.target.value)} className="w-36">
+                <option value="">Aucun ascenseur</option>
+                {ascenseurs?.map(a => <option key={a.id} value={a.id}>{a.code} - {a.adresse?.substring(0, 20)}</option>)}
+              </Select>
+            )}
           </div>
 
           {/* Tabs */}
@@ -922,6 +926,7 @@ export function ContextNotes({
           onClose={() => setShowForm(false)}
           onSave={handleSave}
           defaultAscenseurId={contextType === 'ascenseur' ? contextId : undefined}
+          hideAscenseurSelect={contextType === 'mise_service' || contextType === 'travaux' || contextType === 'client'}
         />
       )}
     </div>
