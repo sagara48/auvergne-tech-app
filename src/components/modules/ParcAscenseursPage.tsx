@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
-import { format, formatDistanceToNow, parseISO, differenceInHours } from 'date-fns';
+import { format, formatDistanceToNow, parseISO, differenceInHours, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
@@ -178,18 +178,44 @@ const getArrets = async () => {
   }
 };
 
-const getPannesRecentes = async (limit = 50) => {
+const getPannesRecentes = async (limit = 50, userSecteurs?: number[]) => {
   try {
-    const { data, error } = await supabase
+    // D'abord récupérer les pannes
+    const { data: pannes, error } = await supabase
       .from('parc_pannes')
       .select('*')
       .order('date_appel', { ascending: false })
-      .limit(limit);
+      .limit(limit * 2); // Récupérer plus pour filtrer ensuite
+    
     if (error) {
       console.warn('Table parc_pannes non disponible:', error.message);
       return [];
     }
-    return data || [];
+    
+    if (!pannes) return [];
+    
+    // Si pas de filtrage par secteurs, retourner tout
+    if (!userSecteurs || userSecteurs.length === 0) {
+      return pannes.slice(0, limit);
+    }
+    
+    // Récupérer les ascenseurs pour connaître leurs secteurs
+    const { data: ascenseurs } = await supabase
+      .from('parc_ascenseurs')
+      .select('id_wsoucont, secteur');
+    
+    const secteursMap: Record<number, number> = {};
+    (ascenseurs || []).forEach((a: any) => {
+      if (a.id_wsoucont) secteursMap[a.id_wsoucont] = a.secteur;
+    });
+    
+    // Filtrer les pannes par secteurs autorisés
+    return pannes
+      .filter((p: any) => {
+        const secteur = secteursMap[p.id_wsoucont];
+        return secteur && userSecteurs.includes(secteur);
+      })
+      .slice(0, limit);
   } catch {
     return [];
   }
@@ -794,21 +820,19 @@ function SyncModal({ onClose }: { onClose: () => void }) {
 // COMPOSANTS
 // =============================================
 
-// Widget Ascenseurs à l'arrêt
-function ArretsWidget({ arrets, onSelectArret }: { arrets: any[]; onSelectArret?: (arret: any) => void }) {
-  const [showAll, setShowAll] = useState(false);
-  
-  if (arrets.length === 0) {
+// Widget Ascenseurs à l'arrêt (compact)
+function ArretsWidget({ count, onClick }: { count: number; onClick?: () => void }) {
+  if (count === 0) {
     return (
       <Card className="bg-green-500/10 border-green-500/30">
-        <CardBody className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-500" />
+        <CardBody className="p-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+              <CheckCircle className="w-4 h-4 text-green-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-green-500">0</p>
-              <p className="text-sm text-[var(--text-muted)]">Ascenseur à l'arrêt</p>
+              <p className="text-lg font-bold text-green-500">0</p>
+              <p className="text-[10px] text-[var(--text-muted)]">À l'arrêt</p>
             </div>
           </div>
         </CardBody>
@@ -816,173 +840,23 @@ function ArretsWidget({ arrets, onSelectArret }: { arrets: any[]; onSelectArret?
     );
   }
   
-  // Fonction pour décoder les entités HTML
-  const decodeHtml = (text: string | null) => {
-    if (!text) return null;
-    return text
-      .replace(/&#13;/g, '\n')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .trim();
-  };
-  
-  // Fonction pour formater une heure HHMM
-  const formatHeureHHMM = (heureStr: string | null) => {
-    if (!heureStr) return null;
-    const h = heureStr.toString().padStart(4, '0');
-    return `${h.substring(0, 2)}h${h.substring(2, 4)}`;
-  };
-  
   return (
-    <>
-      <Card className="bg-red-500/10 border-red-500/30 cursor-pointer" onClick={() => setShowAll(true)}>
-        <CardBody className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center animate-pulse">
-                <AlertTriangle className="w-6 h-6 text-red-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-red-500">{arrets.length}</p>
-                <p className="text-sm text-[var(--text-muted)]">Ascenseur{arrets.length > 1 ? 's' : ''} à l'arrêt</p>
-              </div>
-            </div>
+    <Card 
+      className="bg-red-500/10 border-red-500/30 cursor-pointer hover:bg-red-500/15 transition-all" 
+      onClick={onClick}
+    >
+      <CardBody className="p-3">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center animate-pulse">
+            <AlertTriangle className="w-4 h-4 text-red-500" />
           </div>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {arrets.slice(0, 3).map(arret => {
-              const data = arret.data_warret || {};
-              const dateAppel = arret.date_appel ? parseISO(arret.date_appel) : new Date();
-              const heuresArret = differenceInHours(new Date(), dateAppel);
-              const heureAppel = formatHeureHHMM(data.APPEL || arret.heure_appel);
-              
-              return (
-                <div key={arret.id} className="p-2 bg-[var(--bg-tertiary)] rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm">{arret.code_appareil}</p>
-                      <p className="text-xs text-[var(--text-muted)] truncate">{arret.adresse}, {arret.ville}</p>
-                    </div>
-                    <Badge variant="red" className="text-[10px] ml-2">{heuresArret}h</Badge>
-                  </div>
-                </div>
-              );
-            })}
-            {arrets.length > 3 && (
-              <p className="text-xs text-center text-[var(--text-muted)] pt-1">
-                + {arrets.length - 3} autre{arrets.length - 3 > 1 ? 's' : ''} • Cliquer pour voir tout
-              </p>
-            )}
+          <div>
+            <p className="text-lg font-bold text-red-500">{count}</p>
+            <p className="text-[10px] text-[var(--text-muted)]">À l'arrêt</p>
           </div>
-        </CardBody>
-      </Card>
-      
-      {/* Modal liste complète des arrêts */}
-      {showAll && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <Card className="w-[900px] max-h-[85vh] overflow-hidden flex flex-col">
-            <CardBody className="p-0 flex-1 overflow-hidden flex flex-col">
-              {/* Header */}
-              <div className="p-4 border-b border-[var(--border-primary)] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
-                    <AlertTriangle className="w-5 h-5 text-red-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">Ascenseurs à l'arrêt</h2>
-                    <p className="text-sm text-[var(--text-muted)]">{arrets.length} appareil{arrets.length > 1 ? 's' : ''}</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowAll(false)} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
-                  <XCircle className="w-5 h-5" />
-                </button>
-              </div>
-              
-              {/* Liste */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {arrets.map(arret => {
-                  const data = arret.data_warret || {};
-                  const dateAppel = arret.date_appel ? parseISO(arret.date_appel) : new Date();
-                  const heuresArret = differenceInHours(new Date(), dateAppel);
-                  const heureAppel = formatHeureHHMM(data.APPEL || arret.heure_appel);
-                  const motif = data.Libelle || arret.motif;
-                  const demandeur = data.DEMAND || arret.demandeur;
-                  const notes = decodeHtml(data.NOTE2);
-                  
-                  return (
-                    <div key={arret.id} className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-red-500/30">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                            <Building2 className="w-5 h-5 text-red-500" />
-                          </div>
-                          <div>
-                            <p className="font-bold">{arret.code_appareil}</p>
-                            <p className="text-sm text-[var(--text-muted)]">{arret.adresse}, {arret.ville}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {arret.hors_contrat && (
-                            <Badge variant="gray">Hors contrat</Badge>
-                          )}
-                          <Badge variant="red" className="animate-pulse">
-                            À l'arrêt depuis {heuresArret}h
-                          </Badge>
-                        </div>
-                      </div>
-                      
-                      {/* Infos appel */}
-                      <div className="grid grid-cols-2 gap-4 mb-3">
-                        <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
-                          <p className="text-xs text-[var(--text-muted)] mb-1">Date & heure d'appel</p>
-                          <p className="text-sm font-medium">
-                            {format(dateAppel, 'EEEE dd MMMM yyyy', { locale: fr })}
-                            {heureAppel && ` à ${heureAppel}`}
-                          </p>
-                        </div>
-                        
-                        {demandeur && (
-                          <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
-                            <p className="text-xs text-[var(--text-muted)] mb-1">Demandeur</p>
-                            <p className="text-sm font-medium">{demandeur}</p>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Motif */}
-                      {motif && (
-                        <div className="p-3 bg-red-500/10 rounded-lg border border-red-500/20 mb-3">
-                          <p className="text-xs text-red-400 mb-1">Motif d'arrêt</p>
-                          <p className="text-sm">{motif}</p>
-                        </div>
-                      )}
-                      
-                      {/* Notes */}
-                      {notes && (
-                        <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
-                          <p className="text-xs text-[var(--text-muted)] mb-1">Notes</p>
-                          <p className="text-sm text-[var(--text-secondary)] whitespace-pre-line">{notes}</p>
-                        </div>
-                      )}
-                      
-                      {/* Infos techniques */}
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        <Badge variant="gray" className="text-[10px]">Secteur {arret.secteur}</Badge>
-                        {arret.marque && <Badge variant="gray" className="text-[10px]">{arret.marque}</Badge>}
-                        {arret.type_planning && (
-                          <Badge variant="blue" className="text-[10px]">{arret.type_planning} - {arret.nb_visites_an || 0} visites/an</Badge>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardBody>
-          </Card>
         </div>
-      )}
-    </>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -1656,6 +1530,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
 // PAGE PRINCIPALE
 // =============================================
 export function ParcAscenseursPage() {
+  const [mainTab, setMainTab] = useState<'parc' | 'arrets' | 'pannes'>('parc');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [secteurFilter, setSecteurFilter] = useState<string>('');
@@ -1700,6 +1575,13 @@ export function ParcAscenseursPage() {
     refetchInterval: 60000 // Refresh toutes les minutes
   });
   
+  // Pannes récentes filtrées par secteurs
+  const { data: pannesRecentes } = useQuery({
+    queryKey: ['parc-pannes-recentes', userSecteurs],
+    queryFn: () => getPannesRecentes(100, userSecteurs || []),
+    enabled: userSecteurs !== undefined
+  });
+  
   // Enrichir les arrêts avec les données des ascenseurs
   const enrichedArrets = useMemo(() => {
     if (!arrets || !ascenseurs) return [];
@@ -1741,6 +1623,29 @@ export function ParcAscenseursPage() {
     return enrichedArrets.filter((a: Arret) => userSecteurs.includes(a.secteur));
   }, [enrichedArrets, userSecteurs]);
   
+  // Enrichir les pannes avec les données des ascenseurs
+  const enrichedPannes = useMemo(() => {
+    if (!pannesRecentes || !ascenseurs) return [];
+    
+    const ascenseursMap: Record<number, any> = {};
+    ascenseurs.forEach((a: any) => {
+      if (a.id_wsoucont) ascenseursMap[a.id_wsoucont] = a;
+    });
+    
+    return pannesRecentes.map((panne: any) => {
+      const asc = ascenseursMap[panne.id_wsoucont];
+      return {
+        ...panne,
+        code_appareil: asc?.code_appareil || panne.code_appareil,
+        adresse: asc?.adresse,
+        ville: asc?.ville,
+        secteur: asc?.secteur,
+        marque: asc?.marque,
+        type_planning: asc?.type_planning
+      };
+    });
+  }, [pannesRecentes, ascenseurs]);
+  
   const { data: secteurs } = useQuery({
     queryKey: ['parc-secteurs'],
     queryFn: getSecteurs
@@ -1758,11 +1663,6 @@ export function ParcAscenseursPage() {
     queryFn: getLastSync
   });
   
-  const { data: stats } = useQuery({
-    queryKey: ['parc-stats'],
-    queryFn: getStats
-  });
-  
   // Stats sous contrat / hors contrat
   const contratStats = useMemo(() => {
     if (!ascenseurs) return { sousContrat: 0, horsContrat: 0 };
@@ -1770,6 +1670,17 @@ export function ParcAscenseursPage() {
     const horsContrat = ascenseurs.filter((a: any) => !a.type_planning).length;
     return { sousContrat, horsContrat };
   }, [ascenseurs]);
+  
+  // Compter les pannes des 30 derniers jours (déjà filtré par secteurs)
+  const pannes30j = useMemo(() => {
+    if (!enrichedPannes) return 0;
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    return enrichedPannes.filter((p: any) => {
+      if (!p.date_appel) return false;
+      return parseISO(p.date_appel) >= thirtyDaysAgo;
+    }).length;
+  }, [enrichedPannes]);
   
   const filteredAscenseurs = useMemo(() => {
     if (!ascenseurs) return [];
@@ -1794,11 +1705,40 @@ export function ParcAscenseursPage() {
     });
   }, [ascenseurs, search, secteurFilter, showArretOnly, contratFilter]);
   
+  // Fonction utilitaire pour formater la durée d'arrêt
+  const formatDureeArret = (dateAppel: Date) => {
+    const jours = differenceInDays(new Date(), dateAppel);
+    if (jours === 0) {
+      const heures = differenceInHours(new Date(), dateAppel);
+      return `${heures}h`;
+    }
+    return `${jours}j`;
+  };
+  
+  // Fonction pour décoder les entités HTML
+  const decodeHtml = (text: string | null) => {
+    if (!text) return null;
+    return text
+      .replace(/&#13;/g, '\n')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .trim();
+  };
+  
+  // Fonction pour formater une heure HHMM
+  const formatHeureHHMM = (heureStr: string | null) => {
+    if (!heureStr) return null;
+    const h = heureStr.toString().padStart(4, '0');
+    return `${h.substring(0, 2)}h${h.substring(2, 4)}`;
+  };
+  
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex-shrink-0 p-4 border-b border-[var(--border-primary)]">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-2xl font-bold">Parc Ascenseurs</h1>
             <p className="text-sm text-[var(--text-muted)]">
@@ -1812,174 +1752,390 @@ export function ParcAscenseursPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => setShowSyncModal(true)}>
-              <Cloud className="w-4 h-4" /> Synchronisation
+              <Cloud className="w-4 h-4" /> Sync
             </Button>
           </div>
         </div>
         
-        {/* Stats Cards */}
-        <div className="grid grid-cols-5 gap-4 mb-4">
-          <Card>
-            <CardBody className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                  <Building2 className="w-5 h-5 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{ascenseurs?.length || 0}</p>
-                  <p className="text-xs text-[var(--text-muted)]">Ascenseurs</p>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-          
-          <ArretsWidget arrets={filteredArrets || []} />
-          
-          <Card 
-            className={`cursor-pointer transition-all ${contratFilter === 'contrat' ? 'border-green-500' : ''}`}
-            onClick={() => setContratFilter(contratFilter === 'contrat' ? 'all' : 'contrat')}
-          >
-            <CardBody className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-green-500">{contratStats.sousContrat}</p>
-                  <p className="text-xs text-[var(--text-muted)]">Sous contrat</p>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-          
-          <Card 
-            className={`cursor-pointer transition-all ${contratFilter === 'hors_contrat' ? 'border-gray-500' : ''}`}
-            onClick={() => setContratFilter(contratFilter === 'hors_contrat' ? 'all' : 'hors_contrat')}
-          >
-            <CardBody className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gray-500/20 flex items-center justify-center">
-                  <XCircle className="w-5 h-5 text-gray-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-400">{contratStats.horsContrat}</p>
-                  <p className="text-xs text-[var(--text-muted)]">Hors contrat</p>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-          
-          <Card>
-            <CardBody className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                  <Wrench className="w-5 h-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats?.pannes30j || 0}</p>
-                  <p className="text-xs text-[var(--text-muted)]">Pannes (30j)</p>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-        </div>
-        
-        {/* Filters */}
+        {/* Stats Cards Compacts + Onglets */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher par code, adresse, ville..."
-              className="pl-10"
+          {/* Stats compactes */}
+          <div className="flex items-center gap-2">
+            <Card className="bg-blue-500/10 border-blue-500/30">
+              <CardBody className="p-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <Building2 className="w-4 h-4 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold">{ascenseurs?.length || 0}</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">Total</p>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+            
+            <ArretsWidget 
+              count={filteredArrets?.length || 0} 
+              onClick={() => setMainTab('arrets')}
             />
+            
+            <Card 
+              className={`cursor-pointer transition-all ${contratFilter === 'contrat' ? 'border-green-500 bg-green-500/15' : 'bg-green-500/5'}`}
+              onClick={() => {
+                setMainTab('parc');
+                setContratFilter(contratFilter === 'contrat' ? 'all' : 'contrat');
+              }}
+            >
+              <CardBody className="p-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-green-500">{contratStats.sousContrat}</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">Contrat</p>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+            
+            <Card 
+              className={`cursor-pointer transition-all ${contratFilter === 'hors_contrat' ? 'border-gray-500 bg-gray-500/15' : 'bg-gray-500/5'}`}
+              onClick={() => {
+                setMainTab('parc');
+                setContratFilter(contratFilter === 'hors_contrat' ? 'all' : 'hors_contrat');
+              }}
+            >
+              <CardBody className="p-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gray-500/20 flex items-center justify-center">
+                    <XCircle className="w-4 h-4 text-gray-500" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-gray-400">{contratStats.horsContrat}</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">HC</p>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+            
+            <Card 
+              className="cursor-pointer hover:bg-orange-500/15 transition-all"
+              onClick={() => setMainTab('pannes')}
+            >
+              <CardBody className="p-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                    <Wrench className="w-4 h-4 text-orange-500" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold">{pannes30j}</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">Pannes 30j</p>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
           </div>
           
-          <Select value={secteurFilter} onChange={e => setSecteurFilter(e.target.value)} className="w-40">
-            <option value="">Tous secteurs</option>
-            {availableSecteurs?.map((s: any) => (
-              <option key={s.numero} value={s.numero}>{s.nom}</option>
-            ))}
-          </Select>
+          {/* Séparateur */}
+          <div className="h-10 w-px bg-[var(--border-primary)]" />
           
-          <Select value={contratFilter} onChange={e => setContratFilter(e.target.value as any)} className="w-40">
-            <option value="all">Tous contrats</option>
-            <option value="contrat">Sous contrat</option>
-            <option value="hors_contrat">Hors contrat</option>
-          </Select>
-          
-          <Button
-            variant={showArretOnly ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setShowArretOnly(!showArretOnly)}
-          >
-            <AlertTriangle className="w-4 h-4" />
-            À l'arrêt ({filteredArrets?.length || 0})
-          </Button>
-          
+          {/* Onglets principaux */}
           <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-lg p-1">
             <button
-              onClick={() => setView('grid')}
-              className={`p-2 rounded ${view === 'grid' ? 'bg-orange-500 text-white' : 'text-[var(--text-muted)]'}`}
+              onClick={() => setMainTab('parc')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                mainTab === 'parc' ? 'bg-orange-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
             >
-              <LayoutGrid className="w-4 h-4" />
+              <Building2 className="w-4 h-4 inline mr-1" />
+              Parc
             </button>
             <button
-              onClick={() => setView('list')}
-              className={`p-2 rounded ${view === 'list' ? 'bg-orange-500 text-white' : 'text-[var(--text-muted)]'}`}
+              onClick={() => setMainTab('arrets')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                mainTab === 'arrets' ? 'bg-red-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
             >
-              <List className="w-4 h-4" />
+              <AlertTriangle className="w-4 h-4 inline mr-1" />
+              Arrêts ({filteredArrets?.length || 0})
+            </button>
+            <button
+              onClick={() => setMainTab('pannes')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                mainTab === 'pannes' ? 'bg-orange-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Wrench className="w-4 h-4 inline mr-1" />
+              Pannes
             </button>
           </div>
         </div>
+        
+        {/* Filters - seulement pour l'onglet Parc */}
+        {mainTab === 'parc' && (
+          <div className="flex items-center gap-3 flex-wrap mt-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Rechercher par code, adresse, ville..."
+                className="pl-10"
+              />
+            </div>
+            
+            <Select value={secteurFilter} onChange={e => setSecteurFilter(e.target.value)} className="w-40">
+              <option value="">Tous secteurs</option>
+              {availableSecteurs?.map((s: any) => (
+                <option key={s.numero} value={s.numero}>{s.nom}</option>
+              ))}
+            </Select>
+            
+            <Select value={contratFilter} onChange={e => setContratFilter(e.target.value as any)} className="w-40">
+              <option value="all">Tous contrats</option>
+              <option value="contrat">Sous contrat</option>
+              <option value="hors_contrat">Hors contrat</option>
+            </Select>
+            
+            <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-lg p-1">
+              <button
+                onClick={() => setView('grid')}
+                className={`p-2 rounded ${view === 'grid' ? 'bg-orange-500 text-white' : 'text-[var(--text-muted)]'}`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setView('list')}
+                className={`p-2 rounded ${view === 'list' ? 'bg-orange-500 text-white' : 'text-[var(--text-muted)]'}`}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Content */}
       <div className="flex-1 overflow-auto p-4">
-        {isLoading ? (
-          <div className="text-center py-12 text-[var(--text-muted)]">Chargement...</div>
-        ) : view === 'grid' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredAscenseurs.map(ascenseur => (
-              <AscenseurCard 
-                key={ascenseur.id} 
-                ascenseur={ascenseur}
-                onClick={() => setSelectedAscenseur(ascenseur)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-[var(--border-primary)]">
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Code</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Adresse</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Ville</th>
-                  <th className="text-center px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Secteur</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Marque</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Planning</th>
-                  <th className="text-center px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Statut</th>
-                </tr>
-              </thead>
-              <tbody>
+        {/* Onglet Parc */}
+        {mainTab === 'parc' && (
+          <>
+            {isLoading ? (
+              <div className="text-center py-12 text-[var(--text-muted)]">Chargement...</div>
+            ) : view === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredAscenseurs.map(ascenseur => (
-                  <AscenseurRow 
+                  <AscenseurCard 
                     key={ascenseur.id} 
                     ascenseur={ascenseur}
                     onClick={() => setSelectedAscenseur(ascenseur)}
                   />
                 ))}
-              </tbody>
-            </table>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-[var(--border-primary)]">
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Code</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Adresse</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Ville</th>
+                      <th className="text-center px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Secteur</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Marque</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Planning</th>
+                      <th className="text-center px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAscenseurs.map(ascenseur => (
+                      <AscenseurRow 
+                        key={ascenseur.id} 
+                        ascenseur={ascenseur}
+                        onClick={() => setSelectedAscenseur(ascenseur)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            
+            {filteredAscenseurs.length === 0 && !isLoading && (
+              <div className="text-center py-12 text-[var(--text-muted)]">
+                <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Aucun ascenseur trouvé</p>
+              </div>
+            )}
+          </>
+        )}
+        
+        {/* Onglet Arrêts */}
+        {mainTab === 'arrets' && (
+          <div className="space-y-3">
+            {filteredArrets.length === 0 ? (
+              <div className="text-center py-12 text-[var(--text-muted)]">
+                <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500 opacity-50" />
+                <p className="text-green-500 font-medium">Aucun ascenseur à l'arrêt</p>
+                <p className="text-sm">Tous les appareils sont en fonctionnement</p>
+              </div>
+            ) : (
+              filteredArrets.map((arret: any) => {
+                const data = arret.data_warret || {};
+                const dateAppel = arret.date_appel ? parseISO(arret.date_appel) : new Date();
+                const dureeArret = formatDureeArret(dateAppel);
+                const heureAppel = formatHeureHHMM(data.APPEL || arret.heure_appel);
+                const motif = data.Libelle || arret.motif;
+                const demandeur = data.DEMAND || arret.demandeur;
+                const notes = decodeHtml(data.NOTE2);
+                
+                return (
+                  <Card key={arret.id} className="border-red-500/30">
+                    <CardBody className="p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                            <Building2 className="w-5 h-5 text-red-500" />
+                          </div>
+                          <div>
+                            <p className="font-bold">{arret.code_appareil}</p>
+                            <p className="text-sm text-[var(--text-muted)]">{arret.adresse}, {arret.ville}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {arret.hors_contrat && (
+                            <Badge variant="gray">Hors contrat</Badge>
+                          )}
+                          <Badge variant="red" className="animate-pulse">
+                            À l'arrêt depuis {dureeArret}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg">
+                          <p className="text-[10px] text-[var(--text-muted)]">Date appel</p>
+                          <p className="text-sm font-medium">{format(dateAppel, 'dd/MM/yyyy', { locale: fr })}</p>
+                        </div>
+                        {heureAppel && (
+                          <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg">
+                            <p className="text-[10px] text-[var(--text-muted)]">Heure</p>
+                            <p className="text-sm font-medium">{heureAppel}</p>
+                          </div>
+                        )}
+                        {demandeur && (
+                          <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg">
+                            <p className="text-[10px] text-[var(--text-muted)]">Demandeur</p>
+                            <p className="text-sm font-medium truncate">{demandeur}</p>
+                          </div>
+                        )}
+                        <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg">
+                          <p className="text-[10px] text-[var(--text-muted)]">Secteur</p>
+                          <p className="text-sm font-medium">{arret.secteur}</p>
+                        </div>
+                      </div>
+                      
+                      {motif && (
+                        <div className="p-2 bg-red-500/10 rounded-lg border border-red-500/20 mb-3">
+                          <p className="text-[10px] text-red-400">Motif</p>
+                          <p className="text-sm">{motif}</p>
+                        </div>
+                      )}
+                      
+                      {notes && (
+                        <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg">
+                          <p className="text-[10px] text-[var(--text-muted)]">Notes</p>
+                          <p className="text-sm text-[var(--text-secondary)] whitespace-pre-line">{notes}</p>
+                        </div>
+                      )}
+                      
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {arret.marque && <Badge variant="gray" className="text-[10px]">{arret.marque}</Badge>}
+                        {arret.type_planning && (
+                          <Badge variant="blue" className="text-[10px]">{arret.type_planning} - {arret.nb_visites_an || 0} vis/an</Badge>
+                        )}
+                      </div>
+                    </CardBody>
+                  </Card>
+                );
+              })
+            )}
           </div>
         )}
         
-        {filteredAscenseurs.length === 0 && !isLoading && (
-          <div className="text-center py-12 text-[var(--text-muted)]">
-            <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>Aucun ascenseur trouvé</p>
+        {/* Onglet Pannes */}
+        {mainTab === 'pannes' && (
+          <div className="space-y-3">
+            <div className="text-sm text-[var(--text-muted)] mb-4">
+              {enrichedPannes.length} dernières pannes (filtrées par vos secteurs)
+            </div>
+            
+            {enrichedPannes.length === 0 ? (
+              <div className="text-center py-12 text-[var(--text-muted)]">
+                <Wrench className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Aucune panne enregistrée</p>
+              </div>
+            ) : (
+              enrichedPannes.slice(0, 50).map((panne: any) => {
+                const data = panne.data_wpanne || {};
+                const dateAppel = panne.date_appel ? parseISO(panne.date_appel) : null;
+                const cause = data.CAUSE || panne.cause;
+                const isVisite = cause === '99' || cause === 99;
+                const isControle = cause === '0' || cause === 0 || cause === '00';
+                const heureAppel = formatHeureHHMM(data.APPEL);
+                const motif = data.Libelle || panne.motif;
+                const panneType = data.PANNES;
+                const depanneur = data.DEPANNEUR;
+                
+                // Skip les visites (cause 99) dans l'onglet pannes
+                if (isVisite || isControle) return null;
+                
+                return (
+                  <Card key={panne.id}>
+                    <CardBody className="p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                            <Wrench className="w-5 h-5 text-orange-500" />
+                          </div>
+                          <div>
+                            <p className="font-bold">{panne.code_appareil}</p>
+                            <p className="text-sm text-[var(--text-muted)]">{panne.adresse}, {panne.ville}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {dateAppel && (
+                            <p className="text-sm font-medium">{format(dateAppel, 'dd/MM/yyyy', { locale: fr })}</p>
+                          )}
+                          {heureAppel && (
+                            <p className="text-xs text-[var(--text-muted)]">{heureAppel}</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {motif && (
+                        <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg mb-2">
+                          <p className="text-sm">{motif}</p>
+                        </div>
+                      )}
+                      
+                      {panneType && (
+                        <div className="p-2 bg-orange-500/10 rounded-lg border border-orange-500/20 mb-2">
+                          <p className="text-[10px] text-orange-400">Type de panne</p>
+                          <p className="text-sm">{panneType}</p>
+                        </div>
+                      )}
+                      
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="gray" className="text-[10px]">Secteur {panne.secteur}</Badge>
+                        {depanneur && <Badge variant="blue" className="text-[10px]">{depanneur}</Badge>}
+                        {cause && <Badge variant="orange" className="text-[10px]">Cause {cause}</Badge>}
+                      </div>
+                    </CardBody>
+                  </Card>
+                );
+              }).filter(Boolean)
+            )}
           </div>
         )}
       </div>
