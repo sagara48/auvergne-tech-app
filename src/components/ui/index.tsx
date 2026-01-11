@@ -167,7 +167,7 @@ interface CardProps {
   children: React.ReactNode;
 }
 
-export function Card({ className, children }: CardProps) {
+export function Card({ className, children, onClick, style }: CardProps & { onClick?: (e: React.MouseEvent) => void; style?: React.CSSProperties }) {
   return (
     <div
       className={cn(
@@ -175,6 +175,8 @@ export function Card({ className, children }: CardProps) {
         'bg-[var(--bg-secondary)] border border-[var(--border-secondary)]',
         className
       )}
+      onClick={onClick}
+      style={style}
     >
       {children}
     </div>

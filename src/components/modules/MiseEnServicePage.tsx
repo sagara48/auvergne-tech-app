@@ -939,8 +939,12 @@ function AppareilDetailModal({ appareil, onClose, onEdit, onArchive, onRefresh }
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <Card className="w-[900px] max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      {/* Backdrop - cliquer dessus ferme le modal */}
+      <div className="absolute inset-0" onClick={onClose} />
+      
+      {/* Contenu du modal - ne propage pas les clics */}
+      <Card className="w-[900px] max-h-[90vh] overflow-hidden flex flex-col relative z-10">
         <CardBody className="p-0 flex-1 overflow-hidden flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-[var(--border-primary)] flex-shrink-0">
