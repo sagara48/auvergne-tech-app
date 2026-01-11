@@ -5,7 +5,8 @@ import type {
   ChatChannel, ChatMessage, ChatMessageRead, Note, NoteCategory,
   Notification, NotificationPreferences, NotificationType, NotificationPriority,
   Commande, CommandeLigne, StatutCommande,
-  NFCTag, NFCScan, TypeTagNFC, NFCAction
+  NFCTag, NFCScan, TypeTagNFC, NFCAction,
+  TypeDemande, StatutDemande, DemandeHistorique
 } from '@/types';
 import { format, addDays, getWeek, getYear } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -378,6 +379,78 @@ export async function retirerStockVehicule(
     notes: notes || `Retour depuis véhicule`,
     effectue_par: technicienId,
   });
+}
+
+// Transférer du stock entre deux véhicules
+export async function transfertStockVehicule(
+  vehiculeSourceId: string,
+  vehiculeDestId: string,
+  articleId: string,
+  quantite: number,
+  technicienId: string,
+  notes?: string
+): Promise<void> {
+  // 1. Vérifier et réduire le stock du véhicule source
+  const { data: source } = await supabase
+    .from('stock_vehicule')
+    .select('id, quantite')
+    .eq('vehicule_id', vehiculeSourceId)
+    .eq('article_id', articleId)
+    .single();
+
+  if (!source) throw new Error('Article non trouvé dans le véhicule source');
+  if (source.quantite < quantite) throw new Error('Quantité insuffisante dans le véhicule source');
+
+  const newSourceQty = source.quantite - quantite;
+  if (newSourceQty <= 0) {
+    await supabase.from('stock_vehicule').delete().eq('id', source.id);
+  } else {
+    await supabase
+      .from('stock_vehicule')
+      .update({ quantite: newSourceQty })
+      .eq('id', source.id);
+  }
+
+  // 2. Ajouter au stock du véhicule destination
+  const { data: dest } = await supabase
+    .from('stock_vehicule')
+    .select('id, quantite')
+    .eq('vehicule_id', vehiculeDestId)
+    .eq('article_id', articleId)
+    .single();
+
+  if (dest) {
+    await supabase
+      .from('stock_vehicule')
+      .update({ quantite: dest.quantite + quantite })
+      .eq('id', dest.id);
+  } else {
+    await supabase
+      .from('stock_vehicule')
+      .insert({ vehicule_id: vehiculeDestId, article_id: articleId, quantite, quantite_min: 0 });
+  }
+
+  // 3. Créer les mouvements de stock (sortie source + entrée dest)
+  await supabase.from('stock_mouvements').insert([
+    {
+      article_id: articleId,
+      type_mouvement: 'sortie',
+      quantite,
+      motif: 'transfert_vehicule',
+      vehicule_id: vehiculeSourceId,
+      notes: notes || `Transfert vers autre véhicule`,
+      effectue_par: technicienId,
+    },
+    {
+      article_id: articleId,
+      type_mouvement: 'entree',
+      quantite,
+      motif: 'transfert_vehicule',
+      vehicule_id: vehiculeDestId,
+      notes: notes || `Transfert depuis autre véhicule`,
+      effectue_par: technicienId,
+    }
+  ]);
 }
 
 // Définir le stock initial d'un véhicule (sans mouvement)
@@ -779,14 +852,37 @@ export async function deleteVehicule(id: string): Promise<void> {
 // ================================================
 // DEMANDES
 // ================================================
-export async function getDemandes(includeArchived = false): Promise<Demande[]> {
+export async function getDemandes(options?: { 
+  includeArchived?: boolean; 
+  technicienId?: string;
+  type?: TypeDemande;
+  statut?: StatutDemande;
+}): Promise<Demande[]> {
   let query = supabase
     .from('demandes')
-    .select('*, technicien:techniciens(*)')
+    .select(`
+      *,
+      technicien:techniciens!demandes_technicien_id_fkey(*),
+      traite_par_technicien:techniciens!demandes_traite_par_fkey(*),
+      article:stock_articles(*),
+      ascenseur:ascenseurs(*, client:clients(*))
+    `)
     .order('created_at', { ascending: false });
   
-  if (!includeArchived) {
+  if (!options?.includeArchived) {
     query = query.or('archive.is.null,archive.eq.false');
+  }
+  
+  if (options?.technicienId) {
+    query = query.eq('technicien_id', options.technicienId);
+  }
+  
+  if (options?.type) {
+    query = query.eq('type_demande', options.type);
+  }
+  
+  if (options?.statut) {
+    query = query.eq('statut', options.statut);
   }
   
   const { data, error } = await query;
@@ -794,17 +890,219 @@ export async function getDemandes(includeArchived = false): Promise<Demande[]> {
   return data || [];
 }
 
-export async function createDemande(demande: Partial<Demande>): Promise<Demande> {
-  const code = `DEM-${String(Date.now()).slice(-6)}`;
-  const { data, error } = await supabase.from('demandes').insert({ ...demande, code }).select().single();
+export async function getDemandeById(id: string): Promise<Demande | null> {
+  const { data, error } = await supabase
+    .from('demandes')
+    .select(`
+      *,
+      technicien:techniciens!demandes_technicien_id_fkey(*),
+      traite_par_technicien:techniciens!demandes_traite_par_fkey(*),
+      article:stock_articles(*),
+      ascenseur:ascenseurs(*, client:clients(*))
+    `)
+    .eq('id', id)
+    .single();
   if (error) throw error;
   return data;
 }
 
+export async function createDemande(demande: Partial<Demande>): Promise<Demande> {
+  const code = `DEM-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+  const { data, error } = await supabase
+    .from('demandes')
+    .insert({ ...demande, code, statut: demande.statut || 'en_attente' })
+    .select()
+    .single();
+  if (error) throw error;
+  
+  // Créer l'entrée historique
+  await supabase.from('demandes_historique').insert({
+    demande_id: data.id,
+    action: 'creation',
+    nouveau_statut: data.statut,
+    effectue_par: demande.technicien_id,
+    commentaire: 'Demande créée'
+  });
+  
+  return data;
+}
+
 export async function updateDemande(id: string, data: Partial<Demande>): Promise<Demande> {
-  const { data: result, error } = await supabase.from('demandes').update(data).eq('id', id).select().single();
+  const { data: result, error } = await supabase
+    .from('demandes')
+    .update({ ...data, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
   if (error) throw error;
   return result;
+}
+
+export async function traiterDemande(
+  id: string, 
+  statut: StatutDemande, 
+  traitePar: string, 
+  commentaire?: string,
+  motifRefus?: string
+): Promise<Demande> {
+  // Récupérer l'ancien statut
+  const { data: ancienne } = await supabase
+    .from('demandes')
+    .select('statut')
+    .eq('id', id)
+    .single();
+  
+  const updateData: any = {
+    statut,
+    traite_par: traitePar,
+    date_traitement: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  
+  if (commentaire) updateData.commentaire_admin = commentaire;
+  if (motifRefus) updateData.motif_refus = motifRefus;
+  
+  const { data: result, error } = await supabase
+    .from('demandes')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  
+  // Créer l'entrée historique
+  await supabase.from('demandes_historique').insert({
+    demande_id: id,
+    action: statut === 'approuve' ? 'approbation' : statut === 'refuse' ? 'refus' : 'modification',
+    ancien_statut: ancienne?.statut,
+    nouveau_statut: statut,
+    effectue_par: traitePar,
+    commentaire: commentaire || motifRefus || `Statut changé en ${statut}`
+  });
+  
+  // Si c'est une demande de congé/RTT approuvée, créer l'événement planning
+  if (statut === 'approuve' && result.type_demande && ['conge', 'rtt'].includes(result.type_demande)) {
+    await supabase.from('planning_events').insert({
+      technicien_id: result.technicien_id,
+      type_event: result.type_demande,
+      titre: result.type_demande === 'conge' ? 'Congé' : 'RTT',
+      date_debut: result.date_debut,
+      date_fin: result.date_fin,
+      journee_complete: true,
+      description: result.description,
+    });
+  }
+  
+  return result;
+}
+
+export async function getDemandeHistorique(demandeId: string): Promise<DemandeHistorique[]> {
+  const { data, error } = await supabase
+    .from('demandes_historique')
+    .select('*, effectue_par_technicien:techniciens(*)')
+    .eq('demande_id', demandeId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addDemandeComment(
+  demandeId: string, 
+  commentaire: string, 
+  effectuePar: string
+): Promise<void> {
+  await supabase.from('demandes_historique').insert({
+    demande_id: demandeId,
+    action: 'commentaire',
+    commentaire,
+    effectue_par: effectuePar
+  });
+}
+
+// Vérifier les conflits de congés
+export async function checkConflitsConges(
+  technicienId: string,
+  dateDebut: string,
+  dateFin: string
+): Promise<{ hasConflict: boolean; conflits: Demande[] }> {
+  const { data, error } = await supabase
+    .from('demandes')
+    .select('*, technicien:techniciens(*)')
+    .in('type_demande', ['conge', 'rtt'])
+    .eq('statut', 'approuve')
+    .neq('technicien_id', technicienId)
+    .or(`date_debut.lte.${dateFin},date_fin.gte.${dateDebut}`);
+  
+  if (error) throw error;
+  
+  // Filtrer pour ne garder que les vraies intersections
+  const conflits = (data || []).filter(d => {
+    const dDebut = new Date(d.date_debut!);
+    const dFin = new Date(d.date_fin!);
+    const debut = new Date(dateDebut);
+    const fin = new Date(dateFin);
+    return dDebut <= fin && dFin >= debut;
+  });
+  
+  return { hasConflict: conflits.length > 0, conflits };
+}
+
+// Calculer le nombre de jours ouvrés entre deux dates
+export function calculerJoursOuvres(dateDebut: string, dateFin: string, demiJourneeDebut = false, demiJourneeFin = false): number {
+  const debut = new Date(dateDebut);
+  const fin = new Date(dateFin);
+  let jours = 0;
+  
+  const current = new Date(debut);
+  while (current <= fin) {
+    const dayOfWeek = current.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Pas samedi/dimanche
+      jours++;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  
+  // Ajuster pour les demi-journées
+  if (demiJourneeDebut) jours -= 0.5;
+  if (demiJourneeFin) jours -= 0.5;
+  
+  return Math.max(0, jours);
+}
+
+// Statistiques des demandes
+export async function getDemandesStats(technicienId?: string): Promise<{
+  total: number;
+  par_statut: Record<string, number>;
+  par_type: Record<string, number>;
+  en_attente_depuis_48h: number;
+}> {
+  let query = supabase.from('demandes').select('*').or('archive.is.null,archive.eq.false');
+  
+  if (technicienId) {
+    query = query.eq('technicien_id', technicienId);
+  }
+  
+  const { data, error } = await query;
+  if (error) throw error;
+  
+  const demandes = data || [];
+  const maintenant = new Date();
+  const il_y_a_48h = new Date(maintenant.getTime() - 48 * 60 * 60 * 1000);
+  
+  return {
+    total: demandes.length,
+    par_statut: demandes.reduce((acc, d) => {
+      acc[d.statut] = (acc[d.statut] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>),
+    par_type: demandes.reduce((acc, d) => {
+      acc[d.type_demande] = (acc[d.type_demande] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>),
+    en_attente_depuis_48h: demandes.filter(d => 
+      d.statut === 'en_attente' && new Date(d.created_at) < il_y_a_48h
+    ).length
+  };
 }
 
 // ================================================

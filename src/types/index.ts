@@ -23,8 +23,9 @@ export type StatutAscenseur = 'en_service' | 'en_panne' | 'arrete' | 'en_travaux
 export type TypeTravaux = 'reparation' | 'modernisation' | 'installation' | 'mise_conformite' | 'depannage';
 export type StatutTravaux = 'planifie' | 'en_cours' | 'en_attente' | 'termine' | 'annule';
 export type Priorite = 'basse' | 'normale' | 'haute' | 'urgente';
-export type TypeDemande = 'piece' | 'conge' | 'materiel' | 'formation' | 'autre';
-export type StatutDemande = 'en_attente' | 'approuve' | 'refuse' | 'en_cours' | 'termine';
+export type TypeDemande = 'piece' | 'conge' | 'rtt' | 'formation' | 'materiel' | 'intervention' | 'remboursement' | 'autre';
+export type StatutDemande = 'brouillon' | 'en_attente' | 'approuve' | 'refuse' | 'en_cours' | 'termine';
+export type CategorieRemboursement = 'carburant' | 'peage' | 'parking' | 'repas' | 'hotel' | 'transport' | 'materiel' | 'autre';
 export type TypeDocument = 'contrat' | 'rapport' | 'photo' | 'facture' | 'devis' | 'plan' | 'certificat' | 'autre';
 export type TypeEvent = 'travaux' | 'tournee' | 'mise_service' | 'formation' | 'conge' | 'rtt' | 'astreinte' | 'reunion' | 'autre';
 export type StatutVehicule = 'disponible' | 'en_service' | 'maintenance' | 'hors_service';
@@ -282,10 +283,78 @@ export interface Demande {
   description?: string;
   priorite: Priorite;
   statut: StatutDemande;
+  
+  // Congé / RTT
+  date_debut?: string;
+  date_fin?: string;
+  nb_jours?: number;
+  demi_journee_debut?: boolean; // Commence l'après-midi
+  demi_journee_fin?: boolean; // Finit le matin
+  
+  // Pièce détachée
+  article_id?: string;
+  quantite?: number;
+  ascenseur_id?: string;
+  
+  // Formation
+  organisme_formation?: string;
+  duree_formation?: string;
+  cout_estime?: number;
+  objectif_formation?: string;
+  
+  // Matériel
+  designation_materiel?: string;
+  reference_materiel?: string;
+  
+  // Intervention urgente
+  motif_urgence?: string;
+  adresse_intervention?: string;
+  
+  // Remboursement
+  categorie_remboursement?: CategorieRemboursement;
+  montant?: number;
+  date_depense?: string;
+  justificatif_url?: string;
+  
+  // Traitement
   traite_par?: string;
   date_traitement?: string;
+  motif_refus?: string;
+  commentaire_admin?: string;
+  
+  // Historique
   created_at: string;
+  updated_at?: string;
+  
+  // Relations
   technicien?: Technicien;
+  traite_par_technicien?: Technicien;
+  article?: StockArticle;
+  ascenseur?: Ascenseur;
+  historique?: DemandeHistorique[];
+  pieces_jointes?: DemandePieceJointe[];
+}
+
+export interface DemandeHistorique {
+  id: string;
+  demande_id: string;
+  action: string;
+  ancien_statut?: StatutDemande;
+  nouveau_statut?: StatutDemande;
+  commentaire?: string;
+  effectue_par: string;
+  effectue_par_technicien?: Technicien;
+  created_at: string;
+}
+
+export interface DemandePieceJointe {
+  id: string;
+  demande_id: string;
+  nom: string;
+  url: string;
+  type_fichier: string;
+  taille: number;
+  created_at: string;
 }
 
 export interface Document {

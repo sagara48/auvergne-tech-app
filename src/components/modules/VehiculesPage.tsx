@@ -3,13 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Car, User, AlertTriangle, CheckCircle, Plus, Gauge, Package, X, ChevronDown, ChevronUp, 
   Edit2, Trash2, Calendar, Wrench, Fuel, ArrowRight, ArrowLeft, Settings, 
-  TrendingUp, Droplet, Clock, MapPin, FileText, AlertCircle, History, Save, RotateCcw
+  TrendingUp, Droplet, Clock, MapPin, FileText, AlertCircle, History, Save, RotateCcw,
+  Repeat, Truck
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
 import { 
   getVehicules, getStockVehicule, getStockArticles, 
   createVehicule, updateVehicule, deleteVehicule, getTechniciens,
   ajouterStockVehicule, retirerStockVehicule, setStockVehicule, updateStockVehiculeMinimal,
+  transfertStockVehicule,
   getTypesEntretien, getEntretiensVehicule, createEntretien, deleteEntretien,
   getPleinsVehicule, createPlein, deletePlein, getStatsCarburant,
   getPeriodiciteVehicule, upsertPeriodicite, deletePeriodicite
@@ -39,14 +41,18 @@ const TYPES_CARBURANT = [
 // ============================================
 // COMPOSANT STOCK VÉHICULE
 // ============================================
-function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
+function VehiculeStock({ vehiculeId, vehicules }: { vehiculeId: string; vehicules: Vehicule[] }) {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showTransfertModal, setShowTransfertModal] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState('');
   const [qty, setQty] = useState(1);
   const [direction, setDirection] = useState<'in' | 'out'>('in');
   const [editingMinimal, setEditingMinimal] = useState<string | null>(null);
   const [minimalValues, setMinimalValues] = useState<Record<string, number>>({});
+  const [vehiculeDestId, setVehiculeDestId] = useState('');
+  const [transfertArticleId, setTransfertArticleId] = useState('');
+  const [transfertQty, setTransfertQty] = useState(1);
 
   const { data: stock } = useQuery({ 
     queryKey: ['stock-vehicule', vehiculeId], 
@@ -56,6 +62,9 @@ function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
     queryKey: ['stock-articles'], 
     queryFn: getStockArticles 
   });
+
+  // Autres véhicules pour le transfert
+  const autresVehicules = vehicules.filter(v => v.id !== vehiculeId);
 
   const ajouterMutation = useMutation({
     mutationFn: () => ajouterStockVehicule(vehiculeId, selectedArticle, qty, CURRENT_USER_ID),
@@ -81,6 +90,26 @@ function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
       setQty(1);
     },
     onError: () => toast.error('Erreur lors du retrait'),
+  });
+
+  const transfertMutation = useMutation({
+    mutationFn: () => transfertStockVehicule(
+      vehiculeId, 
+      vehiculeDestId, 
+      transfertArticleId, 
+      transfertQty, 
+      CURRENT_USER_ID
+    ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-vehicule'] });
+      const destVehicule = vehicules.find(v => v.id === vehiculeDestId);
+      toast.success(`${transfertQty} article(s) transféré(s) vers ${destVehicule?.immatriculation || 'véhicule'}`);
+      setShowTransfertModal(false);
+      setVehiculeDestId('');
+      setTransfertArticleId('');
+      setTransfertQty(1);
+    },
+    onError: (error: any) => toast.error(error.message || 'Erreur lors du transfert'),
   });
 
   const updateMinimalMutation = useMutation({
@@ -126,9 +155,16 @@ function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
           <Badge variant="blue">{stock?.length || 0} articles</Badge>
           {alertes.length > 0 && <Badge variant="red">{alertes.length} alertes</Badge>}
         </div>
-        <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
-          <Plus className="w-4 h-4" /> Gérer stock
-        </Button>
+        <div className="flex items-center gap-2">
+          {autresVehicules.length > 0 && stock && stock.length > 0 && (
+            <Button variant="secondary" size="sm" onClick={() => setShowTransfertModal(true)}>
+              <Repeat className="w-4 h-4" /> Transfert véhicule
+            </Button>
+          )}
+          <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
+            <Plus className="w-4 h-4" /> Gérer stock
+          </Button>
+        </div>
       </div>
 
       {stock && stock.length > 0 ? (
@@ -291,6 +327,129 @@ function VehiculeStock({ vehiculeId }: { vehiculeId: string }) {
                     disabled={!selectedArticle}
                   >
                     {direction === 'in' ? 'Ajouter au véhicule' : 'Retourner au dépôt'}
+                  </Button>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal Transfert entre véhicules */}
+      {showTransfertModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <Card className="w-[500px]">
+            <CardBody>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                    <Repeat className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-[var(--text-primary)]">Transfert entre véhicules</h3>
+                    <p className="text-xs text-[var(--text-muted)]">Déplacer du stock vers un autre véhicule</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowTransfertModal(false)}>
+                  <X className="w-5 h-5 text-[var(--text-tertiary)]" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Véhicule destination */}
+                <div>
+                  <label className="text-sm text-[var(--text-secondary)] mb-1 block flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-purple-400" />
+                    Véhicule destination
+                  </label>
+                  <Select value={vehiculeDestId} onChange={e => setVehiculeDestId(e.target.value)}>
+                    <option value="">Sélectionner le véhicule...</option>
+                    {autresVehicules.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.immatriculation} - {v.marque} {v.modele}
+                        {v.technicien_assigne && ` (${v.technicien_assigne.prenom})`}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Article à transférer */}
+                <div>
+                  <label className="text-sm text-[var(--text-secondary)] mb-1 block flex items-center gap-2">
+                    <Package className="w-4 h-4 text-blue-400" />
+                    Article à transférer
+                  </label>
+                  <Select value={transfertArticleId} onChange={e => setTransfertArticleId(e.target.value)}>
+                    <option value="">Sélectionner un article...</option>
+                    {stock?.map(s => (
+                      <option key={s.article?.id} value={s.article?.id}>
+                        {s.article?.reference} - {s.article?.designation} (qté disponible: {s.quantite})
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Quantité */}
+                <div>
+                  <label className="text-sm text-[var(--text-secondary)] mb-1 block">Quantité à transférer</label>
+                  <Input 
+                    type="number" 
+                    min={1}
+                    max={stock?.find(s => s.article?.id === transfertArticleId)?.quantite || 1}
+                    value={transfertQty} 
+                    onChange={e => setTransfertQty(parseInt(e.target.value) || 1)} 
+                  />
+                  {transfertArticleId && (
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      Maximum: {stock?.find(s => s.article?.id === transfertArticleId)?.quantite || 0}
+                    </p>
+                  )}
+                </div>
+
+                {/* Résumé visuel */}
+                {vehiculeDestId && transfertArticleId && (
+                  <div className="bg-[var(--bg-tertiary)] rounded-xl p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-center">
+                        <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center mx-auto mb-2">
+                          <Car className="w-6 h-6 text-blue-400" />
+                        </div>
+                        <div className="text-sm font-medium text-[var(--text-primary)]">Ce véhicule</div>
+                        <div className="text-xs text-[var(--text-muted)]">
+                          -{transfertQty} {stock?.find(s => s.article?.id === transfertArticleId)?.article?.reference}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 text-purple-400">
+                        <ArrowRight className="w-6 h-6" />
+                      </div>
+                      
+                      <div className="text-center">
+                        <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center mx-auto mb-2">
+                          <Car className="w-6 h-6 text-purple-400" />
+                        </div>
+                        <div className="text-sm font-medium text-[var(--text-primary)]">
+                          {vehicules.find(v => v.id === vehiculeDestId)?.immatriculation}
+                        </div>
+                        <div className="text-xs text-[var(--text-muted)]">
+                          +{transfertQty} {stock?.find(s => s.article?.id === transfertArticleId)?.article?.reference}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <Button variant="secondary" className="flex-1" onClick={() => setShowTransfertModal(false)}>
+                    Annuler
+                  </Button>
+                  <Button 
+                    variant="primary" 
+                    className="flex-1" 
+                    onClick={() => transfertMutation.mutate()} 
+                    disabled={!vehiculeDestId || !transfertArticleId || transfertQty < 1 || transfertMutation.isPending}
+                  >
+                    <Repeat className="w-4 h-4" /> Transférer
                   </Button>
                 </div>
               </div>
@@ -1165,7 +1324,7 @@ function VehiculeFormModal({
 // ============================================
 // DETAIL VÉHICULE
 // ============================================
-function VehiculeDetail({ vehicule, onClose }: { vehicule: Vehicule; onClose: () => void }) {
+function VehiculeDetail({ vehicule, vehicules, onClose }: { vehicule: Vehicule; vehicules: Vehicule[]; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'stock' | 'entretiens' | 'carburant' | 'reglages'>('stock');
   
   const tabs = [
@@ -1221,7 +1380,7 @@ function VehiculeDetail({ vehicule, onClose }: { vehicule: Vehicule; onClose: ()
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto">
-            {activeTab === 'stock' && <VehiculeStock vehiculeId={vehicule.id} />}
+            {activeTab === 'stock' && <VehiculeStock vehiculeId={vehicule.id} vehicules={vehicules} />}
             {activeTab === 'entretiens' && (
               <VehiculeEntretiens vehiculeId={vehicule.id} kilometrageActuel={vehicule.kilometrage || 0} />
             )}
@@ -1430,6 +1589,7 @@ export function VehiculesPage() {
       {viewVehicule && (
         <VehiculeDetail
           vehicule={viewVehicule}
+          vehicules={vehicules || []}
           onClose={() => setViewVehicule(null)}
         />
       )}
