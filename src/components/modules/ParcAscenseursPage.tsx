@@ -180,57 +180,45 @@ const getArrets = async () => {
 
 const getPannesRecentes = async (userSecteurs?: number[]) => {
   try {
-    // Récupérer TOUTES les pannes sans limite, triées par date
-    const { data: pannes, error } = await supabase
+    // Si filtrage par secteurs, d'abord récupérer les id_wsoucont des ascenseurs de ces secteurs
+    let allowedIdWsoucont: number[] | null = null;
+    
+    if (userSecteurs && userSecteurs.length > 0) {
+      const { data: ascenseurs } = await supabase
+        .from('parc_ascenseurs')
+        .select('id_wsoucont')
+        .in('secteur', userSecteurs);
+      
+      if (ascenseurs && ascenseurs.length > 0) {
+        allowedIdWsoucont = ascenseurs.map((a: any) => a.id_wsoucont).filter(Boolean);
+        console.log(`Secteurs ${userSecteurs.join(',')} → ${allowedIdWsoucont.length} ascenseurs`);
+      }
+    }
+    
+    // Construire la requête
+    let query = supabase
       .from('parc_pannes')
       .select('*')
       .order('date_appel', { ascending: false });
+    
+    // Si on a des id_wsoucont autorisés, filtrer dessus
+    if (allowedIdWsoucont && allowedIdWsoucont.length > 0) {
+      // Supabase a une limite sur le IN, donc on prend les 500 premiers
+      query = query.in('id_wsoucont', allowedIdWsoucont.slice(0, 500));
+    }
+    
+    // Limiter à 200 résultats (suffisant pour 30 vraies pannes après filtrage cause)
+    query = query.limit(200);
+    
+    const { data: pannes, error } = await query;
     
     if (error) {
       console.warn('Table parc_pannes non disponible:', error.message);
       return [];
     }
     
-    if (!pannes || pannes.length === 0) {
-      console.log('Aucune panne trouvée');
-      return [];
-    }
-    
-    console.log(`Total pannes récupérées: ${pannes.length}`);
-    
-    // Si pas de filtrage par secteurs (undefined ou tableau vide = tous les secteurs)
-    if (!userSecteurs || userSecteurs.length === 0) {
-      console.log('Pas de filtrage secteurs, retour de toutes les pannes');
-      return pannes;
-    }
-    
-    // Récupérer les ascenseurs pour connaître leurs secteurs
-    const { data: ascenseurs } = await supabase
-      .from('parc_ascenseurs')
-      .select('id_wsoucont, secteur');
-    
-    if (!ascenseurs || ascenseurs.length === 0) {
-      console.log('Pas d\'ascenseurs pour filtrer');
-      return pannes;
-    }
-    
-    const secteursMap: Record<number, number> = {};
-    ascenseurs.forEach((a: any) => {
-      if (a.id_wsoucont !== null && a.id_wsoucont !== undefined) {
-        secteursMap[a.id_wsoucont] = a.secteur;
-      }
-    });
-    
-    // Filtrer les pannes par secteurs autorisés
-    const filtered = pannes.filter((p: any) => {
-      if (!p.id_wsoucont) return false;
-      const secteur = secteursMap[p.id_wsoucont];
-      if (secteur === undefined || secteur === null) return false;
-      return userSecteurs.includes(secteur);
-    });
-    
-    console.log(`Pannes après filtrage secteurs: ${filtered.length}`);
-    return filtered;
+    console.log(`Pannes récupérées (après filtrage secteurs): ${pannes?.length || 0}`);
+    return pannes || [];
   } catch (err) {
     console.error('Erreur getPannesRecentes:', err);
     return [];
