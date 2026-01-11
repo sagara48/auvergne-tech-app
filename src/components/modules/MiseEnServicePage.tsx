@@ -72,55 +72,117 @@ const TYPES_AMORTISSEUR = ['Ressort', 'Huile', 'Polyuréthane', 'Hydraulique', '
 const TYPES_SERRURE = ['Mécanique', 'Électrique', 'Électromécanique'];
 const TYPES_PARACHUTE = ['Progressif', 'Instantané', 'Instantané à effet amorti'];
 
-// Checklist COPREC
+// Checklist COPREC complète (85 points)
 const CHECKLIST_COPREC = [
-  { section: 'machinerie', code: 'MAC-01', label: 'Documentation machinerie', detail: 'Plan, schémas électriques, attestation' },
-  { section: 'machinerie', code: 'MAC-02', label: 'Porte local et serrure', detail: 'Fermeture, verrouillage' },
-  { section: 'machinerie', code: 'MAC-03', label: 'Éclairage machinerie', detail: '200 lux minimum' },
-  { section: 'machinerie', code: 'MAC-04', label: 'Éclairage de sécurité', detail: 'Fonctionnement' },
-  { section: 'machinerie', code: 'MAC-05', label: 'Tableau alimentation', detail: 'Interrupteur, disjoncteurs' },
-  { section: 'machinerie', code: 'MAC-06', label: 'Câblage', detail: 'Alimentation, téléphone' },
-  { section: 'machinerie', code: 'MAC-07', label: 'Ventilation', detail: 'Fonctionnement' },
-  { section: 'machinerie', code: 'MAC-08', label: 'Machine de traction', detail: 'État, fixation, huile' },
-  { section: 'machinerie', code: 'MAC-09', label: 'Frein', detail: 'Fonctionnement, usure' },
-  { section: 'machinerie', code: 'MAC-10', label: 'Limiteur vitesse', detail: 'Plombage, type CE' },
-  { section: 'gaine', code: 'GAI-01', label: 'Fermeture gaine', detail: 'Étanchéité' },
-  { section: 'gaine', code: 'GAI-02', label: 'Ventilation haute', detail: 'Fonctionnement' },
-  { section: 'gaine', code: 'GAI-03', label: 'Éclairage gaine', detail: '50 lux' },
-  { section: 'gaine', code: 'GAI-04', label: 'Guides cabine', detail: 'Attaches conformes' },
-  { section: 'toit_cabine', code: 'TOI-01', label: 'Manœuvre inspection', detail: 'Fonctionnement' },
-  { section: 'toit_cabine', code: 'TOI-02', label: 'Balustrade', detail: '0.7m ou 1.1m' },
-  { section: 'toit_cabine', code: 'TOI-03', label: 'Stop sur toit', detail: 'Arrêt urgence' },
-  { section: 'toit_cabine', code: 'TOI-04', label: 'Prise de courant', detail: 'Fonctionnelle' },
-  { section: 'portes_palieres', code: 'PAL-01', label: 'Portes palières', detail: 'État, alignement' },
-  { section: 'portes_palieres', code: 'PAL-02', label: 'Serrures', detail: 'Fonctionnement, pênes' },
-  { section: 'portes_palieres', code: 'PAL-03', label: 'Boutons appel', detail: 'Conforme EN81-70' },
-  { section: 'cuvette', code: 'CUV-01', label: 'Profondeur', detail: 'Conforme plan' },
-  { section: 'cuvette', code: 'CUV-02', label: 'Éclairage', detail: '50 lux' },
-  { section: 'cuvette', code: 'CUV-03', label: 'Amortisseurs cabine', detail: 'Type CE' },
-  { section: 'cuvette', code: 'CUV-04', label: 'Amortisseurs contrepoids', detail: 'Type CE' },
-  { section: 'cabine', code: 'CAB-01', label: 'Éclairage normal', detail: '100 lux minimum' },
-  { section: 'cabine', code: 'CAB-02', label: 'Éclairage secours', detail: '5 lux/h' },
-  { section: 'cabine', code: 'CAB-03', label: 'Alarme cabine', detail: 'EN81-28' },
-  { section: 'cabine', code: 'CAB-04', label: 'Téléphone', detail: 'Fonctionnement' },
-  { section: 'cabine', code: 'CAB-05', label: 'Main courante', detail: '90 cm ±25mm' },
-  { section: 'securites', code: 'SEC-01', label: 'Parachute cabine', detail: 'Type CE' },
-  { section: 'securites', code: 'SEC-02', label: 'Limiteur cabine', detail: 'Type CE' },
-  { section: 'essais', code: 'ESS-01', label: 'Hors course haut', detail: 'Fin de course' },
-  { section: 'essais', code: 'ESS-02', label: 'Hors course bas', detail: 'Fin de course' },
-  { section: 'essais', code: 'ESS-03', label: 'Parachute 125%', detail: 'Vitesse réduite' },
-  { section: 'essais', code: 'ESS-04', label: 'Freinage', detail: 'Essai' },
-  { section: 'essais', code: 'ESS-05', label: 'Surcharge', detail: 'Fonctionnement' },
-  { section: 'essais', code: 'ESS-06', label: 'Vitesse nominale', detail: 'Mesure' },
+  // MACHINERIE (15 points)
+  { section: 'machinerie', code: 'MAC-01', label: 'Documentation machinerie', detail: 'Plan, schémas électriques, attestation des composants de sécurité' },
+  { section: 'machinerie', code: 'MAC-02', label: 'Porte local et serrure', detail: 'Fermeture correcte, verrouillage fonctionnel' },
+  { section: 'machinerie', code: 'MAC-03', label: 'Éclairage machinerie', detail: '200 lux minimum au sol' },
+  { section: 'machinerie', code: 'MAC-04', label: 'Éclairage de sécurité', detail: 'Fonctionnement correct' },
+  { section: 'machinerie', code: 'MAC-05', label: 'Tableau alimentation', detail: 'Interrupteur de force, disjoncteurs éclairage et PC' },
+  { section: 'machinerie', code: 'MAC-06', label: 'Câblage électrique', detail: 'Alimentation, téléphone, liaison U36' },
+  { section: 'machinerie', code: 'MAC-07', label: 'Ventilation machinerie', detail: 'Fonctionnement et débit conforme' },
+  { section: 'machinerie', code: 'MAC-08', label: 'Thermostat', detail: 'Température ambiante en machinerie' },
+  { section: 'machinerie', code: 'MAC-09', label: 'Signalisation de sécurité', detail: 'Pancarte porte, consignes de dépannage' },
+  { section: 'machinerie', code: 'MAC-10', label: 'Accessoires de levage', detail: 'Estampillé et conforme' },
+  { section: 'machinerie', code: 'MAC-11', label: 'Matériel étranger', detail: 'Absence de matériel non lié à l\'ascenseur' },
+  { section: 'machinerie', code: 'MAC-12', label: 'Machine de traction', detail: 'État général, fixation, niveau d\'huile' },
+  { section: 'machinerie', code: 'MAC-13', label: 'Frein de machine', detail: 'Fonctionnement, usure des garnitures' },
+  { section: 'machinerie', code: 'MAC-14', label: 'Limiteur de vitesse', detail: 'Plombage intact, fonctionnement, marquage CE' },
+  { section: 'machinerie', code: 'MAC-15', label: 'Poulie de traction', detail: 'Usure des gorges, état général' },
+  // LOCAL POULIES (4 points)
+  { section: 'local_poulies', code: 'POU-01', label: 'Porte et serrure', detail: 'Fermeture et verrouillage' },
+  { section: 'local_poulies', code: 'POU-02', label: 'Éclairage', detail: 'Fonctionnement correct' },
+  { section: 'local_poulies', code: 'POU-03', label: 'Prise de courant', detail: 'Présente et fonctionnelle' },
+  { section: 'local_poulies', code: 'POU-04', label: 'Bouton stop', detail: 'Arrêt d\'urgence accessible' },
+  // GAINE (7 points)
+  { section: 'gaine', code: 'GAI-01', label: 'Fermeture de la gaine', detail: 'Étanchéité, protection contre intrusion' },
+  { section: 'gaine', code: 'GAI-02', label: 'Ventilation haute', detail: 'Fonctionnement, surface conforme' },
+  { section: 'gaine', code: 'GAI-03', label: 'Vitrage gaine', detail: 'Type feuilleté si requis' },
+  { section: 'gaine', code: 'GAI-04', label: 'Réserves supérieures', detail: 'Conformité EN81-21, espace toit-plafond' },
+  { section: 'gaine', code: 'GAI-05', label: 'Éclairage de la gaine', detail: '50 lux minimum sur toit cabine' },
+  { section: 'gaine', code: 'GAI-06', label: 'Guides cabine', detail: 'Attaches conformes au plan, coulisseaux' },
+  { section: 'gaine', code: 'GAI-07', label: 'Guides contrepoids', detail: 'Alignement et fixation corrects' },
+  // TOIT DE CABINE (9 points)
+  { section: 'toit_cabine', code: 'TOI-01', label: 'Manœuvre d\'inspection', detail: 'Fonctionnement correct' },
+  { section: 'toit_cabine', code: 'TOI-02', label: 'Balustrade', detail: '0.7m si distance <0.5m, 1.1m si >0.5m' },
+  { section: 'toit_cabine', code: 'TOI-03', label: 'Fin de course inspection', detail: 'Fonctionnement correct' },
+  { section: 'toit_cabine', code: 'TOI-04', label: 'Bouton stop sur toit', detail: 'Arrêt d\'urgence accessible' },
+  { section: 'toit_cabine', code: 'TOI-05', label: 'Contact mou de câble', detail: 'Fonctionnement correct' },
+  { section: 'toit_cabine', code: 'TOI-06', label: 'Prise de courant', detail: 'Présente et fonctionnelle' },
+  { section: 'toit_cabine', code: 'TOI-07', label: 'Alarme sur toit', detail: 'Fonctionnement correct' },
+  { section: 'toit_cabine', code: 'TOI-08', label: 'Éclairage de secours', detail: '5 lux pendant 1 heure' },
+  { section: 'toit_cabine', code: 'TOI-09', label: 'Signalisation réserve réduite', detail: 'Pancarte si applicable' },
+  // PORTES PALIÈRES (6 points)
+  { section: 'portes_palieres', code: 'PAL-01', label: 'État des portes palières', detail: 'État général, alignement, jeux' },
+  { section: 'portes_palieres', code: 'PAL-02', label: 'Vitrage portes', detail: 'Type et état conforme' },
+  { section: 'portes_palieres', code: 'PAL-03', label: 'Boutons d\'appel', detail: 'Conformité EN81-70, accessibilité' },
+  { section: 'portes_palieres', code: 'PAL-04', label: 'Serrures des portes', detail: 'Fonctionnement, engagement pênes 7mm' },
+  { section: 'portes_palieres', code: 'PAL-05', label: 'Mise à la terre portes', detail: 'Continuité électrique' },
+  { section: 'portes_palieres', code: 'PAL-06', label: 'Réglage portes', detail: 'Vitesse et force de fermeture' },
+  // CUVETTE (10 points)
+  { section: 'cuvette', code: 'CUV-01', label: 'Profondeur cuvette', detail: 'Conforme au plan d\'installation' },
+  { section: 'cuvette', code: 'CUV-02', label: 'Éclairage cuvette', detail: '50 lux minimum' },
+  { section: 'cuvette', code: 'CUV-03', label: 'Interrupteur stop', detail: 'Accessible depuis l\'entrée' },
+  { section: 'cuvette', code: 'CUV-04', label: 'Échelle d\'accès', detail: 'Présente et conforme' },
+  { section: 'cuvette', code: 'CUV-05', label: 'Amortisseurs cabine', detail: 'Nombre, modèle, marquage CE' },
+  { section: 'cuvette', code: 'CUV-06', label: 'Amortisseurs contrepoids', detail: 'Nombre, modèle, marquage CE' },
+  { section: 'cuvette', code: 'CUV-07', label: 'Prise de courant', detail: 'Présente avec mise à la terre' },
+  { section: 'cuvette', code: 'CUV-08', label: 'Réserve sous cabine', detail: 'Mesure conforme aux normes' },
+  { section: 'cuvette', code: 'CUV-09', label: 'Poulie tendeuse', detail: 'Installation correcte, contact de sécurité' },
+  { section: 'cuvette', code: 'CUV-10', label: 'Commande fosse', detail: 'Boîtier inspection, montée/descente, stop' },
+  // CABINE (13 points)
+  { section: 'cabine', code: 'CAB-01', label: 'Porte de cabine', detail: 'Contact de heurt, état général' },
+  { section: 'cabine', code: 'CAB-02', label: 'Éclairage normal', detail: '100 lux minimum au sol' },
+  { section: 'cabine', code: 'CAB-03', label: 'Éclairage de secours', detail: '5 lux pendant 1 heure minimum' },
+  { section: 'cabine', code: 'CAB-04', label: 'Verrouillage porte cabine', detail: 'Fonctionnement correct' },
+  { section: 'cabine', code: 'CAB-05', label: 'Boîtes à boutons', detail: 'État et fonctionnement' },
+  { section: 'cabine', code: 'CAB-06', label: 'Main courante', detail: 'Dessus à 90 cm ±25mm' },
+  { section: 'cabine', code: 'CAB-07', label: 'Revêtement cabine', detail: 'Parois, sol, vitrage marqué' },
+  { section: 'cabine', code: 'CAB-08', label: 'Dispositif d\'alarme', detail: 'Conformité EN81-28, fonctionnement' },
+  { section: 'cabine', code: 'CAB-09', label: 'Pictogrammes alarme', detail: 'Jaune émission, vert réception' },
+  { section: 'cabine', code: 'CAB-10', label: 'Téléphone cabine', detail: 'Fonctionnement, communication établie' },
+  { section: 'cabine', code: 'CAB-11', label: 'Garde pieds cabine', detail: 'Type fixe ou rétractable' },
+  { section: 'cabine', code: 'CAB-12', label: 'Indicateur de position', detail: 'Affichage correct à chaque niveau' },
+  { section: 'cabine', code: 'CAB-13', label: 'Ventilation cabine', detail: 'Fonctionnement correct' },
+  // SUSPENSION (4 points)
+  { section: 'suspension', code: 'SUS-01', label: 'Câbles de suspension', detail: 'Nombre, diamètre, état, usure' },
+  { section: 'suspension', code: 'SUS-02', label: 'Attaches câbles', detail: 'État et serrage correct' },
+  { section: 'suspension', code: 'SUS-03', label: 'Garde câbles', detail: 'Présents et conformes' },
+  { section: 'suspension', code: 'SUS-04', label: 'Protection points rentrants', detail: 'Présente sur poulies' },
+  // JEUX (2 points)
+  { section: 'jeux', code: 'JEU-01', label: 'Jeu seuil-seuil', detail: '35 mm maximum' },
+  { section: 'jeux', code: 'JEU-02', label: 'Distance parois gaine', detail: '<150mm, contrepoids >50mm' },
+  // SÉCURITÉS (4 points)
+  { section: 'securites', code: 'SEC-01', label: 'Parachute cabine', detail: 'Type CE, fonctionnement correct' },
+  { section: 'securites', code: 'SEC-02', label: 'Parachute contrepoids', detail: 'Type CE si présent' },
+  { section: 'securites', code: 'SEC-03', label: 'Limiteur cabine', detail: 'Marquage CE, plombage' },
+  { section: 'securites', code: 'SEC-04', label: 'Limiteur contrepoids', detail: 'Type CE si présent' },
+  // ESSAIS (12 points)
+  { section: 'essais', code: 'ESS-01', label: 'Fin de course haut', detail: 'Fonctionnement correct' },
+  { section: 'essais', code: 'ESS-02', label: 'Fin de course bas', detail: 'Fonctionnement correct' },
+  { section: 'essais', code: 'ESS-03', label: 'Essai parachute 125%', detail: 'Vitesse réduite, contact enclenché' },
+  { section: 'essais', code: 'ESS-04', label: 'Masse d\'une serrure', detail: 'Déclenchement fusible ou disjoncteur' },
+  { section: 'essais', code: 'ESS-05', label: 'Essai de freinage', detail: 'Efficacité du frein' },
+  { section: 'essais', code: 'ESS-06', label: 'Dispositif de surcharge', detail: 'Fonctionnement correct' },
+  { section: 'essais', code: 'ESS-07', label: 'Essai A3', detail: 'Fonctionnement correct' },
+  { section: 'essais', code: 'ESS-08', label: 'Désincarcération', detail: 'Manœuvre auto et manuelle' },
+  { section: 'essais', code: 'ESS-09', label: 'Précision nivelage', detail: 'Vérification à tous les niveaux' },
+  { section: 'essais', code: 'ESS-10', label: 'Vitesse nominale', detail: 'Mesure montée et descente' },
+  { section: 'essais', code: 'ESS-11', label: 'Bruit et vibrations', detail: 'Niveau acceptable' },
+  { section: 'essais', code: 'ESS-12', label: 'Rénivelage', detail: 'Fonctionnement si équipé' },
 ];
 
 const SECTION_LABELS: Record<string, string> = {
   'machinerie': 'Machinerie',
+  'local_poulies': 'Local Poulies',
   'gaine': 'Gaine',
   'toit_cabine': 'Toit de Cabine',
   'portes_palieres': 'Portes Palières',
   'cuvette': 'Cuvette',
   'cabine': 'Cabine',
+  'suspension': 'Suspension',
+  'jeux': 'Jeux',
   'securites': 'Sécurités',
   'essais': 'Essais',
 };
@@ -229,10 +291,32 @@ function AppareilFormModal({ appareil, onClose, onSave, isLoading }: { appareil?
 // MODAL CHECKLIST (PERSISTANTE)
 // =============================================
 interface CheckpointData { status: string; remarks: string; measurement: string; }
+interface EssaisEnCharge {
+  speed_empty_up: string; speed_empty_down: string;
+  speed_half_up: string; speed_half_down: string;
+  speed_full_up: string; speed_full_down: string;
+  amp_empty_up: string; amp_empty_down: string;
+  amp_half_up: string; amp_half_down: string;
+  amp_full_up: string; amp_full_down: string;
+  remarks: string;
+}
+
+const defaultEssais: EssaisEnCharge = {
+  speed_empty_up: '', speed_empty_down: '',
+  speed_half_up: '', speed_half_down: '',
+  speed_full_up: '', speed_full_down: '',
+  amp_empty_up: '', amp_empty_down: '',
+  amp_half_up: '', amp_half_down: '',
+  amp_full_up: '', amp_full_down: '',
+  remarks: ''
+};
 
 function ChecklistModal({ appareil, onClose, onSave }: { appareil: any; onClose: () => void; onSave: () => void }) {
   const [checkpoints, setCheckpoints] = useState<Record<string, CheckpointData>>({});
   const [expandedSection, setExpandedSection] = useState<string | null>('machinerie');
+  const [showMeasurement, setShowMeasurement] = useState<Record<string, boolean>>({});
+  const [essaisEnCharge, setEssaisEnCharge] = useState<EssaisEnCharge>(defaultEssais);
+  const [showEssaisEnCharge, setShowEssaisEnCharge] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [inspectorName, setInspectorName] = useState('');
   const [inspectionDate, setInspectionDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -248,8 +332,26 @@ function ChecklistModal({ appareil, onClose, onSave }: { appareil: any; onClose:
         setInspectorName(existing.inspector_name || '');
         setInspectionDate(existing.inspection_date || format(new Date(), 'yyyy-MM-dd'));
         const loaded: Record<string, CheckpointData> = {};
-        existing.mes_inspection_checkpoints?.forEach((cp: any) => { loaded[cp.checkpoint_code] = { status: cp.status || '', remarks: cp.remarks || '', measurement: cp.measurement || '' }; });
+        const showMeas: Record<string, boolean> = {};
+        existing.mes_inspection_checkpoints?.forEach((cp: any) => { 
+          loaded[cp.checkpoint_code] = { status: cp.status || '', remarks: cp.remarks || '', measurement: cp.measurement || '' }; 
+          if (cp.measurement) showMeas[cp.checkpoint_code] = true;
+        });
         setCheckpoints(loaded);
+        setShowMeasurement(showMeas);
+        // Charger les essais en charge
+        if (existing.speed_empty_up || existing.amp_empty_up) {
+          setEssaisEnCharge({
+            speed_empty_up: existing.speed_empty_up || '', speed_empty_down: existing.speed_empty_down || '',
+            speed_half_up: existing.speed_half_up || '', speed_half_down: existing.speed_half_down || '',
+            speed_full_up: existing.speed_full_up || '', speed_full_down: existing.speed_full_down || '',
+            amp_empty_up: existing.amp_empty_up || '', amp_empty_down: existing.amp_empty_down || '',
+            amp_half_up: existing.amp_half_up || '', amp_half_down: existing.amp_half_down || '',
+            amp_full_up: existing.amp_full_up || '', amp_full_down: existing.amp_full_down || '',
+            remarks: existing.general_remarks || ''
+          });
+          setShowEssaisEnCharge(true);
+        }
       }
     } catch { /* pas de rapport existant */ }
   };
@@ -260,7 +362,17 @@ function ChecklistModal({ appareil, onClose, onSave }: { appareil: any; onClose:
     return groups;
   }, []);
 
-  const updateCheckpoint = (code: string, field: keyof CheckpointData, value: string) => { setCheckpoints(prev => ({ ...prev, [code]: { ...prev[code], [field]: value } })); };
+  const updateCheckpoint = (code: string, field: keyof CheckpointData, value: string) => { 
+    setCheckpoints(prev => ({ ...prev, [code]: { ...prev[code], [field]: value } })); 
+  };
+
+  const toggleMeasurement = (code: string) => {
+    setShowMeasurement(prev => ({ ...prev, [code]: !prev[code] }));
+  };
+
+  const updateEssai = (field: keyof EssaisEnCharge, value: string) => {
+    setEssaisEnCharge(prev => ({ ...prev, [field]: value }));
+  };
 
   const stats = useMemo(() => {
     const values = Object.values(checkpoints);
@@ -273,14 +385,38 @@ function ChecklistModal({ appareil, onClose, onSave }: { appareil: any; onClose:
     setIsSaving(true);
     try {
       let currentReportId = reportId;
+      const reportData = { 
+        inspector_name: inspectorName, 
+        inspection_date: inspectionDate, 
+        status: progress === 100 ? 'termine' : 'en_cours',
+        speed_empty_up: essaisEnCharge.speed_empty_up || null,
+        speed_empty_down: essaisEnCharge.speed_empty_down || null,
+        speed_half_up: essaisEnCharge.speed_half_up || null,
+        speed_half_down: essaisEnCharge.speed_half_down || null,
+        speed_full_up: essaisEnCharge.speed_full_up || null,
+        speed_full_down: essaisEnCharge.speed_full_down || null,
+        amp_empty_up: essaisEnCharge.amp_empty_up || null,
+        amp_empty_down: essaisEnCharge.amp_empty_down || null,
+        amp_half_up: essaisEnCharge.amp_half_up || null,
+        amp_half_down: essaisEnCharge.amp_half_down || null,
+        amp_full_up: essaisEnCharge.amp_full_up || null,
+        amp_full_down: essaisEnCharge.amp_full_down || null,
+        general_remarks: essaisEnCharge.remarks || null
+      };
+
       if (!currentReportId) {
         const reportNumber = `RAP-${appareil.device_number}-${format(new Date(), 'yyyyMMdd')}`;
-        const { data: newReport, error } = await supabase.from('mes_inspection_reports').insert({ device_id: appareil.id, report_number: reportNumber, report_type: 'mise_en_service', inspector_name: inspectorName, inspection_date: inspectionDate, status: progress === 100 ? 'termine' : 'en_cours' }).select().single();
+        const { data: newReport, error } = await supabase.from('mes_inspection_reports').insert({ 
+          device_id: appareil.id, 
+          report_number: reportNumber, 
+          report_type: 'mise_en_service', 
+          ...reportData 
+        }).select().single();
         if (error) throw error;
         currentReportId = newReport.id;
         setReportId(currentReportId);
       } else {
-        await supabase.from('mes_inspection_reports').update({ inspector_name: inspectorName, inspection_date: inspectionDate, status: progress === 100 ? 'termine' : 'en_cours' }).eq('id', currentReportId);
+        await supabase.from('mes_inspection_reports').update(reportData).eq('id', currentReportId);
       }
       await supabase.from('mes_inspection_checkpoints').delete().eq('report_id', currentReportId);
       const checkpointsToInsert = CHECKLIST_COPREC.map(item => {
@@ -297,41 +433,214 @@ function ChecklistModal({ appareil, onClose, onSave }: { appareil: any; onClose:
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
       <div className="absolute inset-0" onClick={onClose} />
-      <Card className="w-[950px] max-h-[90vh] overflow-hidden flex flex-col relative z-10">
+      <Card className="w-[1000px] max-h-[90vh] overflow-hidden flex flex-col relative z-10">
         <CardBody className="p-0 flex-1 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-[var(--border-primary)] flex-shrink-0">
-            <div className="flex items-center justify-between mb-3"><div><h2 className="text-lg font-bold">Checklist d'inspection COPREC</h2><p className="text-sm text-[var(--text-muted)]">{appareil.device_number} - {appareil.site_name}</p></div><button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"><X className="w-5 h-5" /></button></div>
-            <div className="grid grid-cols-2 gap-4 mb-4"><div><label className="text-xs text-[var(--text-muted)] block mb-1">Inspecteur</label><Input value={inspectorName} onChange={e => setInspectorName(e.target.value)} placeholder="Nom" className="h-9" /></div><div><label className="text-xs text-[var(--text-muted)] block mb-1">Date</label><Input type="date" value={inspectionDate} onChange={e => setInspectionDate(e.target.value)} className="h-9" /></div></div>
-            <div className="flex items-center gap-4"><div className="flex-1"><div className="flex items-center justify-between mb-1"><span className="text-sm">Progression</span><span className="text-sm font-bold text-orange-400">{progress}%</span></div><div className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-amber-400" style={{ width: `${progress}%` }} /></div></div><div className="flex gap-2"><Badge variant="green">C: {stats.conforme}</Badge><Badge variant="red">NC: {stats.nonConforme}</Badge><Badge variant="gray">SO: {stats.sansObjet}</Badge></div></div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-lg font-bold">Checklist d'inspection COPREC</h2>
+                <p className="text-sm text-[var(--text-muted)]">{appareil.device_number} - {appareil.site_name} • <span className="text-orange-400 font-medium">{CHECKLIST_COPREC.length} points</span></p>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div><label className="text-xs text-[var(--text-muted)] block mb-1">Inspecteur</label><Input value={inspectorName} onChange={e => setInspectorName(e.target.value)} placeholder="Nom" className="h-9" /></div>
+              <div><label className="text-xs text-[var(--text-muted)] block mb-1">Date</label><Input type="date" value={inspectionDate} onChange={e => setInspectionDate(e.target.value)} className="h-9" /></div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-1"><span className="text-sm">Progression</span><span className="text-sm font-bold text-orange-400">{progress}%</span></div>
+                <div className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-amber-400" style={{ width: `${progress}%` }} /></div>
+              </div>
+              <div className="flex gap-2">
+                <Badge variant="green">C: {stats.conforme}</Badge>
+                <Badge variant="red">NC: {stats.nonConforme}</Badge>
+                <Badge variant="gray">SO: {stats.sansObjet}</Badge>
+              </div>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
+            {/* Sections de la checklist */}
             {Object.entries(groupedChecklist).map(([section, items]) => {
-              const sectionStats = items.reduce((acc, item) => { const cp = checkpoints[item.code]; if (cp?.status === 'C') acc.c++; else if (cp?.status === 'NC') acc.nc++; else if (cp?.status === 'SO') acc.so++; return acc; }, { c: 0, nc: 0, so: 0 });
+              const sectionStats = items.reduce((acc, item) => { 
+                const cp = checkpoints[item.code]; 
+                if (cp?.status === 'C') acc.c++; 
+                else if (cp?.status === 'NC') acc.nc++; 
+                else if (cp?.status === 'SO') acc.so++; 
+                return acc; 
+              }, { c: 0, nc: 0, so: 0 });
+              
               return (
                 <div key={section} className="mb-4">
                   <button onClick={() => setExpandedSection(expandedSection === section ? null : section)} className="w-full flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-lg hover:bg-[var(--bg-secondary)]">
-                    <div className="flex items-center gap-2"><span className="font-semibold">{SECTION_LABELS[section] || section}</span><Badge variant="gray">{items.length}</Badge>{sectionStats.c > 0 && <Badge variant="green">{sectionStats.c}</Badge>}{sectionStats.nc > 0 && <Badge variant="red">{sectionStats.nc}</Badge>}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{SECTION_LABELS[section] || section}</span>
+                      <Badge variant="gray">{items.length}</Badge>
+                      {sectionStats.c > 0 && <Badge variant="green">{sectionStats.c}</Badge>}
+                      {sectionStats.nc > 0 && <Badge variant="red">{sectionStats.nc}</Badge>}
+                    </div>
                     {expandedSection === section ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
                   {expandedSection === section && (
-                    <div className="mt-2 space-y-2">{items.map(item => {
-                      const cp = checkpoints[item.code] || { status: '', remarks: '', measurement: '' };
-                      return (
-                        <div key={item.code} className={`p-3 rounded-lg border ${cp.status === 'C' ? 'bg-green-500/5 border-green-500/30' : cp.status === 'NC' ? 'bg-red-500/5 border-red-500/30' : cp.status === 'SO' ? 'bg-gray-500/5 border-gray-500/30' : 'bg-[var(--bg-elevated)] border-[var(--border-primary)]'}`}>
-                          <div className="flex items-start gap-3">
-                            <div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="text-xs font-mono text-orange-400">{item.code}</span><span className="text-sm font-medium">{item.label}</span></div><p className="text-xs text-[var(--text-muted)]">{item.detail}</p></div>
-                            <div className="flex gap-1">{[{ v: 'C', color: '#10B981' }, { v: 'NC', color: '#EF4444' }, { v: 'SO', color: '#6B7280' }].map(({ v, color }) => (<button key={v} onClick={() => updateCheckpoint(item.code, 'status', cp.status === v ? '' : v)} className={`w-10 h-8 rounded text-xs font-bold ${cp.status === v ? 'text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-secondary)]'}`} style={cp.status === v ? { backgroundColor: color } : {}}>{v}</button>))}</div>
+                    <div className="mt-2 space-y-2">
+                      {items.map(item => {
+                        const cp = checkpoints[item.code] || { status: '', remarks: '', measurement: '' };
+                        const hasMeasurement = showMeasurement[item.code];
+                        
+                        return (
+                          <div key={item.code} className={`p-3 rounded-lg border ${
+                            cp.status === 'C' ? 'bg-green-500/5 border-green-500/30' : 
+                            cp.status === 'NC' ? 'bg-red-500/5 border-red-500/30' : 
+                            cp.status === 'SO' ? 'bg-gray-500/5 border-gray-500/30' : 
+                            'bg-[var(--bg-elevated)] border-[var(--border-primary)]'
+                          }`}>
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs font-mono text-orange-400">{item.code}</span>
+                                  <span className="text-sm font-medium">{item.label}</span>
+                                </div>
+                                <p className="text-xs text-[var(--text-muted)]">{item.detail}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => toggleMeasurement(item.code)}
+                                  className={`p-1.5 rounded transition-all ${hasMeasurement ? 'bg-blue-500/20 text-blue-500' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-secondary)]'}`}
+                                  title={hasMeasurement ? 'Masquer mesure' : 'Ajouter mesure'}
+                                >
+                                  <Ruler className="w-4 h-4" />
+                                </button>
+                                <div className="flex gap-1">
+                                  {[{ v: 'C', color: '#10B981' }, { v: 'NC', color: '#EF4444' }, { v: 'SO', color: '#6B7280' }].map(({ v, color }) => (
+                                    <button 
+                                      key={v} 
+                                      onClick={() => updateCheckpoint(item.code, 'status', cp.status === v ? '' : v)} 
+                                      className={`w-10 h-8 rounded text-xs font-bold ${cp.status === v ? 'text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:bg-[var(--bg-secondary)]'}`} 
+                                      style={cp.status === v ? { backgroundColor: color } : {}}
+                                    >
+                                      {v}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            {hasMeasurement && (
+                              <div className="mt-2">
+                                <Input value={cp.measurement} onChange={e => updateCheckpoint(item.code, 'measurement', e.target.value)} placeholder="Mesure / Valeur relevée" className="h-8 text-sm" />
+                              </div>
+                            )}
+                            <div className="mt-2">
+                              <Input value={cp.remarks} onChange={e => updateCheckpoint(item.code, 'remarks', e.target.value)} placeholder={cp.status === 'NC' ? 'Remarques (obligatoire pour NC)' : 'Remarques (optionnel)'} className={`h-8 text-sm ${cp.status === 'NC' && !cp.remarks ? 'border-red-500' : ''}`} />
+                            </div>
                           </div>
-                          <div className="mt-2 grid grid-cols-2 gap-2"><Input value={cp.measurement} onChange={e => updateCheckpoint(item.code, 'measurement', e.target.value)} placeholder="Mesure / Valeur" className="h-8 text-sm" /><Input value={cp.remarks} onChange={e => updateCheckpoint(item.code, 'remarks', e.target.value)} placeholder={cp.status === 'NC' ? 'Remarques (obligatoire)' : 'Remarques'} className={`h-8 text-sm ${cp.status === 'NC' && !cp.remarks ? 'border-red-500' : ''}`} /></div>
-                        </div>
-                      );
-                    })}</div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               );
             })}
+
+            {/* Section Essais en charge - Tableau */}
+            <div className="mb-4">
+              <button onClick={() => setShowEssaisEnCharge(!showEssaisEnCharge)} className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-orange-500/20 to-amber-500/20 border border-orange-500/30 rounded-lg hover:from-orange-500/30 hover:to-amber-500/30">
+                <div className="flex items-center gap-2">
+                  <Gauge className="w-5 h-5 text-orange-400" />
+                  <span className="font-semibold text-orange-400">Essais en charge</span>
+                  <Badge variant="orange">Mesures vitesse & ampérage</Badge>
+                </div>
+                {showEssaisEnCharge ? <ChevronUp className="w-4 h-4 text-orange-400" /> : <ChevronDown className="w-4 h-4 text-orange-400" />}
+              </button>
+              
+              {showEssaisEnCharge && (
+                <div className="mt-3 p-4 bg-[var(--bg-elevated)] rounded-lg border border-[var(--border-primary)]">
+                  {/* Tableau Vitesse */}
+                  <div className="mb-6">
+                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-blue-400" />
+                      Mesures de vitesse (m/s)
+                    </h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-[var(--border-primary)]">
+                            <th className="text-left py-2 px-3 font-medium text-[var(--text-muted)]">Charge</th>
+                            <th className="text-center py-2 px-3 font-medium text-green-400">↑ Montée</th>
+                            <th className="text-center py-2 px-3 font-medium text-red-400">↓ Descente</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-[var(--border-primary)]/50">
+                            <td className="py-2 px-3 font-medium">À vide</td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.speed_empty_up} onChange={e => updateEssai('speed_empty_up', e.target.value)} placeholder="0.00" className="h-8 text-center text-sm" /></td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.speed_empty_down} onChange={e => updateEssai('speed_empty_down', e.target.value)} placeholder="0.00" className="h-8 text-center text-sm" /></td>
+                          </tr>
+                          <tr className="border-b border-[var(--border-primary)]/50">
+                            <td className="py-2 px-3 font-medium">Demi-charge</td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.speed_half_up} onChange={e => updateEssai('speed_half_up', e.target.value)} placeholder="0.00" className="h-8 text-center text-sm" /></td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.speed_half_down} onChange={e => updateEssai('speed_half_down', e.target.value)} placeholder="0.00" className="h-8 text-center text-sm" /></td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 px-3 font-medium">Pleine charge</td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.speed_full_up} onChange={e => updateEssai('speed_full_up', e.target.value)} placeholder="0.00" className="h-8 text-center text-sm" /></td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.speed_full_down} onChange={e => updateEssai('speed_full_down', e.target.value)} placeholder="0.00" className="h-8 text-center text-sm" /></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Tableau Ampérage */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-yellow-400" />
+                      Mesures d'ampérage (A)
+                    </h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-[var(--border-primary)]">
+                            <th className="text-left py-2 px-3 font-medium text-[var(--text-muted)]">Charge</th>
+                            <th className="text-center py-2 px-3 font-medium text-green-400">↑ Montée</th>
+                            <th className="text-center py-2 px-3 font-medium text-red-400">↓ Descente</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-[var(--border-primary)]/50">
+                            <td className="py-2 px-3 font-medium">À vide</td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.amp_empty_up} onChange={e => updateEssai('amp_empty_up', e.target.value)} placeholder="0.0" className="h-8 text-center text-sm" /></td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.amp_empty_down} onChange={e => updateEssai('amp_empty_down', e.target.value)} placeholder="0.0" className="h-8 text-center text-sm" /></td>
+                          </tr>
+                          <tr className="border-b border-[var(--border-primary)]/50">
+                            <td className="py-2 px-3 font-medium">Demi-charge</td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.amp_half_up} onChange={e => updateEssai('amp_half_up', e.target.value)} placeholder="0.0" className="h-8 text-center text-sm" /></td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.amp_half_down} onChange={e => updateEssai('amp_half_down', e.target.value)} placeholder="0.0" className="h-8 text-center text-sm" /></td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 px-3 font-medium">Pleine charge</td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.amp_full_up} onChange={e => updateEssai('amp_full_up', e.target.value)} placeholder="0.0" className="h-8 text-center text-sm" /></td>
+                            <td className="py-2 px-3"><Input value={essaisEnCharge.amp_full_down} onChange={e => updateEssai('amp_full_down', e.target.value)} placeholder="0.0" className="h-8 text-center text-sm" /></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Remarques générales */}
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Remarques essais en charge</label>
+                    <Textarea value={essaisEnCharge.remarks} onChange={e => updateEssai('remarks', e.target.value)} placeholder="Observations sur les essais en charge..." rows={2} />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="p-4 border-t border-[var(--border-primary)] flex gap-3"><Button variant="secondary" className="flex-1" onClick={onClose}>Fermer</Button><Button variant="primary" className="flex-1" onClick={handleSave} disabled={isSaving}>{isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Enregistrer</>}</Button></div>
+          <div className="p-4 border-t border-[var(--border-primary)] flex gap-3">
+            <Button variant="secondary" className="flex-1" onClick={onClose}>Fermer</Button>
+            <Button variant="primary" className="flex-1" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Enregistrer</>}
+            </Button>
+          </div>
         </CardBody>
       </Card>
     </div>
