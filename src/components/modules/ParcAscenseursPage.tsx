@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   Building2, MapPin, AlertTriangle, Clock, Search, Filter, RefreshCw,
@@ -91,81 +91,121 @@ interface SyncStep {
 // API FUNCTIONS
 // =============================================
 const getAscenseurs = async (secteur?: number) => {
-  let query = supabase
-    .from('parc_ascenseurs')
-    .select('*')
-    .order('code_appareil');
-  
-  if (secteur) {
-    query = query.eq('secteur', secteur);
+  try {
+    let query = supabase
+      .from('parc_ascenseurs')
+      .select('*')
+      .order('code_appareil');
+    
+    if (secteur) {
+      query = query.eq('secteur', secteur);
+    }
+    
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Table parc_ascenseurs non disponible:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch {
+    return [];
   }
-  
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
 };
 
 const getArrets = async () => {
-  const { data, error } = await supabase
-    .from('parc_arrets')
-    .select('*')
-    .order('date_appel', { ascending: false });
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('parc_arrets')
+      .select('*')
+      .order('date_appel', { ascending: false });
+    if (error) {
+      console.warn('Table parc_arrets non disponible:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
 };
 
 const getPannesRecentes = async (limit = 50) => {
-  const { data, error } = await supabase
-    .from('parc_pannes')
-    .select('*')
-    .order('date_appel', { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('parc_pannes')
+      .select('*')
+      .order('date_appel', { ascending: false })
+      .limit(limit);
+    if (error) {
+      console.warn('Table parc_pannes non disponible:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
 };
 
 const getSecteurs = async () => {
-  const { data, error } = await supabase
-    .from('parc_secteurs')
-    .select('*')
-    .order('numero');
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('parc_secteurs')
+      .select('*')
+      .order('numero');
+    if (error) return [];
+    return data || [];
+  } catch {
+    return [];
+  }
 };
 
 const getLastSync = async (): Promise<SyncLog | null> => {
-  const { data, error } = await supabase
-    .from('parc_sync_logs')
-    .select('*')
-    .order('sync_date', { ascending: false })
-    .limit(1)
-    .single();
-  if (error) return null;
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from('parc_sync_logs')
+      .select('*')
+      .order('sync_date', { ascending: false })
+      .limit(1)
+      .maybeSingle(); // Utiliser maybeSingle au lieu de single pour éviter l'erreur si vide
+    if (error) return null;
+    return data;
+  } catch {
+    return null;
+  }
 };
 
 const getStats = async () => {
-  const [ascenseursRes, arretsRes, pannesRes] = await Promise.all([
-    supabase.from('parc_ascenseurs').select('id', { count: 'exact' }),
-    supabase.from('parc_arrets').select('id', { count: 'exact' }),
-    supabase.from('parc_pannes').select('id', { count: 'exact' }).gte('date_appel', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-  ]);
-  
-  return {
-    total: ascenseursRes.count || 0,
-    arrets: arretsRes.count || 0,
-    pannes30j: pannesRes.count || 0
-  };
+  try {
+    const [ascenseursRes, arretsRes, pannesRes] = await Promise.all([
+      supabase.from('parc_ascenseurs').select('id', { count: 'exact', head: true }),
+      supabase.from('parc_arrets').select('id', { count: 'exact', head: true }),
+      supabase.from('parc_pannes').select('id', { count: 'exact', head: true }).gte('date_appel', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+    ]);
+    
+    return {
+      total: ascenseursRes.count || 0,
+      arrets: arretsRes.count || 0,
+      pannes30j: pannesRes.count || 0
+    };
+  } catch {
+    return { total: 0, arrets: 0, pannes30j: 0 };
+  }
 };
 
 const getSyncLogs = async (limit = 20): Promise<SyncLog[]> => {
-  const { data, error } = await supabase
-    .from('parc_sync_logs')
-    .select('*')
-    .order('sync_date', { ascending: false })
-    .limit(limit);
-  if (error) return [];
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('parc_sync_logs')
+      .select('*')
+      .order('sync_date', { ascending: false })
+      .limit(limit);
+    if (error) {
+      console.warn('Table parc_sync_logs non disponible:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
 };
 
 // =============================================
@@ -205,6 +245,14 @@ function SyncModal({ onClose }: { onClose: () => void }) {
   const [steps, setSteps] = useState<SyncStep[]>([]);
   const [syncLog, setSyncLog] = useState<string[]>([]);
   const [apiUrl, setApiUrl] = useState(SYNC_API_URL || localStorage.getItem('sync_api_url') || '');
+  
+  // Refs pour accéder aux valeurs actuelles dans les closures async
+  const isRunningRef = useRef(false);
+  const isPausedRef = useRef(false);
+  
+  // Sync les refs avec les states
+  useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
   
   const { data: lastSync, refetch: refetchLastSync } = useQuery({
     queryKey: ['last-sync'],
@@ -288,7 +336,9 @@ function SyncModal({ onClose }: { onClose: () => void }) {
 
   const runFullSync = async () => {
     setIsRunning(true);
+    isRunningRef.current = true;
     setIsPaused(false);
+    isPausedRef.current = false;
     setCurrentStepIndex(0);
     setSyncLog([]);
     
@@ -299,12 +349,13 @@ function SyncModal({ onClose }: { onClose: () => void }) {
     addLog(`   ${stepsToRun.length} étapes à exécuter`);
     
     for (let i = 0; i < stepsToRun.length; i++) {
-      // Vérifier si en pause
-      while (isPaused && isRunning) {
+      // Vérifier si en pause (utiliser ref pour avoir la valeur actuelle)
+      while (isPausedRef.current && isRunningRef.current) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      if (!isRunning) {
+      // Vérifier si arrêté (utiliser ref)
+      if (!isRunningRef.current) {
         addLog('⏹️ Synchronisation annulée');
         break;
       }
@@ -343,6 +394,7 @@ function SyncModal({ onClose }: { onClose: () => void }) {
     addLog('🏁 Synchronisation complète terminée');
     toast.success('Synchronisation complète terminée');
     setIsRunning(false);
+    isRunningRef.current = false;
     refetchLastSync();
     refetchStats();
     refetchLogs();
@@ -351,13 +403,17 @@ function SyncModal({ onClose }: { onClose: () => void }) {
   };
 
   const togglePause = () => {
-    setIsPaused(!isPaused);
-    addLog(isPaused ? '▶️ Reprise...' : '⏸️ Pause...');
+    const newPaused = !isPaused;
+    setIsPaused(newPaused);
+    isPausedRef.current = newPaused;
+    addLog(newPaused ? '⏸️ Pause...' : '▶️ Reprise...');
   };
 
   const stopSync = () => {
     setIsRunning(false);
+    isRunningRef.current = false;
     setIsPaused(false);
+    isPausedRef.current = false;
     addLog('⏹️ Arrêt demandé...');
   };
 
