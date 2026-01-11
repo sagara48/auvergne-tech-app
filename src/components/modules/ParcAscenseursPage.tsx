@@ -90,15 +90,43 @@ interface SyncStep {
 // =============================================
 // API FUNCTIONS
 // =============================================
-const getAscenseurs = async (secteur?: number) => {
+
+// Récupérer les secteurs autorisés pour l'utilisateur connecté
+const getUserSecteurs = async (): Promise<number[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    
+    const { data, error } = await supabase
+      .from('user_secteurs')
+      .select('secteur')
+      .eq('user_id', user.id);
+    
+    if (error || !data || data.length === 0) {
+      // Si pas de secteurs assignés ou erreur, retourner vide (= tous les secteurs)
+      return [];
+    }
+    
+    return data.map(d => d.secteur);
+  } catch {
+    return [];
+  }
+};
+
+const getAscenseurs = async (secteur?: number, userSecteurs?: number[]) => {
   try {
     let query = supabase
       .from('parc_ascenseurs')
       .select('*')
       .order('code_appareil');
     
+    // Filtre par secteur spécifique
     if (secteur) {
       query = query.eq('secteur', secteur);
+    } 
+    // Filtre par secteurs de l'utilisateur (si définis)
+    else if (userSecteurs && userSecteurs.length > 0) {
+      query = query.in('secteur', userSecteurs);
     }
     
     const { data, error } = await query;
@@ -890,9 +918,9 @@ function AscenseurRow({ ascenseur, onClick }: { ascenseur: Ascenseur; onClick: (
 
 // Modal Détail Ascenseur
 function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles'>('info');
   
-  const { data: pannes } = useQuery({
+  const { data: allPannes } = useQuery({
     queryKey: ['pannes-ascenseur', ascenseur.id_wsoucont],
     queryFn: async () => {
       const { data } = await supabase
@@ -900,10 +928,249 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
         .select('*')
         .eq('id_wsoucont', ascenseur.id_wsoucont)
         .order('date_appel', { ascending: false })
-        .limit(20);
+        .limit(100);
       return data || [];
     }
   });
+  
+  // Séparer par type de cause
+  const visites = allPannes?.filter((p: any) => p.cause === '99' || p.cause === 99) || [];
+  const controles = allPannes?.filter((p: any) => p.cause === '0' || p.cause === 0 || p.cause === '00') || [];
+  const pannes = allPannes?.filter((p: any) => {
+    const cause = String(p.cause || '');
+    return cause !== '99' && cause !== '0' && cause !== '00';
+  }) || [];
+  
+  // Composant détaillé pour une visite d'entretien
+  const VisiteCard = ({ item }: { item: any }) => (
+    <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+            <Calendar className="w-5 h-5 text-blue-500" />
+          </div>
+          <div>
+            <p className="font-semibold">
+              {item.date_appel ? format(parseISO(item.date_appel), 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
+            </p>
+            <p className="text-xs text-[var(--text-muted)]">
+              Visite d'entretien
+            </p>
+          </div>
+        </div>
+        <Badge variant="blue">Entretien</Badge>
+      </div>
+      
+      {item.motif && (
+        <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+          <p className="text-sm text-[var(--text-secondary)]">{item.motif}</p>
+        </div>
+      )}
+      
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="flex items-center gap-2">
+          <User className="w-4 h-4 text-[var(--text-muted)]" />
+          <span className="text-[var(--text-muted)]">Technicien:</span>
+          <span className="font-medium">{item.depanneur || '-'}</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+          <span className="text-[var(--text-muted)]">Durée:</span>
+          <span className="font-medium">{item.duree_minutes ? `${item.duree_minutes} min` : '-'}</span>
+        </div>
+        
+        {item.heure_arrivee && (
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+            <span className="text-[var(--text-muted)]">Arrivée:</span>
+            <span className="font-medium">{item.heure_arrivee}</span>
+          </div>
+        )}
+        
+        {item.heure_depart && (
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+            <span className="text-[var(--text-muted)]">Départ:</span>
+            <span className="font-medium">{item.heure_depart}</span>
+          </div>
+        )}
+      </div>
+      
+      {item.travaux && (
+        <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
+          <p className="text-xs text-[var(--text-muted)] mb-1">Travaux effectués:</p>
+          <p className="text-sm text-[var(--text-secondary)]">{item.travaux}</p>
+        </div>
+      )}
+    </div>
+  );
+  
+  // Composant détaillé pour une panne
+  const PanneCard = ({ item }: { item: any }) => (
+    <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+            item.personnes_bloquees > 0 ? 'bg-red-500/20' : 'bg-orange-500/20'
+          }`}>
+            <AlertTriangle className={`w-5 h-5 ${
+              item.personnes_bloquees > 0 ? 'text-red-500' : 'text-orange-500'
+            }`} />
+          </div>
+          <div>
+            <p className="font-semibold">
+              {item.date_appel ? format(parseISO(item.date_appel), 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
+            </p>
+            {item.heure_appel && (
+              <p className="text-xs text-[var(--text-muted)]">Appel à {item.heure_appel}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {item.personnes_bloquees > 0 && (
+            <Badge variant="red" className="animate-pulse">
+              {item.personnes_bloquees} pers. bloquée{item.personnes_bloquees > 1 ? 's' : ''}
+            </Badge>
+          )}
+          <Badge variant={item.etat === 'termine' ? 'green' : 'orange'}>
+            {item.etat || 'En cours'}
+          </Badge>
+        </div>
+      </div>
+      
+      {/* Motif */}
+      <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+        <p className="text-xs text-[var(--text-muted)] mb-1">Motif d'appel:</p>
+        <p className="text-sm font-medium">{item.motif || '-'}</p>
+      </div>
+      
+      {/* Cause */}
+      {item.cause && item.cause !== '99' && item.cause !== '0' && (
+        <div className="mb-3 p-3 bg-orange-500/10 rounded-lg border border-orange-500/20">
+          <p className="text-xs text-orange-400 mb-1">Cause identifiée:</p>
+          <p className="text-sm text-[var(--text-secondary)]">{item.cause}</p>
+        </div>
+      )}
+      
+      {/* Infos intervention */}
+      <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+        <div className="flex items-center gap-2">
+          <User className="w-4 h-4 text-[var(--text-muted)]" />
+          <span className="text-[var(--text-muted)]">Dépanneur:</span>
+          <span className="font-medium">{item.depanneur || '-'}</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+          <span className="text-[var(--text-muted)]">Durée:</span>
+          <span className="font-medium">{item.duree_minutes ? `${item.duree_minutes} min` : '-'}</span>
+        </div>
+        
+        {item.demandeur && (
+          <div className="flex items-center gap-2 col-span-2">
+            <Phone className="w-4 h-4 text-[var(--text-muted)]" />
+            <span className="text-[var(--text-muted)]">Demandeur:</span>
+            <span className="font-medium">{item.demandeur}</span>
+          </div>
+        )}
+      </div>
+      
+      {/* Timeline intervention */}
+      {(item.heure_arrivee || item.heure_depart) && (
+        <div className="flex items-center gap-4 p-2 bg-[var(--bg-secondary)] rounded-lg text-xs">
+          {item.heure_appel && (
+            <div className="flex items-center gap-1">
+              <span className="text-[var(--text-muted)]">📞 Appel:</span>
+              <span className="font-medium">{item.heure_appel}</span>
+            </div>
+          )}
+          {item.heure_arrivee && (
+            <div className="flex items-center gap-1">
+              <span className="text-[var(--text-muted)]">🚗 Arrivée:</span>
+              <span className="font-medium">{item.heure_arrivee}</span>
+            </div>
+          )}
+          {item.heure_depart && (
+            <div className="flex items-center gap-1">
+              <span className="text-[var(--text-muted)]">✅ Départ:</span>
+              <span className="font-medium">{item.heure_depart}</span>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Travaux effectués */}
+      {item.travaux && (
+        <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
+          <p className="text-xs text-[var(--text-muted)] mb-1">Travaux effectués:</p>
+          <p className="text-sm text-[var(--text-secondary)]">{item.travaux}</p>
+        </div>
+      )}
+      
+      {/* Type de panne */}
+      {item.type_panne && (
+        <div className="mt-2">
+          <Badge variant="gray" className="text-[10px]">{item.type_panne}</Badge>
+        </div>
+      )}
+    </div>
+  );
+  
+  // Composant pour les contrôles câbles/parachute
+  const ControleCard = ({ item }: { item: any }) => (
+    <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+            <Eye className="w-5 h-5 text-purple-500" />
+          </div>
+          <div>
+            <p className="font-semibold">
+              {item.date_appel ? format(parseISO(item.date_appel), 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
+            </p>
+            <p className="text-xs text-[var(--text-muted)]">Contrôle câbles / parachute</p>
+          </div>
+        </div>
+        <Badge variant="purple">Contrôle</Badge>
+      </div>
+      
+      {item.motif && (
+        <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+          <p className="text-sm text-[var(--text-secondary)]">{item.motif}</p>
+        </div>
+      )}
+      
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="flex items-center gap-2">
+          <User className="w-4 h-4 text-[var(--text-muted)]" />
+          <span className="text-[var(--text-muted)]">Technicien:</span>
+          <span className="font-medium">{item.depanneur || '-'}</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+          <span className="text-[var(--text-muted)]">Durée:</span>
+          <span className="font-medium">{item.duree_minutes ? `${item.duree_minutes} min` : '-'}</span>
+        </div>
+      </div>
+      
+      {item.travaux && (
+        <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
+          <p className="text-xs text-[var(--text-muted)] mb-1">Observations:</p>
+          <p className="text-sm text-[var(--text-secondary)]">{item.travaux}</p>
+        </div>
+      )}
+    </div>
+  );
+  
+  // Rendu générique pour liste vide
+  const EmptyState = ({ icon: Icon, message }: { icon: any; message: string }) => (
+    <div className="text-center py-8 text-[var(--text-muted)]">
+      <Icon className="w-12 h-12 mx-auto mb-2 opacity-50" />
+      <p>{message}</p>
+    </div>
+  );
   
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -927,11 +1194,12 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
             </div>
             
             {/* Tabs */}
-            <div className="flex gap-2 mt-4">
+            <div className="flex gap-2 mt-4 flex-wrap">
               {[
-                { id: 'info', label: 'Informations', icon: FileText },
-                { id: 'pannes', label: 'Pannes', icon: AlertTriangle },
-                { id: 'visites', label: 'Visites', icon: Calendar }
+                { id: 'info', label: 'Informations', icon: FileText, count: null },
+                { id: 'visites', label: 'Visites', icon: Calendar, count: visites.length },
+                { id: 'controles', label: 'Contrôles', icon: Eye, count: controles.length },
+                { id: 'pannes', label: 'Pannes', icon: AlertTriangle, count: pannes.length }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -944,6 +1212,13 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 >
                   <tab.icon className="w-4 h-4" />
                   {tab.label}
+                  {tab.count !== null && (
+                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      activeTab === tab.id ? 'bg-white/20' : 'bg-[var(--bg-secondary)]'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -1027,40 +1302,33 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
               </div>
             )}
             
-            {activeTab === 'pannes' && (
-              <div className="space-y-3">
-                {pannes && pannes.length > 0 ? (
-                  pannes.map((panne: any) => (
-                    <div key={panne.id} className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">
-                          {panne.date_appel ? format(parseISO(panne.date_appel), 'dd/MM/yyyy', { locale: fr }) : '-'}
-                        </span>
-                        <Badge variant={panne.etat === 'termine' ? 'green' : 'orange'}>
-                          {panne.etat || 'En cours'}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-[var(--text-secondary)]">{panne.motif}</p>
-                      {panne.cause && <p className="text-xs text-[var(--text-muted)] mt-1">Cause: {panne.cause}</p>}
-                      <div className="flex items-center gap-4 mt-2 text-xs text-[var(--text-muted)]">
-                        {panne.depanneur && <span>👤 {panne.depanneur}</span>}
-                        {panne.duree_minutes && <span>⏱️ {panne.duree_minutes} min</span>}
-                      </div>
-                    </div>
-                  ))
+            {activeTab === 'visites' && (
+              <div className="space-y-4">
+                {visites.length > 0 ? (
+                  visites.map((item: any) => <VisiteCard key={item.id} item={item} />)
                 ) : (
-                  <div className="text-center py-8 text-[var(--text-muted)]">
-                    <CheckCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>Aucune panne enregistrée</p>
-                  </div>
+                  <EmptyState icon={Calendar} message="Aucune visite d'entretien enregistrée" />
                 )}
               </div>
             )}
             
-            {activeTab === 'visites' && (
-              <div className="text-center py-8 text-[var(--text-muted)]">
-                <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>Historique des visites à venir</p>
+            {activeTab === 'controles' && (
+              <div className="space-y-4">
+                {controles.length > 0 ? (
+                  controles.map((item: any) => <ControleCard key={item.id} item={item} />)
+                ) : (
+                  <EmptyState icon={Eye} message="Aucun contrôle câbles/parachute enregistré" />
+                )}
+              </div>
+            )}
+            
+            {activeTab === 'pannes' && (
+              <div className="space-y-4">
+                {pannes.length > 0 ? (
+                  pannes.map((item: any) => <PanneCard key={item.id} item={item} />)
+                ) : (
+                  <EmptyState icon={CheckCircle} message="Aucune panne enregistrée" />
+                )}
               </div>
             )}
           </div>
@@ -1081,9 +1349,16 @@ export function ParcAscenseursPage() {
   const [selectedAscenseur, setSelectedAscenseur] = useState<Ascenseur | null>(null);
   const [showSyncModal, setShowSyncModal] = useState(false);
   
+  // Récupérer les secteurs autorisés de l'utilisateur
+  const { data: userSecteurs } = useQuery({
+    queryKey: ['user-secteurs'],
+    queryFn: getUserSecteurs
+  });
+  
   const { data: ascenseurs, isLoading } = useQuery({
-    queryKey: ['parc-ascenseurs'],
-    queryFn: () => getAscenseurs()
+    queryKey: ['parc-ascenseurs', userSecteurs],
+    queryFn: () => getAscenseurs(undefined, userSecteurs),
+    enabled: userSecteurs !== undefined // Attendre que userSecteurs soit chargé
   });
   
   const { data: arrets } = useQuery({
@@ -1092,10 +1367,24 @@ export function ParcAscenseursPage() {
     refetchInterval: 60000 // Refresh toutes les minutes
   });
   
+  // Filtrer les arrêts selon les secteurs de l'utilisateur
+  const filteredArrets = useMemo(() => {
+    if (!arrets) return [];
+    if (!userSecteurs || userSecteurs.length === 0) return arrets;
+    return arrets.filter((a: Arret) => userSecteurs.includes(a.secteur));
+  }, [arrets, userSecteurs]);
+  
   const { data: secteurs } = useQuery({
     queryKey: ['parc-secteurs'],
     queryFn: getSecteurs
   });
+  
+  // Filtrer les secteurs disponibles selon les droits de l'utilisateur
+  const availableSecteurs = useMemo(() => {
+    if (!secteurs) return [];
+    if (!userSecteurs || userSecteurs.length === 0) return secteurs;
+    return secteurs.filter((s: any) => userSecteurs.includes(s.numero));
+  }, [secteurs, userSecteurs]);
   
   const { data: lastSync } = useQuery({
     queryKey: ['parc-last-sync'],
@@ -1157,14 +1446,14 @@ export function ParcAscenseursPage() {
                   <Building2 className="w-5 h-5 text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{stats?.total || 0}</p>
+                  <p className="text-2xl font-bold">{ascenseurs?.length || 0}</p>
                   <p className="text-xs text-[var(--text-muted)]">Ascenseurs</p>
                 </div>
               </div>
             </CardBody>
           </Card>
           
-          <ArretsWidget arrets={arrets || []} />
+          <ArretsWidget arrets={filteredArrets || []} />
           
           <Card>
             <CardBody className="p-4">
@@ -1187,7 +1476,7 @@ export function ParcAscenseursPage() {
                   <BarChart3 className="w-5 h-5 text-purple-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{secteurs?.length || 0}</p>
+                  <p className="text-2xl font-bold">{availableSecteurs?.length || 0}</p>
                   <p className="text-xs text-[var(--text-muted)]">Secteurs</p>
                 </div>
               </div>
@@ -1209,7 +1498,7 @@ export function ParcAscenseursPage() {
           
           <Select value={secteurFilter} onChange={e => setSecteurFilter(e.target.value)} className="w-40">
             <option value="">Tous secteurs</option>
-            {secteurs?.map(s => (
+            {availableSecteurs?.map((s: any) => (
               <option key={s.numero} value={s.numero}>{s.nom}</option>
             ))}
           </Select>
@@ -1220,7 +1509,7 @@ export function ParcAscenseursPage() {
             onClick={() => setShowArretOnly(!showArretOnly)}
           >
             <AlertTriangle className="w-4 h-4" />
-            À l'arrêt ({arrets?.length || 0})
+            À l'arrêt ({filteredArrets?.length || 0})
           </Button>
           
           <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-lg p-1">
