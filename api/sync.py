@@ -206,6 +206,19 @@ def supabase_upsert(table, data, on_conflict=None):
     status, resp = http_request(url, 'POST', data, headers, 15)
     return status in [200, 201]
 
+def supabase_upsert_with_error(table, data, on_conflict=None):
+    """Upsert dans Supabase avec retour d'erreur détaillé"""
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{table}"
+    if on_conflict:
+        url += f"?on_conflict={on_conflict}"
+    headers = supabase_headers()
+    headers['Prefer'] = 'resolution=merge-duplicates,return=minimal'
+    status, resp = http_request(url, 'POST', data, headers, 60)
+    if status in [200, 201]:
+        return True, None
+    else:
+        return False, f"HTTP {status}: {resp[:500] if resp else 'No response'}"
+
 def supabase_update(table, key_col, key_val, data):
     """Update dans Supabase"""
     url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{table}?{key_col}=eq.{key_val}"
@@ -508,7 +521,10 @@ def sync_pannes(period_idx):
     
     items = parse_items(resp, "tabListeWpanne")
     upserted = 0
+    errors = []
     
+    # Préparer les données en batch
+    batch = []
     for p in items:
         id_panne = safe_int(p.get('IDWPANNE'))
         if not id_panne:
@@ -539,13 +555,21 @@ def sync_pannes(period_idx):
             'synced_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat()
         }
-        
-        if supabase_upsert('parc_pannes', data, 'id_panne'):
-            upserted += 1
+        batch.append(data)
+    
+    # Upsert par batch de 100
+    batch_size = 100
+    for i in range(0, len(batch), batch_size):
+        chunk = batch[i:i+batch_size]
+        success, error_msg = supabase_upsert_with_error('parc_pannes', chunk, 'id_panne')
+        if success:
+            upserted += len(chunk)
+        else:
+            errors.append(f"Batch {i//batch_size}: {error_msg}")
     
     next_period = period_idx + 1
-    return {
-        "status": "success",
+    result = {
+        "status": "success" if not errors else "partial",
         "step": 3,
         "period": since_date,
         "period_idx": period_idx,
@@ -553,6 +577,9 @@ def sync_pannes(period_idx):
         "upserted": upserted,
         "next": f"?step=3&period={next_period}" if next_period < len(PERIODS) else "?step=4"
     }
+    if errors:
+        result["errors"] = errors[:5]  # Limiter à 5 erreurs
+    return result
 
 # ============================================================
 # STEP 4: Mise à jour nb_visites_an et flags en_arret
