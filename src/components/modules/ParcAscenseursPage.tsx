@@ -113,6 +113,28 @@ const getUserSecteurs = async (): Promise<number[]> => {
   }
 };
 
+// Récupérer les types de planning avec nb de visites
+const getTypesPlanning = async (): Promise<Record<string, number>> => {
+  try {
+    const { data, error } = await supabase
+      .from('parc_type_planning')
+      .select('code, nb_visites');
+    
+    if (error || !data) return {};
+    
+    // Créer un map code -> nb_visites
+    const map: Record<string, number> = {};
+    data.forEach((tp: any) => {
+      if (tp.code) {
+        map[tp.code] = tp.nb_visites || 0;
+      }
+    });
+    return map;
+  } catch {
+    return {};
+  }
+};
+
 const getAscenseurs = async (secteur?: number, userSecteurs?: number[]) => {
   try {
     let query = supabase
@@ -773,7 +795,9 @@ function SyncModal({ onClose }: { onClose: () => void }) {
 // =============================================
 
 // Widget Ascenseurs à l'arrêt
-function ArretsWidget({ arrets }: { arrets: Arret[] }) {
+function ArretsWidget({ arrets, onSelectArret }: { arrets: any[]; onSelectArret?: (arret: any) => void }) {
+  const [showAll, setShowAll] = useState(false);
+  
   if (arrets.length === 0) {
     return (
       <Card className="bg-green-500/10 border-green-500/30">
@@ -792,64 +816,213 @@ function ArretsWidget({ arrets }: { arrets: Arret[] }) {
     );
   }
   
+  // Fonction pour décoder les entités HTML
+  const decodeHtml = (text: string | null) => {
+    if (!text) return null;
+    return text
+      .replace(/&#13;/g, '\n')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .trim();
+  };
+  
+  // Fonction pour formater une heure HHMM
+  const formatHeureHHMM = (heureStr: string | null) => {
+    if (!heureStr) return null;
+    const h = heureStr.toString().padStart(4, '0');
+    return `${h.substring(0, 2)}h${h.substring(2, 4)}`;
+  };
+  
   return (
-    <Card className="bg-red-500/10 border-red-500/30">
-      <CardBody className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center animate-pulse">
-              <AlertTriangle className="w-6 h-6 text-red-500" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-red-500">{arrets.length}</p>
-              <p className="text-sm text-[var(--text-muted)]">Ascenseur{arrets.length > 1 ? 's' : ''} à l'arrêt</p>
+    <>
+      <Card className="bg-red-500/10 border-red-500/30 cursor-pointer" onClick={() => setShowAll(true)}>
+        <CardBody className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center animate-pulse">
+                <AlertTriangle className="w-6 h-6 text-red-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-red-500">{arrets.length}</p>
+                <p className="text-sm text-[var(--text-muted)]">Ascenseur{arrets.length > 1 ? 's' : ''} à l'arrêt</p>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {arrets.slice(0, 5).map(arret => {
-            const dateAppel = arret.date_appel ? parseISO(arret.date_appel) : new Date();
-            const heuresArret = differenceInHours(new Date(), dateAppel);
-            
-            return (
-              <div key={arret.id} className="flex items-center gap-3 p-2 bg-[var(--bg-tertiary)] rounded-lg">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{arret.code_appareil}</p>
-                  <p className="text-xs text-[var(--text-muted)] truncate">{arret.adresse}, {arret.ville}</p>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {arrets.slice(0, 3).map(arret => {
+              const data = arret.data_warret || {};
+              const dateAppel = arret.date_appel ? parseISO(arret.date_appel) : new Date();
+              const heuresArret = differenceInHours(new Date(), dateAppel);
+              const heureAppel = formatHeureHHMM(data.APPEL || arret.heure_appel);
+              
+              return (
+                <div key={arret.id} className="p-2 bg-[var(--bg-tertiary)] rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{arret.code_appareil}</p>
+                      <p className="text-xs text-[var(--text-muted)] truncate">{arret.adresse}, {arret.ville}</p>
+                    </div>
+                    <Badge variant="red" className="text-[10px] ml-2">{heuresArret}h</Badge>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <Badge variant="red" className="text-[10px]">{heuresArret}h</Badge>
+              );
+            })}
+            {arrets.length > 3 && (
+              <p className="text-xs text-center text-[var(--text-muted)] pt-1">
+                + {arrets.length - 3} autre{arrets.length - 3 > 1 ? 's' : ''} • Cliquer pour voir tout
+              </p>
+            )}
+          </div>
+        </CardBody>
+      </Card>
+      
+      {/* Modal liste complète des arrêts */}
+      {showAll && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <Card className="w-[900px] max-h-[85vh] overflow-hidden flex flex-col">
+            <CardBody className="p-0 flex-1 overflow-hidden flex flex-col">
+              {/* Header */}
+              <div className="p-4 border-b border-[var(--border-primary)] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-red-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">Ascenseurs à l'arrêt</h2>
+                    <p className="text-sm text-[var(--text-muted)]">{arrets.length} appareil{arrets.length > 1 ? 's' : ''}</p>
+                  </div>
                 </div>
+                <button onClick={() => setShowAll(false)} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                  <XCircle className="w-5 h-5" />
+                </button>
               </div>
-            );
-          })}
+              
+              {/* Liste */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {arrets.map(arret => {
+                  const data = arret.data_warret || {};
+                  const dateAppel = arret.date_appel ? parseISO(arret.date_appel) : new Date();
+                  const heuresArret = differenceInHours(new Date(), dateAppel);
+                  const heureAppel = formatHeureHHMM(data.APPEL || arret.heure_appel);
+                  const motif = data.Libelle || arret.motif;
+                  const demandeur = data.DEMAND || arret.demandeur;
+                  const notes = decodeHtml(data.NOTE2);
+                  
+                  return (
+                    <div key={arret.id} className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-red-500/30">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                            <Building2 className="w-5 h-5 text-red-500" />
+                          </div>
+                          <div>
+                            <p className="font-bold">{arret.code_appareil}</p>
+                            <p className="text-sm text-[var(--text-muted)]">{arret.adresse}, {arret.ville}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {arret.hors_contrat && (
+                            <Badge variant="gray">Hors contrat</Badge>
+                          )}
+                          <Badge variant="red" className="animate-pulse">
+                            À l'arrêt depuis {heuresArret}h
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {/* Infos appel */}
+                      <div className="grid grid-cols-2 gap-4 mb-3">
+                        <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+                          <p className="text-xs text-[var(--text-muted)] mb-1">Date & heure d'appel</p>
+                          <p className="text-sm font-medium">
+                            {format(dateAppel, 'EEEE dd MMMM yyyy', { locale: fr })}
+                            {heureAppel && ` à ${heureAppel}`}
+                          </p>
+                        </div>
+                        
+                        {demandeur && (
+                          <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+                            <p className="text-xs text-[var(--text-muted)] mb-1">Demandeur</p>
+                            <p className="text-sm font-medium">{demandeur}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Motif */}
+                      {motif && (
+                        <div className="p-3 bg-red-500/10 rounded-lg border border-red-500/20 mb-3">
+                          <p className="text-xs text-red-400 mb-1">Motif d'arrêt</p>
+                          <p className="text-sm">{motif}</p>
+                        </div>
+                      )}
+                      
+                      {/* Notes */}
+                      {notes && (
+                        <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+                          <p className="text-xs text-[var(--text-muted)] mb-1">Notes</p>
+                          <p className="text-sm text-[var(--text-secondary)] whitespace-pre-line">{notes}</p>
+                        </div>
+                      )}
+                      
+                      {/* Infos techniques */}
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <Badge variant="gray" className="text-[10px]">Secteur {arret.secteur}</Badge>
+                        {arret.marque && <Badge variant="gray" className="text-[10px]">{arret.marque}</Badge>}
+                        {arret.type_planning && (
+                          <Badge variant="blue" className="text-[10px]">{arret.type_planning} - {arret.nb_visites_an || 0} visites/an</Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardBody>
+          </Card>
         </div>
-      </CardBody>
-    </Card>
+      )}
+    </>
   );
 }
 
 // Carte Ascenseur
-function AscenseurCard({ ascenseur, onClick }: { ascenseur: Ascenseur; onClick: () => void }) {
+function AscenseurCard({ ascenseur, onClick }: { ascenseur: any; onClick: () => void }) {
+  const isHorsContrat = !ascenseur.type_planning;
+  
   return (
     <Card 
-      className={`cursor-pointer hover:border-orange-500/50 transition-all ${ascenseur.en_arret ? 'border-red-500/50 bg-red-500/5' : ''}`}
+      className={`cursor-pointer hover:border-orange-500/50 transition-all ${
+        ascenseur.en_arret ? 'border-red-500/50 bg-red-500/5' : 
+        isHorsContrat ? 'border-gray-500/30 bg-gray-500/5' : ''
+      }`}
       onClick={onClick}
     >
       <CardBody className="p-4">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${ascenseur.en_arret ? 'bg-red-500/20' : 'bg-orange-500/20'}`}>
-              <Building2 className={`w-5 h-5 ${ascenseur.en_arret ? 'text-red-500' : 'text-orange-500'}`} />
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+              ascenseur.en_arret ? 'bg-red-500/20' : 
+              isHorsContrat ? 'bg-gray-500/20' : 'bg-orange-500/20'
+            }`}>
+              <Building2 className={`w-5 h-5 ${
+                ascenseur.en_arret ? 'text-red-500' : 
+                isHorsContrat ? 'text-gray-500' : 'text-orange-500'
+              }`} />
             </div>
             <div>
               <p className="font-bold">{ascenseur.code_appareil}</p>
               <p className="text-xs text-[var(--text-muted)]">Secteur {ascenseur.secteur}</p>
             </div>
           </div>
-          {ascenseur.en_arret && (
-            <Badge variant="red" className="animate-pulse">À L'ARRÊT</Badge>
-          )}
+          <div className="flex flex-col items-end gap-1">
+            {ascenseur.en_arret && (
+              <Badge variant="red" className="animate-pulse">À L'ARRÊT</Badge>
+            )}
+            {isHorsContrat && (
+              <Badge variant="gray" className="text-[10px]">Hors contrat</Badge>
+            )}
+          </div>
         </div>
         
         <div className="space-y-1.5 text-sm">
@@ -870,11 +1043,13 @@ function AscenseurCard({ ascenseur, onClick }: { ascenseur: Ascenseur; onClick: 
         </div>
         
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[var(--border-primary)]">
-          {ascenseur.type_planning && (
-            <Badge variant="gray" className="text-[10px]">{ascenseur.type_planning}</Badge>
-          )}
-          {ascenseur.nb_visites_an && (
-            <Badge variant="blue" className="text-[10px]">{ascenseur.nb_visites_an} visites/an</Badge>
+          {ascenseur.type_planning ? (
+            <>
+              <Badge variant="green" className="text-[10px]">{ascenseur.type_planning}</Badge>
+              <Badge variant="blue" className="text-[10px]">{ascenseur.nb_visites_an || 0} visites/an</Badge>
+            </>
+          ) : (
+            <span className="text-xs text-[var(--text-muted)] italic">Aucun contrat de maintenance</span>
           )}
         </div>
       </CardBody>
@@ -883,16 +1058,27 @@ function AscenseurCard({ ascenseur, onClick }: { ascenseur: Ascenseur; onClick: 
 }
 
 // Ligne Ascenseur (vue liste)
-function AscenseurRow({ ascenseur, onClick }: { ascenseur: Ascenseur; onClick: () => void }) {
+function AscenseurRow({ ascenseur, onClick }: { ascenseur: any; onClick: () => void }) {
+  const isHorsContrat = !ascenseur.type_planning;
+  
   return (
     <tr 
-      className={`hover:bg-[var(--bg-secondary)] cursor-pointer ${ascenseur.en_arret ? 'bg-red-500/5' : ''}`}
+      className={`hover:bg-[var(--bg-secondary)] cursor-pointer ${
+        ascenseur.en_arret ? 'bg-red-500/5' : 
+        isHorsContrat ? 'bg-gray-500/5' : ''
+      }`}
       onClick={onClick}
     >
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${ascenseur.en_arret ? 'bg-red-500/20' : 'bg-[var(--bg-tertiary)]'}`}>
-            <Building2 className={`w-4 h-4 ${ascenseur.en_arret ? 'text-red-500' : 'text-[var(--text-muted)]'}`} />
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+            ascenseur.en_arret ? 'bg-red-500/20' : 
+            isHorsContrat ? 'bg-gray-500/20' : 'bg-[var(--bg-tertiary)]'
+          }`}>
+            <Building2 className={`w-4 h-4 ${
+              ascenseur.en_arret ? 'text-red-500' : 
+              isHorsContrat ? 'text-gray-500' : 'text-[var(--text-muted)]'
+            }`} />
           </div>
           <div>
             <p className="font-medium">{ascenseur.code_appareil}</p>
@@ -903,11 +1089,19 @@ function AscenseurRow({ ascenseur, onClick }: { ascenseur: Ascenseur; onClick: (
       <td className="px-4 py-3 text-sm">{ascenseur.adresse}</td>
       <td className="px-4 py-3 text-sm">{ascenseur.ville}</td>
       <td className="px-4 py-3 text-sm text-center">{ascenseur.secteur}</td>
-      <td className="px-4 py-3 text-sm">{ascenseur.marque}</td>
-      <td className="px-4 py-3 text-sm">{ascenseur.type_planning || '-'}</td>
+      <td className="px-4 py-3 text-sm">{ascenseur.marque || '-'}</td>
+      <td className="px-4 py-3 text-sm">
+        {ascenseur.type_planning ? (
+          <span>{ascenseur.type_planning} ({ascenseur.nb_visites_an || 0} vis/an)</span>
+        ) : (
+          <span className="text-gray-500 italic">Hors contrat</span>
+        )}
+      </td>
       <td className="px-4 py-3 text-center">
         {ascenseur.en_arret ? (
           <Badge variant="red">Arrêt</Badge>
+        ) : isHorsContrat ? (
+          <Badge variant="gray">HC</Badge>
         ) : (
           <Badge variant="green">OK</Badge>
         )}
@@ -1387,24 +1581,37 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                   </div>
                 </div>
                 
-                <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl col-span-2">
+                <div className={`p-4 rounded-xl col-span-2 ${
+                  ascenseur.type_planning 
+                    ? 'bg-[var(--bg-tertiary)]' 
+                    : 'bg-gray-500/10 border border-gray-500/30'
+                }`}>
                   <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-orange-400" /> Contrat & Maintenance
+                    {!ascenseur.type_planning && (
+                      <Badge variant="gray" className="ml-2">Hors contrat</Badge>
+                    )}
                   </h3>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Type planning</span>
-                      <span className="font-medium">{ascenseur.type_planning || '-'}</span>
+                  {ascenseur.type_planning ? (
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-[var(--text-muted)]">Type planning</span>
+                        <span className="font-medium">{ascenseur.type_planning}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[var(--text-muted)]">Visites/an</span>
+                        <span className="font-medium text-blue-500">{ascenseur.nb_visites_an || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[var(--text-muted)]">Dernier passage</span>
+                        <span className="font-medium">{ascenseur.dernier_passage ? format(parseISO(ascenseur.dernier_passage), 'dd/MM/yyyy') : '-'}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Visites/an</span>
-                      <span className="font-medium">{ascenseur.nb_visites_an || '-'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Dernier passage</span>
-                      <span className="font-medium">{ascenseur.dernier_passage ? format(parseISO(ascenseur.dernier_passage), 'dd/MM/yyyy') : '-'}</span>
-                    </div>
-                  </div>
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted)] italic">
+                      Cet appareil n'est pas sous contrat de maintenance.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -1452,6 +1659,7 @@ export function ParcAscenseursPage() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [secteurFilter, setSecteurFilter] = useState<string>('');
+  const [contratFilter, setContratFilter] = useState<'all' | 'contrat' | 'hors_contrat'>('all');
   const [showArretOnly, setShowArretOnly] = useState(false);
   const [selectedAscenseur, setSelectedAscenseur] = useState<Ascenseur | null>(null);
   const [showSyncModal, setShowSyncModal] = useState(false);
@@ -1462,11 +1670,29 @@ export function ParcAscenseursPage() {
     queryFn: getUserSecteurs
   });
   
-  const { data: ascenseurs, isLoading } = useQuery({
+  // Récupérer les types de planning pour le nb de visites
+  const { data: typesPlanning } = useQuery({
+    queryKey: ['parc-types-planning'],
+    queryFn: getTypesPlanning
+  });
+  
+  const { data: ascenseursRaw, isLoading } = useQuery({
     queryKey: ['parc-ascenseurs', userSecteurs],
     queryFn: () => getAscenseurs(undefined, userSecteurs),
     enabled: userSecteurs !== undefined // Attendre que userSecteurs soit chargé
   });
+  
+  // Enrichir les ascenseurs avec le nb de visites depuis types planning
+  const ascenseurs = useMemo(() => {
+    if (!ascenseursRaw) return [];
+    if (!typesPlanning) return ascenseursRaw;
+    
+    return ascenseursRaw.map((a: any) => ({
+      ...a,
+      nb_visites_an: a.type_planning ? (typesPlanning[a.type_planning] || 0) : 0,
+      hors_contrat: !a.type_planning
+    }));
+  }, [ascenseursRaw, typesPlanning]);
   
   const { data: arrets } = useQuery({
     queryKey: ['parc-arrets'],
@@ -1474,12 +1700,41 @@ export function ParcAscenseursPage() {
     refetchInterval: 60000 // Refresh toutes les minutes
   });
   
+  // Enrichir les arrêts avec les données des ascenseurs
+  const enrichedArrets = useMemo(() => {
+    if (!arrets || !ascenseurs) return [];
+    
+    // Créer un map id_wsoucont -> ascenseur
+    const ascenseursMap: Record<number, any> = {};
+    ascenseurs.forEach((a: any) => {
+      if (a.id_wsoucont) {
+        ascenseursMap[a.id_wsoucont] = a;
+      }
+    });
+    
+    return arrets.map((arret: any) => {
+      const asc = ascenseursMap[arret.id_wsoucont];
+      return {
+        ...arret,
+        // Enrichir avec les données de l'ascenseur
+        marque: asc?.marque || arret.marque,
+        modele: asc?.modele || arret.modele,
+        type_planning: asc?.type_planning || arret.type_planning,
+        nb_visites_an: asc?.nb_visites_an || 0,
+        localisation: asc?.localisation || arret.localisation,
+        tel_cabine: asc?.tel_cabine,
+        type_appareil: asc?.type_appareil,
+        hors_contrat: asc?.hors_contrat || !asc?.type_planning
+      };
+    });
+  }, [arrets, ascenseurs]);
+  
   // Filtrer les arrêts selon les secteurs de l'utilisateur
   const filteredArrets = useMemo(() => {
-    if (!arrets) return [];
-    if (!userSecteurs || userSecteurs.length === 0) return arrets;
-    return arrets.filter((a: Arret) => userSecteurs.includes(a.secteur));
-  }, [arrets, userSecteurs]);
+    if (!enrichedArrets) return [];
+    if (!userSecteurs || userSecteurs.length === 0) return enrichedArrets;
+    return enrichedArrets.filter((a: Arret) => userSecteurs.includes(a.secteur));
+  }, [enrichedArrets, userSecteurs]);
   
   const { data: secteurs } = useQuery({
     queryKey: ['parc-secteurs'],
@@ -1503,10 +1758,18 @@ export function ParcAscenseursPage() {
     queryFn: getStats
   });
   
+  // Stats sous contrat / hors contrat
+  const contratStats = useMemo(() => {
+    if (!ascenseurs) return { sousContrat: 0, horsContrat: 0 };
+    const sousContrat = ascenseurs.filter((a: any) => a.type_planning).length;
+    const horsContrat = ascenseurs.filter((a: any) => !a.type_planning).length;
+    return { sousContrat, horsContrat };
+  }, [ascenseurs]);
+  
   const filteredAscenseurs = useMemo(() => {
     if (!ascenseurs) return [];
     
-    return ascenseurs.filter(a => {
+    return ascenseurs.filter((a: any) => {
       if (search) {
         const s = search.toLowerCase();
         if (!a.code_appareil?.toLowerCase().includes(s) &&
@@ -1517,9 +1780,14 @@ export function ParcAscenseursPage() {
       }
       if (secteurFilter && a.secteur?.toString() !== secteurFilter) return false;
       if (showArretOnly && !a.en_arret) return false;
+      
+      // Filtre contrat
+      if (contratFilter === 'contrat' && !a.type_planning) return false;
+      if (contratFilter === 'hors_contrat' && a.type_planning) return false;
+      
       return true;
     });
-  }, [ascenseurs, search, secteurFilter, showArretOnly]);
+  }, [ascenseurs, search, secteurFilter, showArretOnly, contratFilter]);
   
   return (
     <div className="h-full flex flex-col">
@@ -1545,7 +1813,7 @@ export function ParcAscenseursPage() {
         </div>
         
         {/* Stats Cards */}
-        <div className="grid grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-5 gap-4 mb-4">
           <Card>
             <CardBody className="p-4">
               <div className="flex items-center gap-3">
@@ -1562,6 +1830,40 @@ export function ParcAscenseursPage() {
           
           <ArretsWidget arrets={filteredArrets || []} />
           
+          <Card 
+            className={`cursor-pointer transition-all ${contratFilter === 'contrat' ? 'border-green-500' : ''}`}
+            onClick={() => setContratFilter(contratFilter === 'contrat' ? 'all' : 'contrat')}
+          >
+            <CardBody className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-green-500">{contratStats.sousContrat}</p>
+                  <p className="text-xs text-[var(--text-muted)]">Sous contrat</p>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+          
+          <Card 
+            className={`cursor-pointer transition-all ${contratFilter === 'hors_contrat' ? 'border-gray-500' : ''}`}
+            onClick={() => setContratFilter(contratFilter === 'hors_contrat' ? 'all' : 'hors_contrat')}
+          >
+            <CardBody className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gray-500/20 flex items-center justify-center">
+                  <XCircle className="w-5 h-5 text-gray-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-400">{contratStats.horsContrat}</p>
+                  <p className="text-xs text-[var(--text-muted)]">Hors contrat</p>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+          
           <Card>
             <CardBody className="p-4">
               <div className="flex items-center gap-3">
@@ -1575,24 +1877,10 @@ export function ParcAscenseursPage() {
               </div>
             </CardBody>
           </Card>
-          
-          <Card>
-            <CardBody className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                  <BarChart3 className="w-5 h-5 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{availableSecteurs?.length || 0}</p>
-                  <p className="text-xs text-[var(--text-muted)]">Secteurs</p>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
         </div>
         
         {/* Filters */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
             <Input
@@ -1608,6 +1896,12 @@ export function ParcAscenseursPage() {
             {availableSecteurs?.map((s: any) => (
               <option key={s.numero} value={s.numero}>{s.nom}</option>
             ))}
+          </Select>
+          
+          <Select value={contratFilter} onChange={e => setContratFilter(e.target.value as any)} className="w-40">
+            <option value="all">Tous contrats</option>
+            <option value="contrat">Sous contrat</option>
+            <option value="hors_contrat">Hors contrat</option>
           </Select>
           
           <Button

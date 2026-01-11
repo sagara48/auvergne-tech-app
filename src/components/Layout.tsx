@@ -27,6 +27,7 @@ import {
   LogOut,
   User,
   Settings,
+  Shield,
 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { NotificationCenter } from '@/components/notifications';
@@ -57,6 +58,7 @@ const modules = [
   { id: 'chat', name: 'Messages', icon: MessageCircle, color: '#8b5cf6' },
   { id: 'nfc', name: 'Tags NFC', icon: Nfc, color: '#06b6d4' },
   { id: 'archives', name: 'Archives', icon: Archive, color: '#64748b' },
+  { id: 'admin', name: 'Administration', icon: Shield, color: '#a855f7' },
 ];
 
 export function Layout({ children }: LayoutProps) {
