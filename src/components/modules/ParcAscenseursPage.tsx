@@ -934,235 +934,342 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
   });
   
   // Séparer par type de cause
-  const visites = allPannes?.filter((p: any) => p.cause === '99' || p.cause === 99) || [];
-  const controles = allPannes?.filter((p: any) => p.cause === '0' || p.cause === 0 || p.cause === '00') || [];
+  const visites = allPannes?.filter((p: any) => {
+    const cause = p.data_wpanne?.CAUSE || p.cause;
+    return cause === '99' || cause === 99;
+  }) || [];
+  const controles = allPannes?.filter((p: any) => {
+    const cause = p.data_wpanne?.CAUSE || p.cause;
+    return cause === '0' || cause === 0 || cause === '00';
+  }) || [];
   const pannes = allPannes?.filter((p: any) => {
-    const cause = String(p.cause || '');
-    return cause !== '99' && cause !== '0' && cause !== '00';
+    const cause = String(p.data_wpanne?.CAUSE || p.cause || '');
+    return cause !== '99' && cause !== '0' && cause !== '00' && cause !== '';
   }) || [];
   
+  // Fonction pour formater une date YYYYMMDD
+  const formatDateYYYYMMDD = (dateStr: string | null) => {
+    if (!dateStr || dateStr.length !== 8) return null;
+    try {
+      const year = dateStr.substring(0, 4);
+      const month = dateStr.substring(4, 6);
+      const day = dateStr.substring(6, 8);
+      return new Date(`${year}-${month}-${day}`);
+    } catch {
+      return null;
+    }
+  };
+  
+  // Fonction pour formater une heure HHMM ou HMM
+  const formatHeureHHMM = (heureStr: string | null) => {
+    if (!heureStr) return null;
+    const h = heureStr.padStart(4, '0');
+    return `${h.substring(0, 2)}h${h.substring(2, 4)}`;
+  };
+  
+  // Fonction pour décoder les entités HTML
+  const decodeHtml = (text: string | null) => {
+    if (!text) return null;
+    return text
+      .replace(/&#13;/g, '\n')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .trim();
+  };
+  
   // Composant détaillé pour une visite d'entretien
-  const VisiteCard = ({ item }: { item: any }) => (
-    <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-            <Calendar className="w-5 h-5 text-blue-500" />
+  const VisiteCard = ({ item }: { item: any }) => {
+    const data = item.data_wpanne || {};
+    const dateVisite = formatDateYYYYMMDD(data.DATE) || (item.date_appel ? parseISO(item.date_appel) : null);
+    const heureInter = formatHeureHHMM(data.INTER);
+    const heureFinInter = formatHeureHHMM(data.HRFININTER);
+    const technicien = data.DEPANNEUR || data.CLEPERSO || item.depanneur;
+    const notes = decodeHtml(data.NOTE2);
+    const motif = data.Libelle || data.PANNES || item.motif;
+    
+    return (
+      <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-blue-500" />
+            </div>
+            <div>
+              <p className="font-semibold">
+                {dateVisite ? format(dateVisite, 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">
+                Visite d'entretien
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold">
-              {item.date_appel ? format(parseISO(item.date_appel), 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
-            </p>
-            <p className="text-xs text-[var(--text-muted)]">
-              Visite d'entretien
-            </p>
-          </div>
-        </div>
-        <Badge variant="blue">Entretien</Badge>
-      </div>
-      
-      {item.motif && (
-        <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
-          <p className="text-sm text-[var(--text-secondary)]">{item.motif}</p>
-        </div>
-      )}
-      
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="flex items-center gap-2">
-          <User className="w-4 h-4 text-[var(--text-muted)]" />
-          <span className="text-[var(--text-muted)]">Technicien:</span>
-          <span className="font-medium">{item.depanneur || '-'}</span>
+          <Badge variant="blue">Entretien</Badge>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-          <span className="text-[var(--text-muted)]">Durée:</span>
-          <span className="font-medium">{item.duree_minutes ? `${item.duree_minutes} min` : '-'}</span>
-        </div>
-        
-        {item.heure_arrivee && (
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-            <span className="text-[var(--text-muted)]">Arrivée:</span>
-            <span className="font-medium">{item.heure_arrivee}</span>
+        {motif && (
+          <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+            <p className="text-sm text-[var(--text-secondary)]">{motif}</p>
           </div>
         )}
         
-        {item.heure_depart && (
+        <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-            <span className="text-[var(--text-muted)]">Départ:</span>
-            <span className="font-medium">{item.heure_depart}</span>
+            <User className="w-4 h-4 text-[var(--text-muted)]" />
+            <span className="text-[var(--text-muted)]">Technicien:</span>
+            <span className="font-medium">{technicien || '-'}</span>
+          </div>
+          
+          {heureInter && (
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+              <span className="text-[var(--text-muted)]">Intervention:</span>
+              <span className="font-medium">{heureInter}</span>
+            </div>
+          )}
+          
+          {heureFinInter && (
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+              <span className="text-[var(--text-muted)]">Fin:</span>
+              <span className="font-medium">{heureFinInter}</span>
+            </div>
+          )}
+          
+          {heureInter && heureFinInter && (
+            <div className="flex items-center gap-2">
+              <Timer className="w-4 h-4 text-[var(--text-muted)]" />
+              <span className="text-[var(--text-muted)]">Durée:</span>
+              <span className="font-medium">
+                {(() => {
+                  const debut = parseInt(data.INTER || '0');
+                  const fin = parseInt(data.HRFININTER || '0');
+                  const debutMin = Math.floor(debut / 100) * 60 + (debut % 100);
+                  const finMin = Math.floor(fin / 100) * 60 + (fin % 100);
+                  const duree = finMin - debutMin;
+                  return duree > 0 ? `${Math.floor(duree / 60)}h${(duree % 60).toString().padStart(2, '0')}` : '-';
+                })()}
+              </span>
+            </div>
+          )}
+        </div>
+        
+        {notes && (
+          <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
+            <p className="text-xs text-[var(--text-muted)] mb-1">Notes / Travaux effectués:</p>
+            <p className="text-sm text-[var(--text-secondary)] whitespace-pre-line">{notes}</p>
           </div>
         )}
       </div>
-      
-      {item.travaux && (
-        <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
-          <p className="text-xs text-[var(--text-muted)] mb-1">Travaux effectués:</p>
-          <p className="text-sm text-[var(--text-secondary)]">{item.travaux}</p>
-        </div>
-      )}
-    </div>
-  );
+    );
+  };
   
   // Composant détaillé pour une panne
-  const PanneCard = ({ item }: { item: any }) => (
-    <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-            item.personnes_bloquees > 0 ? 'bg-red-500/20' : 'bg-orange-500/20'
-          }`}>
-            <AlertTriangle className={`w-5 h-5 ${
-              item.personnes_bloquees > 0 ? 'text-red-500' : 'text-orange-500'
-            }`} />
+  const PanneCard = ({ item }: { item: any }) => {
+    const data = item.data_wpanne || {};
+    const datePanne = formatDateYYYYMMDD(data.DATE) || (item.date_appel ? parseISO(item.date_appel) : null);
+    const heureAppel = formatHeureHHMM(data.APPEL);
+    const heureInter = formatHeureHHMM(data.INTER);
+    const heureFinInter = formatHeureHHMM(data.HRFININTER);
+    const technicien = data.DEPANNEUR || data.CLEPERSO || item.depanneur;
+    const notes = decodeHtml(data.NOTE2);
+    const motifAppel = data.Libelle || item.motif;
+    const typePanne = data.PANNES;
+    const demandeur = data.DEMAND || item.demandeur;
+    const telDemandeur = data.TELDEMAND;
+    const causeCode = data.CAUSE;
+    const persBloquees = item.personnes_bloquees || 0;
+    
+    return (
+      <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+              persBloquees > 0 ? 'bg-red-500/20' : 'bg-orange-500/20'
+            }`}>
+              <AlertTriangle className={`w-5 h-5 ${
+                persBloquees > 0 ? 'text-red-500' : 'text-orange-500'
+              }`} />
+            </div>
+            <div>
+              <p className="font-semibold">
+                {datePanne ? format(datePanne, 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
+              </p>
+              {heureAppel && (
+                <p className="text-xs text-[var(--text-muted)]">Appel à {heureAppel}</p>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="font-semibold">
-              {item.date_appel ? format(parseISO(item.date_appel), 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
-            </p>
-            {item.heure_appel && (
-              <p className="text-xs text-[var(--text-muted)]">Appel à {item.heure_appel}</p>
+          <div className="flex items-center gap-2">
+            {persBloquees > 0 && (
+              <Badge variant="red" className="animate-pulse">
+                {persBloquees} pers. bloquée{persBloquees > 1 ? 's' : ''}
+              </Badge>
+            )}
+            <Badge variant={item.etat === 'termine' ? 'green' : 'orange'}>
+              {item.etat || 'En cours'}
+            </Badge>
+          </div>
+        </div>
+        
+        {/* Motif d'appel */}
+        {motifAppel && (
+          <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+            <p className="text-xs text-[var(--text-muted)] mb-1">Motif d'appel:</p>
+            <p className="text-sm font-medium">{motifAppel}</p>
+          </div>
+        )}
+        
+        {/* Type de panne */}
+        {typePanne && (
+          <div className="mb-3 p-3 bg-orange-500/10 rounded-lg border border-orange-500/20">
+            <p className="text-xs text-orange-400 mb-1">Type de panne:</p>
+            <p className="text-sm text-[var(--text-secondary)]">{typePanne}</p>
+          </div>
+        )}
+        
+        {/* Infos intervention */}
+        <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+          <div className="flex items-center gap-2">
+            <User className="w-4 h-4 text-[var(--text-muted)]" />
+            <span className="text-[var(--text-muted)]">Dépanneur:</span>
+            <span className="font-medium">{technicien || '-'}</span>
+          </div>
+          
+          {demandeur && (
+            <div className="flex items-center gap-2">
+              <Phone className="w-4 h-4 text-[var(--text-muted)]" />
+              <span className="text-[var(--text-muted)]">Demandeur:</span>
+              <span className="font-medium">{demandeur} {telDemandeur ? `(${telDemandeur})` : ''}</span>
+            </div>
+          )}
+          
+          {causeCode && (
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-[var(--text-muted)]" />
+              <span className="text-[var(--text-muted)]">Code cause:</span>
+              <span className="font-medium">{causeCode}</span>
+            </div>
+          )}
+        </div>
+        
+        {/* Timeline intervention */}
+        {(heureAppel || heureInter || heureFinInter) && (
+          <div className="flex items-center gap-4 p-2 bg-[var(--bg-secondary)] rounded-lg text-xs mb-3">
+            {heureAppel && (
+              <div className="flex items-center gap-1">
+                <span className="text-[var(--text-muted)]">📞 Appel:</span>
+                <span className="font-medium">{heureAppel}</span>
+              </div>
+            )}
+            {heureInter && (
+              <div className="flex items-center gap-1">
+                <span className="text-[var(--text-muted)]">🚗 Arrivée:</span>
+                <span className="font-medium">{heureInter}</span>
+              </div>
+            )}
+            {heureFinInter && (
+              <div className="flex items-center gap-1">
+                <span className="text-[var(--text-muted)]">✅ Fin:</span>
+                <span className="font-medium">{heureFinInter}</span>
+              </div>
+            )}
+            {heureInter && heureFinInter && (
+              <div className="flex items-center gap-1 ml-auto">
+                <span className="text-[var(--text-muted)]">⏱️ Durée:</span>
+                <span className="font-medium">
+                  {(() => {
+                    const debut = parseInt(data.INTER || '0');
+                    const fin = parseInt(data.HRFININTER || '0');
+                    const debutMin = Math.floor(debut / 100) * 60 + (debut % 100);
+                    const finMin = Math.floor(fin / 100) * 60 + (fin % 100);
+                    const duree = finMin - debutMin;
+                    return duree > 0 ? `${Math.floor(duree / 60)}h${(duree % 60).toString().padStart(2, '0')}` : '-';
+                  })()}
+                </span>
+              </div>
             )}
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {item.personnes_bloquees > 0 && (
-            <Badge variant="red" className="animate-pulse">
-              {item.personnes_bloquees} pers. bloquée{item.personnes_bloquees > 1 ? 's' : ''}
-            </Badge>
-          )}
-          <Badge variant={item.etat === 'termine' ? 'green' : 'orange'}>
-            {item.etat || 'En cours'}
-          </Badge>
-        </div>
-      </div>
-      
-      {/* Motif */}
-      <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
-        <p className="text-xs text-[var(--text-muted)] mb-1">Motif d'appel:</p>
-        <p className="text-sm font-medium">{item.motif || '-'}</p>
-      </div>
-      
-      {/* Cause */}
-      {item.cause && item.cause !== '99' && item.cause !== '0' && (
-        <div className="mb-3 p-3 bg-orange-500/10 rounded-lg border border-orange-500/20">
-          <p className="text-xs text-orange-400 mb-1">Cause identifiée:</p>
-          <p className="text-sm text-[var(--text-secondary)]">{item.cause}</p>
-        </div>
-      )}
-      
-      {/* Infos intervention */}
-      <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-        <div className="flex items-center gap-2">
-          <User className="w-4 h-4 text-[var(--text-muted)]" />
-          <span className="text-[var(--text-muted)]">Dépanneur:</span>
-          <span className="font-medium">{item.depanneur || '-'}</span>
-        </div>
+        )}
         
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-          <span className="text-[var(--text-muted)]">Durée:</span>
-          <span className="font-medium">{item.duree_minutes ? `${item.duree_minutes} min` : '-'}</span>
-        </div>
-        
-        {item.demandeur && (
-          <div className="flex items-center gap-2 col-span-2">
-            <Phone className="w-4 h-4 text-[var(--text-muted)]" />
-            <span className="text-[var(--text-muted)]">Demandeur:</span>
-            <span className="font-medium">{item.demandeur}</span>
+        {/* Notes / Travaux effectués */}
+        {notes && (
+          <div className="pt-3 border-t border-[var(--border-primary)]">
+            <p className="text-xs text-[var(--text-muted)] mb-1">Notes / Travaux effectués:</p>
+            <p className="text-sm text-[var(--text-secondary)] whitespace-pre-line">{notes}</p>
           </div>
         )}
       </div>
-      
-      {/* Timeline intervention */}
-      {(item.heure_arrivee || item.heure_depart) && (
-        <div className="flex items-center gap-4 p-2 bg-[var(--bg-secondary)] rounded-lg text-xs">
-          {item.heure_appel && (
-            <div className="flex items-center gap-1">
-              <span className="text-[var(--text-muted)]">📞 Appel:</span>
-              <span className="font-medium">{item.heure_appel}</span>
-            </div>
-          )}
-          {item.heure_arrivee && (
-            <div className="flex items-center gap-1">
-              <span className="text-[var(--text-muted)]">🚗 Arrivée:</span>
-              <span className="font-medium">{item.heure_arrivee}</span>
-            </div>
-          )}
-          {item.heure_depart && (
-            <div className="flex items-center gap-1">
-              <span className="text-[var(--text-muted)]">✅ Départ:</span>
-              <span className="font-medium">{item.heure_depart}</span>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* Travaux effectués */}
-      {item.travaux && (
-        <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
-          <p className="text-xs text-[var(--text-muted)] mb-1">Travaux effectués:</p>
-          <p className="text-sm text-[var(--text-secondary)]">{item.travaux}</p>
-        </div>
-      )}
-      
-      {/* Type de panne */}
-      {item.type_panne && (
-        <div className="mt-2">
-          <Badge variant="gray" className="text-[10px]">{item.type_panne}</Badge>
-        </div>
-      )}
-    </div>
-  );
+    );
+  };
   
   // Composant pour les contrôles câbles/parachute
-  const ControleCard = ({ item }: { item: any }) => (
-    <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-            <Eye className="w-5 h-5 text-purple-500" />
+  const ControleCard = ({ item }: { item: any }) => {
+    const data = item.data_wpanne || {};
+    const dateControle = formatDateYYYYMMDD(data.DATE) || (item.date_appel ? parseISO(item.date_appel) : null);
+    const heureInter = formatHeureHHMM(data.INTER);
+    const heureFinInter = formatHeureHHMM(data.HRFININTER);
+    const technicien = data.DEPANNEUR || data.CLEPERSO || item.depanneur;
+    const notes = decodeHtml(data.NOTE2);
+    const motif = data.Libelle || data.PANNES || item.motif;
+    
+    return (
+      <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+              <Eye className="w-5 h-5 text-purple-500" />
+            </div>
+            <div>
+              <p className="font-semibold">
+                {dateControle ? format(dateControle, 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">Contrôle câbles / parachute</p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold">
-              {item.date_appel ? format(parseISO(item.date_appel), 'EEEE dd MMMM yyyy', { locale: fr }) : '-'}
-            </p>
-            <p className="text-xs text-[var(--text-muted)]">Contrôle câbles / parachute</p>
-          </div>
-        </div>
-        <Badge variant="purple">Contrôle</Badge>
-      </div>
-      
-      {item.motif && (
-        <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
-          <p className="text-sm text-[var(--text-secondary)]">{item.motif}</p>
-        </div>
-      )}
-      
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="flex items-center gap-2">
-          <User className="w-4 h-4 text-[var(--text-muted)]" />
-          <span className="text-[var(--text-muted)]">Technicien:</span>
-          <span className="font-medium">{item.depanneur || '-'}</span>
+          <Badge variant="purple">Contrôle</Badge>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-          <span className="text-[var(--text-muted)]">Durée:</span>
-          <span className="font-medium">{item.duree_minutes ? `${item.duree_minutes} min` : '-'}</span>
+        {motif && (
+          <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
+            <p className="text-sm text-[var(--text-secondary)]">{motif}</p>
+          </div>
+        )}
+        
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="flex items-center gap-2">
+            <User className="w-4 h-4 text-[var(--text-muted)]" />
+            <span className="text-[var(--text-muted)]">Technicien:</span>
+            <span className="font-medium">{technicien || '-'}</span>
+          </div>
+          
+          {heureInter && (
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+              <span className="text-[var(--text-muted)]">Intervention:</span>
+              <span className="font-medium">{heureInter}</span>
+            </div>
+          )}
+          
+          {heureFinInter && (
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+              <span className="text-[var(--text-muted)]">Fin:</span>
+              <span className="font-medium">{heureFinInter}</span>
+            </div>
+          )}
         </div>
+        
+        {notes && (
+          <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
+            <p className="text-xs text-[var(--text-muted)] mb-1">Observations:</p>
+            <p className="text-sm text-[var(--text-secondary)] whitespace-pre-line">{notes}</p>
+          </div>
+        )}
       </div>
-      
-      {item.travaux && (
-        <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
-          <p className="text-xs text-[var(--text-muted)] mb-1">Observations:</p>
-          <p className="text-sm text-[var(--text-secondary)]">{item.travaux}</p>
-        </div>
-      )}
-    </div>
-  );
+    );
+  };
   
   // Rendu générique pour liste vide
   const EmptyState = ({ icon: Icon, message }: { icon: any; message: string }) => (
