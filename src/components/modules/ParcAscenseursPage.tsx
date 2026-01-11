@@ -1716,7 +1716,12 @@ export function ParcAscenseursPage() {
       const asc = ascenseursMap[arret.id_wsoucont];
       return {
         ...arret,
-        // Enrichir avec les données de l'ascenseur
+        // Enrichir avec les données de l'ascenseur (priorité à l'ascenseur car arret peut avoir des valeurs null)
+        code_appareil: asc?.code_appareil || arret.code_appareil,
+        adresse: asc?.adresse || arret.adresse,
+        ville: asc?.ville || arret.ville,
+        code_postal: asc?.code_postal || arret.code_postal,
+        secteur: asc?.secteur || arret.secteur,
         marque: asc?.marque || arret.marque,
         modele: asc?.modele || arret.modele,
         type_planning: asc?.type_planning || arret.type_planning,
@@ -1724,7 +1729,7 @@ export function ParcAscenseursPage() {
         localisation: asc?.localisation || arret.localisation,
         tel_cabine: asc?.tel_cabine,
         type_appareil: asc?.type_appareil,
-        hors_contrat: asc?.hors_contrat || !asc?.type_planning
+        hors_contrat: !asc?.type_planning
       };
     });
   }, [arrets, ascenseurs]);

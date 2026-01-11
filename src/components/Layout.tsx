@@ -58,7 +58,6 @@ const modules = [
   { id: 'chat', name: 'Messages', icon: MessageCircle, color: '#8b5cf6' },
   { id: 'nfc', name: 'Tags NFC', icon: Nfc, color: '#06b6d4' },
   { id: 'archives', name: 'Archives', icon: Archive, color: '#64748b' },
-  { id: 'admin', name: 'Administration', icon: Shield, color: '#a855f7' },
 ];
 
 export function Layout({ children }: LayoutProps) {
@@ -311,6 +310,16 @@ export function Layout({ children }: LayoutProps) {
                       >
                         <Settings className="w-4 h-4" />
                         Paramètres
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setModuleActif('admin');
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                      >
+                        <Shield className="w-4 h-4 text-purple-500" />
+                        Administration
                       </button>
                     </div>
                     
