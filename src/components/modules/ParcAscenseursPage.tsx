@@ -180,21 +180,21 @@ const getArrets = async () => {
 
 const getPannesRecentes = async (limit = 50, userSecteurs?: number[]) => {
   try {
-    // D'abord récupérer les pannes
+    // Récupérer beaucoup plus de pannes pour avoir assez après filtrage
     const { data: pannes, error } = await supabase
       .from('parc_pannes')
       .select('*')
       .order('date_appel', { ascending: false })
-      .limit(limit * 2); // Récupérer plus pour filtrer ensuite
+      .limit(1000); // Récupérer beaucoup pour avoir assez après filtrage
     
     if (error) {
       console.warn('Table parc_pannes non disponible:', error.message);
       return [];
     }
     
-    if (!pannes) return [];
+    if (!pannes || pannes.length === 0) return [];
     
-    // Si pas de filtrage par secteurs, retourner tout
+    // Si pas de filtrage par secteurs (undefined ou tableau vide = tous les secteurs)
     if (!userSecteurs || userSecteurs.length === 0) {
       return pannes.slice(0, limit);
     }
@@ -204,19 +204,29 @@ const getPannesRecentes = async (limit = 50, userSecteurs?: number[]) => {
       .from('parc_ascenseurs')
       .select('id_wsoucont, secteur');
     
+    if (!ascenseurs || ascenseurs.length === 0) {
+      // Si pas d'ascenseurs, on ne peut pas filtrer, retourner tout
+      return pannes.slice(0, limit);
+    }
+    
     const secteursMap: Record<number, number> = {};
-    (ascenseurs || []).forEach((a: any) => {
-      if (a.id_wsoucont) secteursMap[a.id_wsoucont] = a.secteur;
+    ascenseurs.forEach((a: any) => {
+      if (a.id_wsoucont !== null && a.id_wsoucont !== undefined) {
+        secteursMap[a.id_wsoucont] = a.secteur;
+      }
     });
     
     // Filtrer les pannes par secteurs autorisés
-    return pannes
-      .filter((p: any) => {
-        const secteur = secteursMap[p.id_wsoucont];
-        return secteur && userSecteurs.includes(secteur);
-      })
-      .slice(0, limit);
-  } catch {
+    const filtered = pannes.filter((p: any) => {
+      if (!p.id_wsoucont) return false;
+      const secteur = secteursMap[p.id_wsoucont];
+      if (secteur === undefined || secteur === null) return false;
+      return userSecteurs.includes(secteur);
+    });
+    
+    return filtered.slice(0, limit);
+  } catch (err) {
+    console.error('Erreur getPannesRecentes:', err);
     return [];
   }
 };
@@ -1799,10 +1809,10 @@ export function ParcAscenseursPage() {
     refetchInterval: 60000 // Refresh toutes les minutes
   });
   
-  // Pannes récentes filtrées par secteurs (30 dernières)
+  // Pannes récentes filtrées par secteurs (récupérer 200 pour avoir 30 vraies pannes après filtrage cause)
   const { data: pannesRecentes } = useQuery({
     queryKey: ['parc-pannes-recentes', userSecteurs],
-    queryFn: () => getPannesRecentes(30, userSecteurs || []),
+    queryFn: () => getPannesRecentes(200, userSecteurs || []),
     enabled: userSecteurs !== undefined
   });
   
@@ -1895,14 +1905,28 @@ export function ParcAscenseursPage() {
     return { sousContrat, horsContrat };
   }, [ascenseurs]);
   
-  // Compter les pannes des 30 derniers jours (déjà filtré par secteurs)
+  // Compter les vraies pannes des 30 derniers jours (exclure visites et contrôles)
   const pannes30j = useMemo(() => {
-    if (!enrichedPannes) return 0;
+    if (!enrichedPannes || enrichedPannes.length === 0) return 0;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
     return enrichedPannes.filter((p: any) => {
       if (!p.date_appel) return false;
-      return parseISO(p.date_appel) >= thirtyDaysAgo;
+      
+      // Exclure les visites (cause 99) et contrôles (cause 0)
+      const data = p.data_wpanne || {};
+      const cause = data.CAUSE || p.cause;
+      const isVisite = cause === '99' || cause === 99;
+      const isControle = cause === '0' || cause === 0 || cause === '00';
+      if (isVisite || isControle) return false;
+      
+      // Vérifier la date
+      try {
+        return parseISO(p.date_appel) >= thirtyDaysAgo;
+      } catch {
+        return false;
+      }
     }).length;
   }, [enrichedPannes]);
   
