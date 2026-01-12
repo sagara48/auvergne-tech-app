@@ -1,17 +1,26 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   FolderOpen, File, FileText, Image, FileSpreadsheet, Search, Upload, Grid, List, 
   Plus, Edit2, Trash2, X, FolderPlus, ChevronRight, Download, Eye, MoreVertical,
-  Folder, Check
+  Folder, Check, Tag, Filter, Calendar, SlidersHorizontal, Sparkles, Scan, Loader2,
+  FileSearch, Copy, CheckCircle
 } from 'lucide-react';
-import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
+import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { getDocuments, getGedDossiers, createGedDossier, updateGedDossier, deleteGedDossier, uploadDocument, deleteDocument, updateDocument } from '@/services/api';
 import type { GedDossier } from '@/services/api';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { TypeDocument, Document } from '@/types';
 import toast from 'react-hot-toast';
+import { 
+  extractTextFromImage, 
+  searchInText, 
+  analyzeDocumentText,
+  cacheOCRText,
+  getCachedOCRText,
+  searchAllDocuments
+} from '@/services/ocrService';
 
 const TYPE_CONFIG: Record<TypeDocument, { label: string; icon: any; color: string }> = {
   contrat: { label: 'Contrat', icon: FileText, color: '#3b82f6' },
@@ -252,6 +261,264 @@ function ImportModal({
   );
 }
 
+// Modal OCR - Extraction de texte
+function OCRModal({ 
+  document, 
+  onClose 
+}: { 
+  document: Document; 
+  onClose: () => void;
+}) {
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [extractedText, setExtractedText] = useState('');
+  const [metadata, setMetadata] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchMatches, setSearchMatches] = useState<any[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  // Vérifier le cache au chargement
+  useState(() => {
+    const cached = getCachedOCRText(document.id);
+    if (cached) {
+      setExtractedText(cached.text);
+      setMetadata(cached.metadata);
+    }
+  });
+
+  const handleExtract = async () => {
+    if (!document.url) {
+      toast.error('URL du document non disponible');
+      return;
+    }
+
+    setIsExtracting(true);
+    setProgress(0);
+
+    try {
+      const isImage = document.type === 'photo' || 
+                      document.url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+
+      let text = '';
+      
+      if (isImage) {
+        const result = await extractTextFromImage(
+          document.url,
+          (p) => setProgress(Math.round(p * 100))
+        );
+        text = result.text;
+      } else {
+        // Pour les PDFs, on utiliserait extractTextFromPDF
+        // mais cela nécessite le fichier original
+        toast.error('OCR sur PDF non disponible - utilisez une image');
+        setIsExtracting(false);
+        return;
+      }
+
+      if (text) {
+        setExtractedText(text);
+        const meta = analyzeDocumentText(text);
+        setMetadata(meta);
+        
+        // Mettre en cache
+        cacheOCRText(document.id, text, meta);
+        
+        toast.success(`Texte extrait avec succès (${text.length} caractères)`);
+      } else {
+        toast.error('Aucun texte détecté dans le document');
+      }
+    } catch (error) {
+      console.error('Erreur OCR:', error);
+      toast.error('Erreur lors de l\'extraction du texte');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleSearch = () => {
+    if (extractedText && searchQuery) {
+      const matches = searchInText(extractedText, searchQuery);
+      setSearchMatches(matches);
+    }
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(extractedText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success('Texte copié dans le presse-papier');
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Card className="w-[700px] max-h-[90vh] overflow-hidden flex flex-col">
+        <CardBody className="p-0 flex flex-col flex-1 overflow-hidden">
+          {/* Header */}
+          <div className="p-4 border-b border-[var(--border-primary)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                  <Scan className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold">Extraction OCR</h2>
+                  <p className="text-sm text-[var(--text-muted)]">{document.nom}</p>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {!extractedText ? (
+              <div className="text-center py-8">
+                <Scan className="w-16 h-16 mx-auto mb-4 text-[var(--text-muted)]" />
+                <p className="text-[var(--text-secondary)] mb-4">
+                  Extraire le texte de ce document pour permettre la recherche full-text
+                </p>
+                <Button 
+                  variant="primary" 
+                  onClick={handleExtract}
+                  disabled={isExtracting}
+                >
+                  {isExtracting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Extraction... {progress}%
+                    </>
+                  ) : (
+                    <>
+                      <Scan className="w-4 h-4" />
+                      Lancer l'OCR
+                    </>
+                  )}
+                </Button>
+                {isExtracting && (
+                  <div className="mt-4 w-64 mx-auto">
+                    <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-purple-500 transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Métadonnées détectées */}
+                {metadata && (metadata.type || metadata.date || metadata.montant || metadata.keywords?.length > 0) && (
+                  <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-purple-400" />
+                      Métadonnées détectées
+                    </h4>
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      {metadata.type && (
+                        <Badge variant="purple">Type: {metadata.type}</Badge>
+                      )}
+                      {metadata.date && (
+                        <Badge variant="blue">Date: {metadata.date}</Badge>
+                      )}
+                      {metadata.montant && (
+                        <Badge variant="green">Montant: {metadata.montant.toFixed(2)}€</Badge>
+                      )}
+                      {metadata.reference && (
+                        <Badge>Réf: {metadata.reference}</Badge>
+                      )}
+                    </div>
+                    {metadata.keywords?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {metadata.keywords.map((kw: string) => (
+                          <span key={kw} className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs">
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Recherche dans le texte */}
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <FileSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                    <Input
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                      placeholder="Rechercher dans le texte extrait..."
+                      className="pl-10"
+                    />
+                  </div>
+                  <Button variant="secondary" onClick={handleSearch}>
+                    <Search className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {/* Résultats de recherche */}
+                {searchMatches.length > 0 && (
+                  <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                    <p className="text-sm font-medium mb-2">
+                      {searchMatches.length} résultat{searchMatches.length > 1 ? 's' : ''} trouvé{searchMatches.length > 1 ? 's' : ''}
+                    </p>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {searchMatches.map((match, idx) => (
+                        <div key={idx} className="text-sm p-2 bg-[var(--bg-secondary)] rounded">
+                          <span className="text-[var(--text-muted)]">...</span>
+                          {match.context.split(match.highlight).map((part: string, i: number, arr: string[]) => (
+                            <span key={i}>
+                              {part}
+                              {i < arr.length - 1 && (
+                                <mark className="bg-yellow-500/30 text-yellow-300 px-0.5 rounded">
+                                  {match.highlight}
+                                </mark>
+                              )}
+                            </span>
+                          ))}
+                          <span className="text-[var(--text-muted)]">...</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Texte extrait */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-sm">Texte extrait</h4>
+                    <Button variant="secondary" size="sm" onClick={handleCopy}>
+                      {copied ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                      {copied ? 'Copié' : 'Copier'}
+                    </Button>
+                  </div>
+                  <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg max-h-64 overflow-y-auto">
+                    <pre className="text-sm whitespace-pre-wrap font-mono text-[var(--text-secondary)]">
+                      {extractedText}
+                    </pre>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                    {extractedText.length} caractères • {extractedText.split(/\s+/).length} mots
+                  </p>
+                </div>
+
+                {/* Bouton ré-extraction */}
+                <Button variant="secondary" onClick={handleExtract} disabled={isExtracting}>
+                  <Scan className="w-4 h-4" />
+                  Ré-extraire le texte
+                </Button>
+              </>
+            )}
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
 export function GEDPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -262,6 +529,17 @@ export function GEDPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [editingDossier, setEditingDossier] = useState<GedDossier | null>(null);
   const [contextMenu, setContextMenu] = useState<{ dossier: GedDossier; x: number; y: number } | null>(null);
+  const [ocrDocument, setOcrDocument] = useState<Document | null>(null);
+  const [fullTextSearch, setFullTextSearch] = useState(false);
+  const [fullTextResults, setFullTextResults] = useState<any[]>([]);
+  
+  // États recherche avancée
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<'date' | 'nom' | 'taille'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const { data: documents } = useQuery({ queryKey: ['documents'], queryFn: getDocuments });
   const { data: dossiers } = useQuery({ queryKey: ['ged-dossiers'], queryFn: getGedDossiers });
@@ -316,14 +594,93 @@ export function GEDPage() {
     },
   });
 
-  // Filtrage
-  const filtered = documents?.filter(d => {
-    const matchSearch = d.nom.toLowerCase().includes(search.toLowerCase());
-    const matchType = filterType === 'all' || d.type_document === filterType;
-    const matchDossier = selectedDossier === null || (d as any).dossier_id === selectedDossier || 
-      (!(d as any).dossier_id && selectedDossier === 'sans-dossier');
-    return matchSearch && matchType && matchDossier;
-  }) || [];
+  // Fonction de normalisation pour la recherche
+  const normalizeText = (text: string) => {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  };
+
+  // Filtrage amélioré avec recherche avancée
+  const filtered = useMemo(() => {
+    let result = documents || [];
+    
+    // Filtre par recherche texte (nom, description, tags)
+    if (search) {
+      const searchNorm = normalizeText(search);
+      result = result.filter(d => {
+        const nomNorm = normalizeText(d.nom || '');
+        const descNorm = normalizeText((d as any).description || '');
+        const tagsNorm = ((d as any).tags || []).map((t: string) => normalizeText(t)).join(' ');
+        return nomNorm.includes(searchNorm) || 
+               descNorm.includes(searchNorm) || 
+               tagsNorm.includes(searchNorm);
+      });
+    }
+    
+    // Filtre par type
+    if (filterType !== 'all') {
+      result = result.filter(d => d.type_document === filterType);
+    }
+    
+    // Filtre par dossier
+    if (selectedDossier !== null) {
+      if (selectedDossier === 'sans-dossier') {
+        result = result.filter(d => !(d as any).dossier_id);
+      } else {
+        result = result.filter(d => (d as any).dossier_id === selectedDossier);
+      }
+    }
+    
+    // Filtre par date (recherche avancée)
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      result = result.filter(d => new Date(d.created_at) >= fromDate);
+    }
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59);
+      result = result.filter(d => new Date(d.created_at) <= toDate);
+    }
+    
+    // Filtre par tags sélectionnés
+    if (selectedTags.length > 0) {
+      result = result.filter(d => {
+        const docTags = (d as any).tags || [];
+        return selectedTags.some(tag => docTags.includes(tag));
+      });
+    }
+    
+    // Tri
+    result = [...result].sort((a, b) => {
+      let comparison = 0;
+      switch (sortBy) {
+        case 'nom':
+          comparison = (a.nom || '').localeCompare(b.nom || '');
+          break;
+        case 'taille':
+          comparison = ((a as any).taille || 0) - ((b as any).taille || 0);
+          break;
+        case 'date':
+        default:
+          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      return sortOrder === 'desc' ? -comparison : comparison;
+    });
+    
+    return result;
+  }, [documents, search, filterType, selectedDossier, dateFrom, dateTo, selectedTags, sortBy, sortOrder]);
+
+  // Extraire tous les tags uniques
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    documents?.forEach(d => {
+      ((d as any).tags || []).forEach((tag: string) => tags.add(tag));
+    });
+    return Array.from(tags).sort();
+  }, [documents]);
 
   // Stats
   const stats = {
@@ -436,20 +793,67 @@ export function GEDPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
               <Input 
-                placeholder="Rechercher..." 
+                placeholder={fullTextSearch ? "Recherche dans le contenu OCR..." : "Rechercher..."} 
                 value={search} 
-                onChange={e => setSearch(e.target.value)} 
+                onChange={e => {
+                  setSearch(e.target.value);
+                  if (fullTextSearch && e.target.value.length >= 3) {
+                    const results = searchAllDocuments(e.target.value);
+                    setFullTextResults(results);
+                  } else {
+                    setFullTextResults([]);
+                  }
+                }} 
                 className="pl-10 w-64" 
               />
             </div>
+            <button
+              onClick={() => setFullTextSearch(!fullTextSearch)}
+              className={`p-2 rounded-lg border transition-colors ${
+                fullTextSearch 
+                  ? 'bg-purple-500/20 border-purple-500/50 text-purple-400' 
+                  : 'bg-[var(--bg-tertiary)] border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              title="Recherche full-text (dans le contenu OCR)"
+            >
+              <FileSearch className="w-4 h-4" />
+            </button>
             <Select value={filterType} onChange={e => setFilterType(e.target.value)} className="w-40">
               <option value="all">Tous les types</option>
               {Object.entries(TYPE_CONFIG).map(([k, v]) => (
                 <option key={k} value={k}>{v.label}</option>
               ))}
             </Select>
+            <button
+              onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
+              className={`p-2 rounded-lg border transition-colors ${
+                showAdvancedSearch 
+                  ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' 
+                  : 'bg-[var(--bg-tertiary)] border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              title="Recherche avancée"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
           </div>
           <div className="flex items-center gap-2">
+            {/* Tri */}
+            <Select 
+              value={`${sortBy}-${sortOrder}`} 
+              onChange={e => {
+                const [by, order] = e.target.value.split('-');
+                setSortBy(by as any);
+                setSortOrder(order as any);
+              }} 
+              className="w-36 text-sm"
+            >
+              <option value="date-desc">Plus récents</option>
+              <option value="date-asc">Plus anciens</option>
+              <option value="nom-asc">Nom A-Z</option>
+              <option value="nom-desc">Nom Z-A</option>
+              <option value="taille-desc">Plus gros</option>
+              <option value="taille-asc">Plus petits</option>
+            </Select>
             <div className="flex bg-[var(--bg-tertiary)] rounded-lg p-1">
               <button
                 onClick={() => setViewMode('grid')}
@@ -469,6 +873,108 @@ export function GEDPage() {
             </Button>
           </div>
         </div>
+        
+        {/* Panneau recherche avancée */}
+        {showAdvancedSearch && (
+          <Card className="mb-4 border-indigo-500/30">
+            <CardBody className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                  Recherche avancée
+                </h4>
+                <button 
+                  onClick={() => {
+                    setDateFrom('');
+                    setDateTo('');
+                    setSelectedTags([]);
+                  }}
+                  className="text-xs text-indigo-400 hover:underline"
+                >
+                  Réinitialiser
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-4 gap-4">
+                {/* Filtres par date */}
+                <div>
+                  <label className="text-xs text-[var(--text-muted)] mb-1 block">Date début</label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={e => setDateFrom(e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-[var(--text-muted)] mb-1 block">Date fin</label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={e => setDateTo(e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+                
+                {/* Tags */}
+                <div className="col-span-2">
+                  <label className="text-xs text-[var(--text-muted)] mb-1 block">Filtrer par tags</label>
+                  <div className="flex flex-wrap gap-1 p-2 bg-[var(--bg-tertiary)] rounded-lg min-h-[38px]">
+                    {allTags.length > 0 ? (
+                      allTags.map(tag => (
+                        <button
+                          key={tag}
+                          onClick={() => {
+                            if (selectedTags.includes(tag)) {
+                              setSelectedTags(selectedTags.filter(t => t !== tag));
+                            } else {
+                              setSelectedTags([...selectedTags, tag]);
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                            selectedTags.includes(tag)
+                              ? 'bg-indigo-500 text-white'
+                              : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                          }`}
+                        >
+                          <Tag className="w-3 h-3 inline mr-1" />{tag}
+                        </button>
+                      ))
+                    ) : (
+                      <span className="text-xs text-[var(--text-muted)]">Aucun tag disponible</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Résumé filtres actifs */}
+              {(dateFrom || dateTo || selectedTags.length > 0) && (
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[var(--border-primary)]">
+                  <Filter className="w-4 h-4 text-indigo-400" />
+                  <span className="text-sm text-[var(--text-muted)]">Filtres actifs:</span>
+                  {dateFrom && (
+                    <Badge variant="gray" className="text-xs">
+                      Depuis {format(new Date(dateFrom), 'dd/MM/yyyy')}
+                    </Badge>
+                  )}
+                  {dateTo && (
+                    <Badge variant="gray" className="text-xs">
+                      Jusqu'au {format(new Date(dateTo), 'dd/MM/yyyy')}
+                    </Badge>
+                  )}
+                  {selectedTags.map(tag => (
+                    <Badge key={tag} variant="blue" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+                  <span className="text-sm font-medium text-indigo-400 ml-auto">
+                    {filtered.length} résultat{filtered.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        )}
 
         {/* Titre du dossier sélectionné */}
         {selectedDossier && selectedDossier !== 'sans-dossier' && (
@@ -492,6 +998,15 @@ export function GEDPage() {
                   <Card key={doc.id} className="hover:border-indigo-500/50 transition-colors cursor-pointer group">
                     <CardBody className="text-center relative">
                       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                        {(doc.type_document === 'photo' || doc.fichier_url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)) && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setOcrDocument(doc); }}
+                            className="p-1.5 bg-[var(--bg-tertiary)] rounded hover:bg-purple-500/20"
+                            title="Extraire le texte (OCR)"
+                          >
+                            <Scan className="w-3.5 h-3.5 text-purple-400" />
+                          </button>
+                        )}
                         {doc.fichier_url && (
                           <a 
                             href={doc.fichier_url} 
@@ -642,6 +1157,13 @@ export function GEDPage() {
           dossiers={dossiers || []}
           onClose={() => setShowImportModal(false)}
           onUpload={(file, metadata) => uploadMutation.mutate({ file, metadata })}
+        />
+      )}
+
+      {ocrDocument && (
+        <OCRModal
+          document={ocrDocument}
+          onClose={() => setOcrDocument(null)}
         />
       )}
     </div>

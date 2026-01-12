@@ -21,6 +21,7 @@ import {
   ShoppingCart,
   Nfc,
   Wifi,
+  WifiOff,
   PanelLeftClose,
   PanelLeft,
   LogOut,
@@ -33,8 +34,12 @@ import { NotificationCenter } from '@/components/notifications';
 import { RealtimeStatusIndicator } from '@/components/RealtimeStatusIndicator';
 import { PanierButton, PanierDrawer } from '@/components/Panier';
 import { NFCScanner } from '@/components/NFCScanner';
+import { AlertCenter } from '@/components/AlertCenter';
+import { AIChatbot } from '@/components/AIChatbot';
 import { supabase } from '@/services/supabase';
+import { initAlertService } from '@/services/alertService';
 import { cn } from '@/lib/utils';
+import { useOnlineStatus } from '@/hooks';
 
 interface LayoutProps {
   children: ReactNode;
@@ -62,6 +67,7 @@ export function Layout({ children }: LayoutProps) {
   const { moduleActif, setModuleActif, user, theme, toggleTheme } = useAppStore();
   const [showNFCScan, setShowNFCScan] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const { isOnline } = useOnlineStatus();
   
   // État de la sidebar (persisté dans localStorage)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -73,6 +79,11 @@ export function Layout({ children }: LayoutProps) {
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
+
+  // Initialiser le service d'alertes
+  useEffect(() => {
+    initAlertService();
+  }, []);
 
   const toggleSidebar = () => setSidebarCollapsed(!sidebarCollapsed);
   const openScanner = () => setShowNFCScan(true);
@@ -227,6 +238,14 @@ export function Layout({ children }: LayoutProps) {
           <div className="flex items-center gap-3">
             {/* Realtime Status Indicator */}
             <RealtimeStatusIndicator />
+            
+            {/* Indicateur Online/Offline */}
+            {!isOnline && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 border border-red-500/30 rounded-lg animate-pulse">
+                <WifiOff className="w-4 h-4 text-red-400" />
+                <span className="text-xs font-medium text-red-400">Hors ligne</span>
+              </div>
+            )}
 
             {/* Theme Toggle (compact) */}
             <button 
@@ -252,6 +271,9 @@ export function Layout({ children }: LayoutProps) {
 
             {/* Panier */}
             <PanierButton />
+
+            {/* Alertes intelligentes */}
+            <AlertCenter />
 
             {/* Notifications */}
             <NotificationCenter />
@@ -351,6 +373,9 @@ export function Layout({ children }: LayoutProps) {
       {showNFCScan && (
         <NFCScanner fullScreen autoStart onClose={() => setShowNFCScan(false)} />
       )}
+
+      {/* Assistant IA Chatbot */}
+      <AIChatbot />
     </div>
   );
 }

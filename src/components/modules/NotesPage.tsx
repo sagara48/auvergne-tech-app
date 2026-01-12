@@ -6,7 +6,8 @@ import {
   FileCheck, MoreVertical, AlertTriangle, CheckCircle, Bell, BellOff, Paperclip,
   MessageSquare, Send, ChevronDown, ChevronRight, Bold, Italic, ListTodo,
   Columns, SortAsc, SortDesc, Calendar, Mail, Download, Eye, Check, Square,
-  CheckSquare, Upload, Image, FileText, Layers
+  CheckSquare, Upload, Image, FileText, Layers, Link2, ExternalLink, QrCode,
+  Users, UserPlus, Lock, Unlock, CalendarClock, Timer, Copy, Printer, Sparkles
 } from 'lucide-react';
 import { Button, Card, CardBody, Badge, Input, Select } from '@/components/ui';
 import { 
@@ -14,11 +15,21 @@ import {
   getNotesDossiers, createNoteDossier,
   getNoteCommentaires, createNoteCommentaire, deleteNoteCommentaire,
   getNotePiecesJointes, uploadNotePieceJointe, deleteNotePieceJointe,
-  getAscenseurs, getContextNotes
+  getAscenseurs, getContextNotes, getTechniciens
 } from '@/services/api';
+import {
+  downloadNotePDF, shareNoteByEmail, generateNoteQRCode,
+  getNotesPartages, partagerNote, supprimerPartage,
+  getNotesLiees, lierNotes, supprimerLiaison,
+  getNoteRappels, creerRappel, supprimerRappel,
+  getEcheanceStatus,
+  type NotePartage, type NoteLiaison, type NoteRappel
+} from '@/services/noteService';
+import { AdvancedNoteSearch } from '@/components/AdvancedNoteSearch';
+import { type SearchResult } from '@/services/noteSearchService';
 import type { Note, NoteCategorie } from '@/types';
 import type { NoteDossier, NoteCommentaire, NotePieceJointe, ChecklistItem } from '@/services/api';
-import { format, parseISO, formatDistanceToNow, addDays } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, addDays, addHours, addWeeks, differenceInDays, differenceInHours } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
@@ -269,6 +280,474 @@ function AttachmentsSection({ noteId }: { noteId: string }) {
 }
 
 // ============================================
+// COMPOSANT ÉCHÉANCES ET RAPPELS
+// ============================================
+function EcheancesSection({ 
+  noteId, 
+  echeanceDate, 
+  onEcheanceChange 
+}: { 
+  noteId?: string;
+  echeanceDate: string;
+  onEcheanceChange: (date: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [showAddRappel, setShowAddRappel] = useState(false);
+
+  const { data: rappels } = useQuery({
+    queryKey: ['note-rappels', noteId],
+    queryFn: () => noteId ? getNoteRappels(noteId) : Promise.resolve([]),
+    enabled: !!noteId,
+  });
+
+  const createRappelMutation = useMutation({
+    mutationFn: ({ type, dateRappel, delai }: { type: 'echeance' | 'rappel_avant'; dateRappel: string; delai?: number }) => 
+      creerRappel(noteId!, type, dateRappel, delai),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['note-rappels', noteId] });
+      toast.success('Rappel créé');
+      setShowAddRappel(false);
+    },
+  });
+
+  const deleteRappelMutation = useMutation({
+    mutationFn: supprimerRappel,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['note-rappels', noteId] }),
+  });
+
+  const echeanceStatus = getEcheanceStatus(echeanceDate);
+
+  const presetRappels = [
+    { label: '1 heure avant', delai: 60 },
+    { label: '1 jour avant', delai: 1440 },
+    { label: '1 semaine avant', delai: 10080 },
+  ];
+
+  const addPresetRappel = (delaiMinutes: number) => {
+    if (!echeanceDate || !noteId) {
+      toast.error('Définissez d\'abord une échéance');
+      return;
+    }
+    const echeance = new Date(echeanceDate);
+    const dateRappel = new Date(echeance.getTime() - delaiMinutes * 60 * 1000);
+    createRappelMutation.mutate({ 
+      type: 'rappel_avant', 
+      dateRappel: dateRappel.toISOString(),
+      delai: delaiMinutes
+    });
+  };
+
+  return (
+    <div className="border-t border-[var(--border-primary)] pt-4 mt-4">
+      <div className="flex items-center gap-2 mb-3">
+        <CalendarClock className="w-4 h-4 text-[var(--text-tertiary)]" />
+        <span className="text-sm font-medium text-[var(--text-secondary)]">Échéance & Rappels</span>
+      </div>
+
+      {/* Date d'échéance */}
+      <div className="flex items-center gap-2 mb-3">
+        <Input
+          type="datetime-local"
+          value={echeanceDate}
+          onChange={e => onEcheanceChange(e.target.value)}
+          className="flex-1"
+        />
+        {echeanceStatus.status !== 'none' && (
+          <Badge 
+            variant={echeanceStatus.status === 'depasse' ? 'red' : echeanceStatus.status === 'urgent' ? 'orange' : 'green'}
+            className="text-[10px] whitespace-nowrap"
+          >
+            {echeanceStatus.label}
+          </Badge>
+        )}
+      </div>
+
+      {/* Raccourcis échéance */}
+      <div className="flex gap-2 mb-4">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={() => onEcheanceChange(format(addDays(new Date(), 1), "yyyy-MM-dd'T'17:00"))}
+        >
+          Demain
+        </Button>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={() => onEcheanceChange(format(addWeeks(new Date(), 1), "yyyy-MM-dd'T'17:00"))}
+        >
+          1 semaine
+        </Button>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={() => onEcheanceChange(format(addDays(new Date(), 30), "yyyy-MM-dd'T'17:00"))}
+        >
+          1 mois
+        </Button>
+      </div>
+
+      {/* Rappels programmés */}
+      {noteId && (
+        <>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-[var(--text-muted)]">Rappels programmés</span>
+            <Button variant="ghost" size="sm" onClick={() => setShowAddRappel(!showAddRappel)}>
+              <Bell className="w-3 h-3 mr-1" /> Ajouter
+            </Button>
+          </div>
+
+          {showAddRappel && echeanceDate && (
+            <div className="flex gap-1 mb-2 p-2 bg-[var(--bg-tertiary)] rounded-lg">
+              {presetRappels.map(p => (
+                <Button 
+                  key={p.delai} 
+                  variant="secondary" 
+                  size="sm"
+                  onClick={() => addPresetRappel(p.delai)}
+                  disabled={createRappelMutation.isPending}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-1">
+            {rappels?.map(rappel => (
+              <div key={rappel.id} className="flex items-center justify-between p-2 bg-[var(--bg-tertiary)] rounded-lg group">
+                <div className="flex items-center gap-2">
+                  {rappel.envoye ? (
+                    <CheckCircle className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Timer className="w-4 h-4 text-amber-400" />
+                  )}
+                  <span className="text-sm">
+                    {format(parseISO(rappel.date_rappel), 'dd/MM/yyyy HH:mm', { locale: fr })}
+                  </span>
+                  {rappel.delai_minutes && (
+                    <Badge variant="gray" className="text-[10px]">
+                      {rappel.delai_minutes === 60 ? '1h avant' : 
+                       rappel.delai_minutes === 1440 ? '1j avant' : 
+                       rappel.delai_minutes === 10080 ? '1sem avant' : `${rappel.delai_minutes}min`}
+                    </Badge>
+                  )}
+                </div>
+                <button 
+                  onClick={() => deleteRappelMutation.mutate(rappel.id)}
+                  className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded"
+                >
+                  <X className="w-3 h-3 text-red-400" />
+                </button>
+              </div>
+            ))}
+            {(!rappels || rappels.length === 0) && (
+              <div className="text-xs text-[var(--text-muted)] text-center py-2">Aucun rappel programmé</div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// COMPOSANT PARTAGE AVEC COLLEGUES
+// ============================================
+function PartageSection({ noteId }: { noteId: string }) {
+  const queryClient = useQueryClient();
+  const [showAddPartage, setShowAddPartage] = useState(false);
+  const [selectedTechnicien, setSelectedTechnicien] = useState('');
+  const [permission, setPermission] = useState<'lecture' | 'edition'>('lecture');
+
+  const { data: partages } = useQuery({
+    queryKey: ['note-partages', noteId],
+    queryFn: () => getNotesPartages(noteId),
+  });
+
+  const { data: techniciens } = useQuery({
+    queryKey: ['techniciens'],
+    queryFn: getTechniciens,
+  });
+
+  const addPartageMutation = useMutation({
+    mutationFn: () => partagerNote(noteId, selectedTechnicien, permission),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['note-partages', noteId] });
+      toast.success('Note partagée');
+      setShowAddPartage(false);
+      setSelectedTechnicien('');
+    },
+  });
+
+  const deletePartageMutation = useMutation({
+    mutationFn: supprimerPartage,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['note-partages', noteId] }),
+  });
+
+  // Filtrer les techniciens déjà partagés
+  const techniciensDispo = techniciens?.filter(
+    (t: any) => !partages?.some(p => p.technicien_id === t.id)
+  );
+
+  return (
+    <div className="border-t border-[var(--border-primary)] pt-4 mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-[var(--text-tertiary)]" />
+          <span className="text-sm font-medium text-[var(--text-secondary)]">Partage</span>
+          <Badge variant="gray" className="text-[10px]">{partages?.length || 0}</Badge>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setShowAddPartage(!showAddPartage)}>
+          <UserPlus className="w-3 h-3 mr-1" /> Partager
+        </Button>
+      </div>
+
+      {showAddPartage && (
+        <div className="flex gap-2 mb-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">
+          <Select 
+            value={selectedTechnicien} 
+            onChange={e => setSelectedTechnicien(e.target.value)}
+            className="flex-1"
+          >
+            <option value="">Choisir un collègue...</option>
+            {techniciensDispo?.map((t: any) => (
+              <option key={t.id} value={t.id}>{t.prenom} {t.nom}</option>
+            ))}
+          </Select>
+          <Select value={permission} onChange={e => setPermission(e.target.value as any)} className="w-28">
+            <option value="lecture">Lecture</option>
+            <option value="edition">Édition</option>
+          </Select>
+          <Button 
+            variant="primary" 
+            size="sm"
+            onClick={() => addPartageMutation.mutate()}
+            disabled={!selectedTechnicien || addPartageMutation.isPending}
+          >
+            <Check className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {partages?.map(partage => (
+          <div key={partage.id} className="flex items-center gap-2 p-2 bg-[var(--bg-tertiary)] rounded-lg group">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+              {partage.technicien?.avatar_initiales || '?'}
+            </div>
+            <div className="flex-1">
+              <span className="text-sm font-medium">{partage.technicien?.prenom} {partage.technicien?.nom}</span>
+            </div>
+            <Badge variant={partage.permission === 'edition' ? 'blue' : 'gray'} className="text-[10px]">
+              {partage.permission === 'edition' ? <Unlock className="w-3 h-3 mr-1" /> : <Lock className="w-3 h-3 mr-1" />}
+              {partage.permission}
+            </Badge>
+            <button 
+              onClick={() => deletePartageMutation.mutate(partage.id)}
+              className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded"
+            >
+              <X className="w-3 h-3 text-red-400" />
+            </button>
+          </div>
+        ))}
+        {(!partages || partages.length === 0) && (
+          <div className="text-xs text-[var(--text-muted)] text-center py-2">Note non partagée</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// COMPOSANT LIAISONS ENTRE NOTES
+// ============================================
+function LiaisonsSection({ noteId, allNotes }: { noteId: string; allNotes?: Note[] }) {
+  const queryClient = useQueryClient();
+  const [showAddLiaison, setShowAddLiaison] = useState(false);
+  const [selectedNote, setSelectedNote] = useState('');
+  const [typeLiaison, setTypeLiaison] = useState<'reference' | 'suite' | 'associee'>('reference');
+
+  const { data: liaisons } = useQuery({
+    queryKey: ['note-liaisons', noteId],
+    queryFn: () => getNotesLiees(noteId),
+  });
+
+  const addLiaisonMutation = useMutation({
+    mutationFn: () => lierNotes(noteId, selectedNote, typeLiaison),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['note-liaisons', noteId] });
+      toast.success('Notes liées');
+      setShowAddLiaison(false);
+      setSelectedNote('');
+    },
+    onError: () => toast.error('Ces notes sont déjà liées'),
+  });
+
+  const deleteLiaisonMutation = useMutation({
+    mutationFn: supprimerLiaison,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['note-liaisons', noteId] }),
+  });
+
+  // Filtrer les notes déjà liées et la note actuelle
+  const notesDispo = allNotes?.filter(
+    n => n.id !== noteId && !liaisons?.some(l => l.note_cible_id === n.id)
+  );
+
+  const getTypeLiaisonLabel = (type: string) => {
+    switch (type) {
+      case 'reference': return 'Référence';
+      case 'suite': return 'Suite de';
+      case 'associee': return 'Associée';
+      default: return type;
+    }
+  };
+
+  const getTypeLiaisonColor = (type: string) => {
+    switch (type) {
+      case 'reference': return '#3b82f6';
+      case 'suite': return '#22c55e';
+      case 'associee': return '#a855f7';
+      default: return '#6b7280';
+    }
+  };
+
+  return (
+    <div className="border-t border-[var(--border-primary)] pt-4 mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Link2 className="w-4 h-4 text-[var(--text-tertiary)]" />
+          <span className="text-sm font-medium text-[var(--text-secondary)]">Notes liées</span>
+          <Badge variant="gray" className="text-[10px]">{liaisons?.length || 0}</Badge>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setShowAddLiaison(!showAddLiaison)}>
+          <Plus className="w-3 h-3 mr-1" /> Lier
+        </Button>
+      </div>
+
+      {showAddLiaison && (
+        <div className="flex gap-2 mb-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">
+          <Select 
+            value={selectedNote} 
+            onChange={e => setSelectedNote(e.target.value)}
+            className="flex-1"
+          >
+            <option value="">Choisir une note...</option>
+            {notesDispo?.map(n => (
+              <option key={n.id} value={n.id}>{n.titre}</option>
+            ))}
+          </Select>
+          <Select value={typeLiaison} onChange={e => setTypeLiaison(e.target.value as any)} className="w-28">
+            <option value="reference">Référence</option>
+            <option value="suite">Suite de</option>
+            <option value="associee">Associée</option>
+          </Select>
+          <Button 
+            variant="primary" 
+            size="sm"
+            onClick={() => addLiaisonMutation.mutate()}
+            disabled={!selectedNote || addLiaisonMutation.isPending}
+          >
+            <Link2 className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {liaisons?.map(liaison => (
+          <div key={liaison.id} className="flex items-center gap-2 p-2 bg-[var(--bg-tertiary)] rounded-lg group hover:bg-[var(--bg-elevated)] cursor-pointer">
+            <div 
+              className="w-1 h-8 rounded-full" 
+              style={{ backgroundColor: liaison.note_cible?.couleur || '#6366f1' }}
+            />
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-medium truncate block">{liaison.note_cible?.titre}</span>
+              <Badge 
+                variant="gray" 
+                className="text-[10px]"
+                style={{ backgroundColor: `${getTypeLiaisonColor(liaison.type_liaison)}20`, color: getTypeLiaisonColor(liaison.type_liaison) }}
+              >
+                {getTypeLiaisonLabel(liaison.type_liaison)}
+              </Badge>
+            </div>
+            <ExternalLink className="w-3 h-3 text-[var(--text-muted)]" />
+            <button 
+              onClick={(e) => { e.stopPropagation(); deleteLiaisonMutation.mutate(liaison.id); }}
+              className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded"
+            >
+              <X className="w-3 h-3 text-red-400" />
+            </button>
+          </div>
+        ))}
+        {(!liaisons || liaisons.length === 0) && (
+          <div className="text-xs text-[var(--text-muted)] text-center py-2">Aucune note liée</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// COMPOSANT EXPORT ET ACTIONS
+// ============================================
+function ExportActionsSection({ note }: { note: Note }) {
+  const [showQR, setShowQR] = useState(false);
+  
+  const handleExportPDF = async () => {
+    try {
+      await downloadNotePDF(note);
+      toast.success('PDF téléchargé');
+    } catch (error) {
+      toast.error('Erreur lors de l\'export');
+    }
+  };
+
+  const handleCopyLink = () => {
+    const url = `${window.location.origin}/notes/${note.id}`;
+    navigator.clipboard.writeText(url);
+    toast.success('Lien copié');
+  };
+
+  return (
+    <div className="border-t border-[var(--border-primary)] pt-4 mt-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Share2 className="w-4 h-4 text-[var(--text-tertiary)]" />
+        <span className="text-sm font-medium text-[var(--text-secondary)]">Export & Partage</span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" onClick={handleExportPDF}>
+          <Download className="w-3 h-3 mr-1" /> PDF
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => shareNoteByEmail(note)}>
+          <Mail className="w-3 h-3 mr-1" /> Email
+        </Button>
+        <Button variant="secondary" size="sm" onClick={handleCopyLink}>
+          <Copy className="w-3 h-3 mr-1" /> Lien
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => setShowQR(!showQR)}>
+          <QrCode className="w-3 h-3 mr-1" /> QR
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => window.print()}>
+          <Printer className="w-3 h-3 mr-1" /> Imprimer
+        </Button>
+      </div>
+
+      {showQR && (
+        <div className="mt-3 p-4 bg-white rounded-lg flex flex-col items-center">
+          <img 
+            src={generateNoteQRCode(note.id)} 
+            alt="QR Code" 
+            className="w-32 h-32"
+          />
+          <p className="text-xs text-gray-500 mt-2">Scannez pour accéder à la note</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // MODAL FORMULAIRE NOTE
 // ============================================
 function NoteFormModal({ 
@@ -276,13 +755,15 @@ function NoteFormModal({
   onClose, 
   onSave,
   defaultAscenseurId,
-  hideAscenseurSelect
+  hideAscenseurSelect,
+  allNotes
 }: { 
   note?: Note; 
   onClose: () => void; 
   onSave: (data: Partial<Note>) => void;
   defaultAscenseurId?: string;
   hideAscenseurSelect?: boolean;
+  allNotes?: Note[];
 }) {
   const [titre, setTitre] = useState(note?.titre || '');
   const [contenu, setContenu] = useState(note?.contenu || '');
@@ -294,10 +775,11 @@ function NoteFormModal({
   const [dossierId, setDossierId] = useState(note?.dossier_id || '');
   const [ascenseurId, setAscenseurId] = useState(note?.ascenseur_id || defaultAscenseurId || '');
   const [rappelDate, setRappelDate] = useState(note?.rappel_date ? format(parseISO(note.rappel_date), "yyyy-MM-dd'T'HH:mm") : '');
+  const [echeanceDate, setEcheanceDate] = useState((note as any)?.echeance_date ? format(parseISO((note as any).echeance_date), "yyyy-MM-dd'T'HH:mm") : '');
   const [checklist, setChecklist] = useState<ChecklistItem[]>(note?.checklist || []);
   const [tags, setTags] = useState<string[]>(note?.tags || []);
   const [newTag, setNewTag] = useState('');
-  const [activeTab, setActiveTab] = useState<'contenu' | 'checklist' | 'options'>('contenu');
+  const [activeTab, setActiveTab] = useState<'contenu' | 'checklist' | 'options' | 'avance'>('contenu');
 
   const { data: dossiers } = useQuery({ queryKey: ['notes-dossiers'], queryFn: getNotesDossiers });
   const { data: ascenseurs } = useQuery({ queryKey: ['ascenseurs'], queryFn: getAscenseurs });
@@ -322,17 +804,22 @@ function NoteFormModal({
       dossier_id: dossierId || null,
       ascenseur_id: ascenseurId || null,
       rappel_date: rappelDate || null,
+      echeance_date: echeanceDate || null,
       rappel_envoye: false,
       checklist,
       tags,
       technicien_id: CURRENT_USER_ID,
-    });
+    } as any);
   };
 
   const handleSendEmail = () => {
-    const subject = encodeURIComponent(`Note: ${titre}`);
-    const body = encodeURIComponent(`${titre}\n\n${contenu}\n\n---\nEnvoyé depuis AuvergneTech`);
-    window.open(`mailto:?subject=${subject}&body=${body}`);
+    if (note) {
+      shareNoteByEmail(note);
+    } else {
+      const subject = encodeURIComponent(`Note: ${titre}`);
+      const body = encodeURIComponent(`${titre}\n\n${contenu}\n\n---\nEnvoyé depuis AuvergneTech`);
+      window.open(`mailto:?subject=${subject}&body=${body}`);
+    }
   };
 
   return (
@@ -391,6 +878,7 @@ function NoteFormModal({
               { id: 'contenu', label: 'Contenu', icon: FileText },
               { id: 'checklist', label: 'Checklist', icon: ListTodo },
               { id: 'options', label: 'Options', icon: Layers },
+              ...(note ? [{ id: 'avance', label: 'Avancé', icon: CalendarClock }] : []),
             ].map(tab => (
               <button
                 key={tab.id}
@@ -504,6 +992,26 @@ function NoteFormModal({
                 </div>
               </div>
             )}
+
+            {activeTab === 'avance' && note && (
+              <div className="space-y-0 overflow-y-auto max-h-[400px]">
+                {/* Section Échéances et Rappels */}
+                <EcheancesSection 
+                  noteId={note.id}
+                  echeanceDate={echeanceDate}
+                  onEcheanceChange={setEcheanceDate}
+                />
+                
+                {/* Section Partage */}
+                <PartageSection noteId={note.id} />
+                
+                {/* Section Liaisons */}
+                <LiaisonsSection noteId={note.id} allNotes={allNotes} />
+                
+                {/* Section Export */}
+                <ExportActionsSection note={note} />
+              </div>
+            )}
           </div>
 
           {/* Sections additionnelles pour édition */}
@@ -548,16 +1056,28 @@ function NoteCard({
   const checklistProgress = note.checklist?.length > 0 
     ? Math.round((note.checklist.filter((i: ChecklistItem) => i.fait).length / note.checklist.length) * 100) 
     : null;
+  
+  // Calculer le statut d'échéance
+  const echeanceStatus = getEcheanceStatus((note as any).echeance_date);
 
   if (viewMode === 'list') {
     return (
-      <div onClick={onEdit} className={`flex items-center gap-4 p-3 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl hover:border-dark-500 transition-all cursor-pointer group ${note.epingle ? 'ring-1 ring-purple-500/30' : ''}`}>
+      <div onClick={onEdit} className={`flex items-center gap-4 p-3 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl hover:border-dark-500 transition-all cursor-pointer group ${note.epingle ? 'ring-1 ring-purple-500/30' : ''} ${echeanceStatus.status === 'depasse' ? 'border-red-500/50' : ''}`}>
         <div className="w-1 h-10 rounded-full" style={{ backgroundColor: note.couleur }} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             {note.epingle && <Pin className="w-3 h-3 text-purple-400" />}
             <span className="font-medium text-[var(--text-primary)] truncate">{note.titre}</span>
             {note.rappel_date && <Bell className="w-3 h-3 text-amber-400" />}
+            {echeanceStatus.status !== 'none' && (
+              <Badge 
+                variant={echeanceStatus.status === 'depasse' ? 'red' : echeanceStatus.status === 'urgent' ? 'orange' : 'green'}
+                className="text-[10px] flex items-center gap-1"
+              >
+                <Timer className="w-3 h-3" />
+                {echeanceStatus.label}
+              </Badge>
+            )}
           </div>
           <div className="text-xs text-[var(--text-tertiary)] truncate">{note.contenu?.substring(0, 80)}</div>
         </div>
@@ -584,7 +1104,7 @@ function NoteCard({
 
   // Vue grille / kanban
   return (
-    <div onClick={onEdit} className={`flex flex-col bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl overflow-hidden hover:border-dark-500 transition-all cursor-pointer group ${note.epingle ? 'ring-1 ring-purple-500/30' : ''}`}>
+    <div onClick={onEdit} className={`flex flex-col bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl overflow-hidden hover:border-dark-500 transition-all cursor-pointer group ${note.epingle ? 'ring-1 ring-purple-500/30' : ''} ${echeanceStatus.status === 'depasse' ? 'border-red-500/50' : ''}`}>
       <div className="h-1" style={{ backgroundColor: note.couleur }} />
       <div className="p-3 flex-1 flex flex-col">
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -593,11 +1113,25 @@ function NoteCard({
             <h3 className="font-medium text-sm text-[var(--text-primary)] truncate">{note.titre}</h3>
           </div>
           <div className="flex items-center gap-1">
+            {echeanceStatus.status !== 'none' && (
+              <Timer className={`w-3 h-3 ${echeanceStatus.status === 'depasse' ? 'text-red-400 animate-pulse' : echeanceStatus.status === 'urgent' ? 'text-orange-400' : 'text-green-400'}`} />
+            )}
             {note.rappel_date && <Bell className="w-3 h-3 text-amber-400" />}
             {note.partage && <Share2 className="w-3 h-3 text-blue-400" />}
           </div>
         </div>
         <p className="text-xs text-[var(--text-tertiary)] flex-1 line-clamp-2 mb-2">{note.contenu || 'Aucun contenu'}</p>
+        
+        {/* Indicateur échéance */}
+        {echeanceStatus.status !== 'none' && (
+          <div className={`text-[10px] mb-2 px-2 py-1 rounded ${
+            echeanceStatus.status === 'depasse' ? 'bg-red-500/20 text-red-400' :
+            echeanceStatus.status === 'urgent' ? 'bg-orange-500/20 text-orange-400' :
+            'bg-green-500/20 text-green-400'
+          }`}>
+            ⏰ {echeanceStatus.label}
+          </div>
+        )}
         
         {checklistProgress !== null && (
           <div className="flex items-center gap-2 mb-2">
@@ -634,6 +1168,16 @@ export function NotesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editNote, setEditNote] = useState<Note | null>(null);
   const [showDossierModal, setShowDossierModal] = useState(false);
+  
+  // Recherche avancée
+  const [useAdvancedSearch, setUseAdvancedSearch] = useState(false);
+  const [advancedSearchResults, setAdvancedSearchResults] = useState<SearchResult[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const handleAdvancedSearch = (results: SearchResult[]) => {
+    setAdvancedSearchResults(results);
+    setIsSearching(false);
+  };
 
   const { data: notes, isLoading } = useQuery({ 
     queryKey: ['notes', CURRENT_USER_ID], 
@@ -699,6 +1243,22 @@ export function NotesPage() {
     }));
   }, [filteredNotes]);
 
+  // Notes à afficher (recherche avancée ou filtres simples)
+  const displayedNotes = useMemo(() => {
+    if (useAdvancedSearch && advancedSearchResults) {
+      return advancedSearchResults.map(r => r.note);
+    }
+    return filteredNotes;
+  }, [useAdvancedSearch, advancedSearchResults, filteredNotes]);
+
+  // Groupement Kanban pour les notes affichées
+  const displayedKanbanGroups = useMemo(() => {
+    return STATUTS.map(s => ({
+      ...s,
+      notes: displayedNotes.filter(n => n.statut === s.value),
+    }));
+  }, [displayedNotes]);
+
   const handleSave = (data: Partial<Note>) => {
     if (editNote) updateMutation.mutate({ id: editNote.id, data });
     else createMutation.mutate(data);
@@ -741,36 +1301,28 @@ export function NotesPage() {
 
       {/* Contenu principal */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        {/* Toggle recherche avancée */}
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
-              <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 w-56" />
-            </div>
-            <Select value={filterCategorie} onChange={e => setFilterCategorie(e.target.value)} className="w-32">
-              <option value="all">Catégorie</option>
-              {Object.entries(CATEGORIES_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </Select>
-            <Select value={filterPriorite} onChange={e => setFilterPriorite(e.target.value)} className="w-28">
-              <option value="all">Priorité</option>
-              {PRIORITES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </Select>
-            <Select value={filterStatut} onChange={e => setFilterStatut(e.target.value)} className="w-28">
-              <option value="all">Statut</option>
-              {STATUTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </Select>
+            <button
+              onClick={() => { setUseAdvancedSearch(false); setAdvancedSearchResults(null); }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                !useAdvancedSearch ? 'bg-purple-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              Recherche simple
+            </button>
+            <button
+              onClick={() => setUseAdvancedSearch(true)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
+                useAdvancedSearch ? 'bg-purple-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Sparkles className="w-3 h-3" />
+              Recherche avancée
+            </button>
           </div>
           <div className="flex items-center gap-2">
-            {/* Tri */}
-            <Select value={sortBy} onChange={e => setSortBy(e.target.value as any)} className="w-28">
-              <option value="date">Date</option>
-              <option value="titre">Titre</option>
-              <option value="priorite">Priorité</option>
-            </Select>
-            <button onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
-              {sortOrder === 'asc' ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
-            </button>
             {/* Vue */}
             <div className="flex bg-[var(--bg-tertiary)] rounded-lg p-1">
               <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-[var(--bg-elevated)]' : ''}`}><Grid className="w-4 h-4" /></button>
@@ -781,11 +1333,66 @@ export function NotesPage() {
           </div>
         </div>
 
+        {/* Recherche avancée */}
+        {useAdvancedSearch ? (
+          <div className="mb-4">
+            <AdvancedNoteSearch 
+              onSearch={handleAdvancedSearch}
+              isSearching={isSearching}
+            />
+          </div>
+        ) : (
+          /* Header recherche simple */
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
+                <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 w-56" />
+              </div>
+              <Select value={filterCategorie} onChange={e => setFilterCategorie(e.target.value)} className="w-32">
+                <option value="all">Catégorie</option>
+                {Object.entries(CATEGORIES_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </Select>
+              <Select value={filterPriorite} onChange={e => setFilterPriorite(e.target.value)} className="w-28">
+                <option value="all">Priorité</option>
+                {PRIORITES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </Select>
+              <Select value={filterStatut} onChange={e => setFilterStatut(e.target.value)} className="w-28">
+                <option value="all">Statut</option>
+                {STATUTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Tri */}
+              <Select value={sortBy} onChange={e => setSortBy(e.target.value as any)} className="w-28">
+                <option value="date">Date</option>
+                <option value="titre">Titre</option>
+                <option value="priorite">Priorité</option>
+              </Select>
+              <button onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                {sortOrder === 'asc' ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Contenu */}
         <div className="flex-1 overflow-auto">
+          {/* Résumé résultats recherche avancée */}
+          {useAdvancedSearch && advancedSearchResults && (
+            <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+              <p className="text-sm">
+                <span className="font-semibold text-purple-400">{advancedSearchResults.length}</span> note(s) trouvée(s)
+                {advancedSearchResults.length > 0 && advancedSearchResults[0].score > 0 && (
+                  <span className="text-[var(--text-muted)]"> — triées par pertinence</span>
+                )}
+              </p>
+            </div>
+          )}
+
           {viewMode === 'kanban' ? (
             <div className="flex gap-4 h-full">
-              {kanbanGroups.map(group => (
+              {displayedKanbanGroups.map(group => (
                 <div key={group.value} className="w-72 flex-shrink-0 flex flex-col">
                   <div className="flex items-center gap-2 mb-3 p-2 rounded-lg" style={{ background: `${group.color}20` }}>
                     <div className="w-2 h-2 rounded-full" style={{ background: group.color }} />
@@ -802,13 +1409,13 @@ export function NotesPage() {
             </div>
           ) : (
             <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'space-y-2'}>
-              {filteredNotes.map(note => (
+              {displayedNotes.map(note => (
                 <NoteCard key={note.id} note={note} viewMode={viewMode} onEdit={() => setEditNote(note)} onDelete={() => deleteMutation.mutate(note.id)} onTogglePin={() => togglePinMutation.mutate({ id: note.id, epingle: !note.epingle })} />
               ))}
             </div>
           )}
 
-          {filteredNotes.length === 0 && !isLoading && (
+          {displayedNotes.length === 0 && !isLoading && (
             <Card className="p-12 text-center">
               <div className="text-6xl mb-4">📝</div>
               <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Aucune note</h3>
@@ -820,7 +1427,7 @@ export function NotesPage() {
 
       {/* Modals */}
       {(showForm || editNote) && (
-        <NoteFormModal note={editNote || undefined} onClose={() => { setShowForm(false); setEditNote(null); }} onSave={handleSave} />
+        <NoteFormModal note={editNote || undefined} onClose={() => { setShowForm(false); setEditNote(null); }} onSave={handleSave} allNotes={notes} />
       )}
 
       {showDossierModal && (
