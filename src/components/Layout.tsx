@@ -35,7 +35,6 @@ import { RealtimeStatusIndicator } from '@/components/RealtimeStatusIndicator';
 import { PanierButton, PanierDrawer } from '@/components/Panier';
 import { NFCScanner } from '@/components/NFCScanner';
 import { AlertCenter } from '@/components/AlertCenter';
-import { AIChatbot } from '@/components/AIChatbot';
 import { supabase } from '@/services/supabase';
 import { initAlertService } from '@/services/alertService';
 import { cn } from '@/lib/utils';
@@ -373,9 +372,6 @@ export function Layout({ children }: LayoutProps) {
       {showNFCScan && (
         <NFCScanner fullScreen autoStart onClose={() => setShowNFCScan(false)} />
       )}
-
-      {/* Assistant IA Chatbot */}
-      <AIChatbot />
     </div>
   );
 }

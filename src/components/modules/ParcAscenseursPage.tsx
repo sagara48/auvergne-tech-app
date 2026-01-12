@@ -7,13 +7,12 @@ import {
   CheckCircle, XCircle, Settings, Eye, FileText, BarChart3, Play,
   Pause, RotateCcw, Database, Cloud, CloudOff, Loader2, History,
   Server, Wifi, WifiOff, Download, Upload, X, Route, FileDown,
-  Navigation, Compass, Brain, Sparkles
+  Navigation, Compass, Brain
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
 import { generateRapportMensuel, generateRapportAscenseur } from '@/services/pdfService';
 import { PredictiveAnalysisDashboard } from '@/components/PredictiveAnalysis';
-import { DiagnosticAssistant } from '@/components/AIChatbot';
 import { 
   optimizeRoute, 
   generateGoogleMapsUrl, 
@@ -208,11 +207,10 @@ const getPannesRecentes = async (userSecteurs?: number[]) => {
       }
     }
     
-    // Construire la requête
+    // Construire la requête - récupérer plus de données car le tri par date réelle sera fait côté client
     let query = supabase
       .from('parc_pannes')
-      .select('*')
-      .order('date_appel', { ascending: false });
+      .select('*');
     
     // Si on a des id_wsoucont autorisés, filtrer dessus
     if (allowedIdWsoucont && allowedIdWsoucont.length > 0) {
@@ -220,8 +218,9 @@ const getPannesRecentes = async (userSecteurs?: number[]) => {
       query = query.in('id_wsoucont', allowedIdWsoucont.slice(0, 500));
     }
     
-    // Limiter à 200 résultats (suffisant pour 30 vraies pannes après filtrage cause)
-    query = query.limit(200);
+    // Récupérer plus de résultats pour être sûr d'avoir les dernières pannes
+    // Le tri par date réelle (data_wpanne.DATE) sera fait côté client
+    query = query.limit(500);
     
     const { data: pannes, error } = await query;
     
@@ -2105,7 +2104,6 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
 // =============================================
 export function ParcAscenseursPage() {
   const [mainTab, setMainTab] = useState<'parc' | 'arrets' | 'pannes' | 'tournees' | 'stats' | 'carte' | 'ia'>('parc');
-  const [showDiagnostic, setShowDiagnostic] = useState(false);
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [secteurFilter, setSecteurFilter] = useState<string>('');
@@ -2114,6 +2112,9 @@ export function ParcAscenseursPage() {
   const [selectedAscenseur, setSelectedAscenseur] = useState<Ascenseur | null>(null);
   const [selectedPanne, setSelectedPanne] = useState<any | null>(null);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  
+  // État pour la période des statistiques (en mois)
+  const [statsPeriod, setStatsPeriod] = useState<6 | 12 | 24 | 36>(6);
   
   // États pour l'optimisation des tournées
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -2359,11 +2360,15 @@ export function ParcAscenseursPage() {
     return count;
   }, [vraisPannes]);
   
-  // Compter les ascenseurs avec tournée (wordre défini)
+  // Compter les ascenseurs avec tournée (wordre2 défini) - uniquement dans les secteurs accessibles
   const ascenseursAvecTourneeCount = useMemo(() => {
     if (!ascenseurs) return 0;
-    return ascenseurs.filter((a: any) => a.wordre !== null && a.wordre !== undefined && a.wordre > 0).length;
-  }, [ascenseurs]);
+    return ascenseurs.filter((a: any) => {
+      const hasOrdre = a.wordre2 !== null && a.wordre2 !== undefined && a.wordre2 > 0;
+      const secteurAccessible = !userSecteurs || userSecteurs.length === 0 || userSecteurs.includes(a.secteur);
+      return hasOrdre && secteurAccessible;
+    }).length;
+  }, [ascenseurs, userSecteurs]);
   
   const filteredAscenseurs = useMemo(() => {
     if (!ascenseurs) return [];
@@ -2883,13 +2888,18 @@ export function ParcAscenseursPage() {
         {mainTab === 'tournees' && (
           <div className="space-y-6">
             {(() => {
-              // Grouper les ascenseurs par secteur et trier par wordre
+              // Grouper les ascenseurs par secteur et trier par wordre2 (ordre de tournée)
               const ascenseursBySecteur: Record<number, any[]> = {};
               
-              // Filtrer les ascenseurs qui ont un wordre défini (font partie d'une tournée)
-              const ascenseursAvecTournee = (ascenseurs || []).filter((a: any) => 
-                a.wordre !== null && a.wordre !== undefined && a.wordre > 0
-              );
+              // Filtrer les ascenseurs qui ont un wordre2 défini (font partie d'une tournée)
+              // ET qui sont dans les secteurs accessibles par le technicien
+              const ascenseursAvecTournee = (ascenseurs || []).filter((a: any) => {
+                // Vérifier que wordre2 est défini
+                const hasOrdre = a.wordre2 !== null && a.wordre2 !== undefined && a.wordre2 > 0;
+                // Vérifier que le secteur est accessible (si userSecteurs défini)
+                const secteurAccessible = !userSecteurs || userSecteurs.length === 0 || userSecteurs.includes(a.secteur);
+                return hasOrdre && secteurAccessible;
+              });
               
               ascenseursAvecTournee.forEach((a: any) => {
                 const secteur = a.secteur || 0;
@@ -2899,11 +2909,11 @@ export function ParcAscenseursPage() {
                 ascenseursBySecteur[secteur].push(a);
               });
               
-              // Trier chaque groupe par wordre (ordre de tournée)
+              // Trier chaque groupe par wordre2 (ordre de tournée)
               Object.keys(ascenseursBySecteur).forEach(secteur => {
                 ascenseursBySecteur[Number(secteur)].sort((a: any, b: any) => {
-                  const ordreA = a.wordre || 999;
-                  const ordreB = b.wordre || 999;
+                  const ordreA = a.wordre2 || 999;
+                  const ordreB = b.wordre2 || 999;
                   return ordreA - ordreB;
                 });
               });
@@ -2980,8 +2990,8 @@ export function ParcAscenseursPage() {
                 return (
                   <div className="text-center py-12 text-[var(--text-muted)]">
                     <Route className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p>Aucun ascenseur avec tournée définie</p>
-                    <p className="text-sm mt-2">Les tournées sont définies par le champ "wordre" dans Progilift</p>
+                    <p>Aucun ascenseur avec tournée définie dans vos secteurs</p>
+                    <p className="text-sm mt-2">Les tournées sont définies par le champ "ordre2" dans Progilift</p>
                   </div>
                 );
               }
@@ -3177,7 +3187,7 @@ export function ParcAscenseursPage() {
                                 onClick={() => setSelectedAscenseur(asc)}
                               >
                                 <div className="w-8 h-8 rounded-full bg-lime-500/20 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-lime-400 font-bold text-sm">{asc.wordre}</span>
+                                  <span className="text-lime-400 font-bold text-sm">{asc.wordre2}</span>
                                 </div>
                                 
                                 <div className="flex-1 min-w-0">
@@ -3225,6 +3235,40 @@ export function ParcAscenseursPage() {
         {mainTab === 'stats' && (
           <div className="space-y-6">
             {(() => {
+              // Fonction pour obtenir la date de début selon la période
+              const getStartDate = (months: number) => {
+                const d = new Date();
+                d.setMonth(d.getMonth() - months);
+                d.setDate(1);
+                d.setHours(0, 0, 0, 0);
+                return d;
+              };
+              
+              const startDate = getStartDate(statsPeriod);
+              
+              // Fonction pour extraire la date d'une panne
+              const getPanneDate = (p: any): Date | null => {
+                const data = p.data_wpanne || {};
+                if (data.DATE) {
+                  const dateStr = String(data.DATE);
+                  if (dateStr.length === 8) {
+                    return new Date(
+                      parseInt(dateStr.substring(0, 4)),
+                      parseInt(dateStr.substring(4, 6)) - 1,
+                      parseInt(dateStr.substring(6, 8))
+                    );
+                  }
+                }
+                if (p.date_appel) return new Date(p.date_appel);
+                return null;
+              };
+              
+              // Filtrer les pannes sur la période sélectionnée
+              const pannesPeriode = vraisPannes.filter((p: any) => {
+                const date = getPanneDate(p);
+                return date && date >= startDate;
+              });
+              
               // Calculs des statistiques
               const totalAscenseurs = ascenseurs?.length || 0;
               const ascenseursEnArret = ascenseurs?.filter((a: any) => a.en_arret).length || 0;
@@ -3254,15 +3298,18 @@ export function ParcAscenseursPage() {
               const arretsCritiques = arretsDetails.filter((a: any) => a.heuresArret > 72);
               const arretsWarning = arretsDetails.filter((a: any) => a.heuresArret > 24 && a.heuresArret <= 72);
               
-              // Pannes avec personnes bloquées (dernières 30 jours)
-              const pannesBloquees = vraisPannes.filter((p: any) => {
+              // Pannes avec personnes bloquées (sur la période)
+              const pannesBloquees = pannesPeriode.filter((p: any) => {
                 const data = p.data_wpanne || {};
                 return (data.NOMBRE || 0) > 0;
               }).slice(0, 10);
               
-              // Top 10 ascenseurs les plus en panne
+              // Total alertes
+              const totalAlertes = arretsCritiques.length + arretsWarning.length + pannesBloquees.length;
+              
+              // Top 10 ascenseurs les plus en panne (sur la période)
               const pannesParAscenseur: Record<string, { count: number; code: string; adresse: string; ville: string; secteur: number }> = {};
-              vraisPannes.forEach((p: any) => {
+              pannesPeriode.forEach((p: any) => {
                 const key = p.id_wsoucont;
                 if (!key) return;
                 if (!pannesParAscenseur[key]) {
@@ -3280,19 +3327,21 @@ export function ParcAscenseursPage() {
                 .sort(([, a], [, b]) => b.count - a.count)
                 .slice(0, 10);
               
-              // Évolution des pannes par mois (6 derniers mois)
+              // Évolution des pannes par mois (selon la période)
               const pannesParMois: Record<string, number> = {};
               const moisLabels: string[] = [];
-              for (let i = 5; i >= 0; i--) {
+              for (let i = statsPeriod - 1; i >= 0; i--) {
                 const d = new Date();
                 d.setMonth(d.getMonth() - i);
                 const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                const label = d.toLocaleDateString('fr-FR', { month: 'short' });
+                const label = statsPeriod <= 12 
+                  ? d.toLocaleDateString('fr-FR', { month: 'short' })
+                  : d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
                 pannesParMois[key] = 0;
                 moisLabels.push(label);
               }
               
-              vraisPannes.forEach((p: any) => {
+              pannesPeriode.forEach((p: any) => {
                 const data = p.data_wpanne || {};
                 if (data.DATE) {
                   const dateStr = String(data.DATE);
@@ -3307,10 +3356,12 @@ export function ParcAscenseursPage() {
               
               const pannesMoisData = Object.values(pannesParMois);
               const maxPannesMois = Math.max(...pannesMoisData, 1);
+              const totalPannesPeriode = pannesMoisData.reduce((a, b) => a + b, 0);
+              const moyennePannesMois = (totalPannesPeriode / statsPeriod).toFixed(1);
               
-              // Répartition par secteur
+              // Répartition par secteur (sur la période)
               const pannesParSecteur: Record<number, number> = {};
-              vraisPannes.forEach((p: any) => {
+              pannesPeriode.forEach((p: any) => {
                 const secteur = p.secteur || 0;
                 pannesParSecteur[secteur] = (pannesParSecteur[secteur] || 0) + 1;
               });
@@ -3324,12 +3375,11 @@ export function ParcAscenseursPage() {
                 try {
                   const moisActuel = format(new Date(), 'MMMM yyyy', { locale: fr });
                   
-                  // Préparer les données pour le rapport
                   const rapportData = {
                     mois: moisActuel,
                     totalAscenseurs,
                     tauxDisponibilite: parseFloat(String(tauxDisponibilite)),
-                    pannes30j,
+                    pannes30j: totalPannesPeriode,
                     arretsEnCours: ascenseursEnArret,
                     pannesParSecteur: Object.fromEntries(
                       Object.entries(pannesParSecteur).map(([k, v]) => [k, v])
@@ -3368,9 +3418,31 @@ export function ParcAscenseursPage() {
               
               return (
                 <>
-                  {/* Header avec bouton export */}
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-bold">Statistiques du parc</h2>
+                  {/* Header avec filtre période et export */}
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-lg font-bold">Statistiques du parc</h2>
+                      <div className="flex bg-[var(--bg-tertiary)] rounded-lg p-1">
+                        {[
+                          { value: 6, label: '6 mois' },
+                          { value: 12, label: '1 an' },
+                          { value: 24, label: '2 ans' },
+                          { value: 36, label: '3 ans' },
+                        ].map(p => (
+                          <button
+                            key={p.value}
+                            onClick={() => setStatsPeriod(p.value as any)}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                              statsPeriod === p.value 
+                                ? 'bg-purple-500 text-white' 
+                                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <Button variant="secondary" onClick={handleExportPDF}>
                       <FileDown className="w-4 h-4 mr-2" />
                       Export PDF
@@ -3378,25 +3450,32 @@ export function ParcAscenseursPage() {
                   </div>
                   
                   {/* KPIs principaux */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <Card className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border-blue-500/30">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-blue-400">{totalAscenseurs}</p>
-                        <p className="text-sm text-[var(--text-muted)]">Ascenseurs totaux</p>
+                        <p className="text-sm text-[var(--text-muted)]">Ascenseurs</p>
                       </CardBody>
                     </Card>
                     
                     <Card className="bg-gradient-to-br from-green-500/20 to-green-600/10 border-green-500/30">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-green-400">{tauxDisponibilite}%</p>
-                        <p className="text-sm text-[var(--text-muted)]">Taux disponibilité</p>
+                        <p className="text-sm text-[var(--text-muted)]">Disponibilité</p>
+                      </CardBody>
+                    </Card>
+                    
+                    <Card className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border-purple-500/30">
+                      <CardBody className="p-4 text-center">
+                        <p className="text-3xl font-bold text-purple-400">{totalPannesPeriode}</p>
+                        <p className="text-sm text-[var(--text-muted)]">Pannes ({statsPeriod}m)</p>
                       </CardBody>
                     </Card>
                     
                     <Card className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 border-orange-500/30">
                       <CardBody className="p-4 text-center">
-                        <p className="text-3xl font-bold text-orange-400">{pannes30j}</p>
-                        <p className="text-sm text-[var(--text-muted)]">Pannes (30j)</p>
+                        <p className="text-3xl font-bold text-orange-400">{moyennePannesMois}</p>
+                        <p className="text-sm text-[var(--text-muted)]">Moy/mois</p>
                       </CardBody>
                     </Card>
                     
@@ -3408,88 +3487,107 @@ export function ParcAscenseursPage() {
                     </Card>
                   </div>
                   
-                  {/* Alertes visuelles */}
-                  {(arretsCritiques.length > 0 || arretsWarning.length > 0 || pannesBloquees.length > 0) && (
-                    <div className="space-y-3">
-                      <h3 className="text-lg font-semibold flex items-center gap-2">
-                        <AlertCircle className="w-5 h-5 text-red-500" />
-                        Alertes
-                      </h3>
-                      
-                      {/* Arrêts critiques > 72h */}
-                      {arretsCritiques.length > 0 && (
-                        <Card className="border-red-500/50 bg-red-500/10">
-                          <CardBody className="p-4">
+                  {/* Alertes et Notifications regroupées */}
+                  {totalAlertes > 0 && (
+                    <Card className="border-red-500/30">
+                      <CardBody className="p-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <AlertCircle className="w-5 h-5 text-red-500" />
+                            Alertes & Notifications
+                            <Badge variant="red" className="ml-2">{totalAlertes}</Badge>
+                          </h3>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Arrêts critiques > 72h */}
+                          <div className={`p-4 rounded-lg ${arretsCritiques.length > 0 ? 'bg-red-500/10 border border-red-500/30' : 'bg-[var(--bg-tertiary)]'}`}>
                             <div className="flex items-center gap-2 mb-3">
-                              <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
-                              <span className="font-semibold text-red-400">
-                                {arretsCritiques.length} arrêt{arretsCritiques.length > 1 ? 's' : ''} critique{arretsCritiques.length > 1 ? 's' : ''} (&gt;72h)
+                              <div className={`w-3 h-3 rounded-full ${arretsCritiques.length > 0 ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
+                              <span className={`font-semibold text-sm ${arretsCritiques.length > 0 ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
+                                Arrêts critiques (&gt;72h)
                               </span>
+                              <Badge variant={arretsCritiques.length > 0 ? 'red' : 'gray'} className="ml-auto">
+                                {arretsCritiques.length}
+                              </Badge>
                             </div>
-                            <div className="space-y-2">
-                              {arretsCritiques.slice(0, 5).map((arret: any) => (
-                                <div key={arret.id} className="flex items-center justify-between text-sm">
-                                  <span>{arret.code_appareil} - {arret.ville}</span>
-                                  <Badge variant="red">{Math.floor(arret.heuresArret / 24)}j</Badge>
-                                </div>
-                              ))}
-                              {arretsCritiques.length > 5 && (
-                                <p className="text-xs text-[var(--text-muted)]">+ {arretsCritiques.length - 5} autres</p>
-                              )}
-                            </div>
-                          </CardBody>
-                        </Card>
-                      )}
-                      
-                      {/* Arrêts warning > 24h */}
-                      {arretsWarning.length > 0 && (
-                        <Card className="border-orange-500/50 bg-orange-500/10">
-                          <CardBody className="p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                              <span className="font-semibold text-orange-400">
-                                {arretsWarning.length} arrêt{arretsWarning.length > 1 ? 's' : ''} &gt;24h
-                              </span>
-                            </div>
-                            <div className="space-y-2">
-                              {arretsWarning.slice(0, 5).map((arret: any) => (
-                                <div key={arret.id} className="flex items-center justify-between text-sm">
-                                  <span>{arret.code_appareil} - {arret.ville}</span>
-                                  <Badge variant="orange">{arret.heuresArret}h</Badge>
-                                </div>
-                              ))}
-                            </div>
-                          </CardBody>
-                        </Card>
-                      )}
-                      
-                      {/* Pannes avec personnes bloquées */}
-                      {pannesBloquees.length > 0 && (
-                        <Card className="border-red-500/50 bg-red-500/10">
-                          <CardBody className="p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
-                              <span className="font-semibold text-red-400">
-                                Pannes récentes avec personnes bloquées
-                              </span>
-                            </div>
-                            <div className="space-y-2">
-                              {pannesBloquees.map((panne: any) => {
-                                const data = panne.data_wpanne || {};
-                                return (
-                                  <div key={panne.id} className="flex items-center justify-between text-sm">
-                                    <span>{panne.code_appareil} - {panne.ville}</span>
-                                    <Badge variant="red" className="animate-pulse">
-                                      {data.NOMBRE} bloqué{data.NOMBRE > 1 ? 's' : ''}
-                                    </Badge>
+                            {arretsCritiques.length > 0 ? (
+                              <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                {arretsCritiques.slice(0, 5).map((arret: any) => (
+                                  <div key={arret.id} className="flex items-center justify-between text-xs">
+                                    <span className="truncate flex-1">{arret.code_appareil}</span>
+                                    <Badge variant="red" className="text-[10px] ml-2">{Math.floor(arret.heuresArret / 24)}j</Badge>
                                   </div>
-                                );
-                              })}
+                                ))}
+                                {arretsCritiques.length > 5 && (
+                                  <p className="text-[10px] text-[var(--text-muted)]">+ {arretsCritiques.length - 5} autres</p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-[var(--text-muted)]">Aucun arrêt critique</p>
+                            )}
+                          </div>
+                          
+                          {/* Arrêts warning > 24h */}
+                          <div className={`p-4 rounded-lg ${arretsWarning.length > 0 ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-[var(--bg-tertiary)]'}`}>
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className={`w-3 h-3 rounded-full ${arretsWarning.length > 0 ? 'bg-orange-500' : 'bg-gray-500'}`}></div>
+                              <span className={`font-semibold text-sm ${arretsWarning.length > 0 ? 'text-orange-400' : 'text-[var(--text-muted)]'}`}>
+                                Arrêts &gt;24h
+                              </span>
+                              <Badge variant={arretsWarning.length > 0 ? 'orange' : 'gray'} className="ml-auto">
+                                {arretsWarning.length}
+                              </Badge>
                             </div>
-                          </CardBody>
-                        </Card>
-                      )}
-                    </div>
+                            {arretsWarning.length > 0 ? (
+                              <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                {arretsWarning.slice(0, 5).map((arret: any) => (
+                                  <div key={arret.id} className="flex items-center justify-between text-xs">
+                                    <span className="truncate flex-1">{arret.code_appareil}</span>
+                                    <Badge variant="orange" className="text-[10px] ml-2">{arret.heuresArret}h</Badge>
+                                  </div>
+                                ))}
+                                {arretsWarning.length > 5 && (
+                                  <p className="text-[10px] text-[var(--text-muted)]">+ {arretsWarning.length - 5} autres</p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-[var(--text-muted)]">Aucun arrêt &gt;24h</p>
+                            )}
+                          </div>
+                          
+                          {/* Pannes avec personnes bloquées */}
+                          <div className={`p-4 rounded-lg ${pannesBloquees.length > 0 ? 'bg-red-500/10 border border-red-500/30' : 'bg-[var(--bg-tertiary)]'}`}>
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className={`w-3 h-3 rounded-full ${pannesBloquees.length > 0 ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
+                              <span className={`font-semibold text-sm ${pannesBloquees.length > 0 ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
+                                Pers. bloquées
+                              </span>
+                              <Badge variant={pannesBloquees.length > 0 ? 'red' : 'gray'} className="ml-auto">
+                                {pannesBloquees.length}
+                              </Badge>
+                            </div>
+                            {pannesBloquees.length > 0 ? (
+                              <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                {pannesBloquees.slice(0, 5).map((panne: any) => {
+                                  const data = panne.data_wpanne || {};
+                                  return (
+                                    <div key={panne.id} className="flex items-center justify-between text-xs">
+                                      <span className="truncate flex-1">{panne.code_appareil}</span>
+                                      <Badge variant="red" className="text-[10px] ml-2 animate-pulse">
+                                        {data.NOMBRE} bloqué{data.NOMBRE > 1 ? 's' : ''}
+                                      </Badge>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-[var(--text-muted)]">Aucune sur la période</p>
+                            )}
+                          </div>
+                        </div>
+                      </CardBody>
+                    </Card>
                   )}
                   
                   {/* Graphiques */}
@@ -3499,17 +3597,17 @@ export function ParcAscenseursPage() {
                       <CardBody className="p-4">
                         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                           <TrendingUp className="w-5 h-5 text-purple-500" />
-                          Évolution des pannes (6 mois)
+                          Évolution des pannes ({statsPeriod} mois)
                         </h3>
-                        <div className="flex items-end gap-2 h-40">
+                        <div className="flex items-end gap-1 h-40 overflow-x-auto">
                           {pannesMoisData.map((count, index) => (
-                            <div key={index} className="flex-1 flex flex-col items-center gap-1">
-                              <span className="text-xs font-semibold">{count}</span>
+                            <div key={index} className="flex flex-col items-center gap-1" style={{ minWidth: statsPeriod > 12 ? '24px' : '40px', flex: 1 }}>
+                              <span className="text-[10px] font-semibold">{count}</span>
                               <div 
                                 className="w-full bg-purple-500 rounded-t transition-all"
                                 style={{ height: `${(count / maxPannesMois) * 100}%`, minHeight: count > 0 ? '4px' : '0' }}
                               ></div>
-                              <span className="text-xs text-[var(--text-muted)]">{moisLabels[index]}</span>
+                              <span className="text-[9px] text-[var(--text-muted)] whitespace-nowrap">{moisLabels[index]}</span>
                             </div>
                           ))}
                         </div>
@@ -3521,7 +3619,7 @@ export function ParcAscenseursPage() {
                       <CardBody className="p-4">
                         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                           <BarChart3 className="w-5 h-5 text-blue-500" />
-                          Pannes par secteur
+                          Pannes par secteur ({statsPeriod}m)
                         </h3>
                         <div className="space-y-2">
                           {secteursSorted.map(([secteur, count]) => (
@@ -3536,6 +3634,9 @@ export function ParcAscenseursPage() {
                               <span className="text-sm font-semibold w-8 text-right">{count}</span>
                             </div>
                           ))}
+                          {secteursSorted.length === 0 && (
+                            <p className="text-[var(--text-muted)] text-center py-4">Aucune panne sur la période</p>
+                          )}
                         </div>
                       </CardBody>
                     </Card>
@@ -3546,7 +3647,7 @@ export function ParcAscenseursPage() {
                     <CardBody className="p-4">
                       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                         <AlertTriangle className="w-5 h-5 text-orange-500" />
-                        Top 10 - Ascenseurs les plus en panne
+                        Top 10 - Ascenseurs les plus en panne ({statsPeriod} mois)
                       </h3>
                       {top10Pannes.length === 0 ? (
                         <p className="text-[var(--text-muted)] text-center py-4">Aucune panne enregistrée</p>
@@ -3658,7 +3759,7 @@ export function ParcAscenseursPage() {
                   <div className="space-y-4">
                     {villesSorted.map(([ville, ascenseursVille]) => {
                       const enArret = ascenseursVille.filter((a: any) => a.en_arret);
-                      const triParWordre = [...ascenseursVille].sort((a, b) => (a.wordre || 999) - (b.wordre || 999));
+                      const triParOrdre = [...ascenseursVille].sort((a, b) => (a.wordre2 || 999) - (b.wordre2 || 999));
                       
                       return (
                         <Card key={ville} className="overflow-hidden">
@@ -3692,7 +3793,7 @@ export function ParcAscenseursPage() {
                                   <Button
                                     variant="primary"
                                     size="sm"
-                                    onClick={() => openItineraire(triParWordre)}
+                                    onClick={() => openItineraire(triParOrdre)}
                                   >
                                     <Route className="w-4 h-4 mr-1" />
                                     Itinéraire
@@ -3703,15 +3804,15 @@ export function ParcAscenseursPage() {
                             
                             {/* Liste des ascenseurs */}
                             <div className="divide-y divide-[var(--border-primary)]">
-                              {triParWordre.slice(0, 5).map((asc: any) => (
+                              {triParOrdre.slice(0, 5).map((asc: any) => (
                                 <div 
                                   key={asc.id}
                                   className="p-3 flex items-center gap-3 hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
                                   onClick={() => setSelectedAscenseur(asc)}
                                 >
-                                  {asc.wordre && (
+                                  {asc.wordre2 && (
                                     <div className="w-6 h-6 rounded-full bg-lime-500/20 flex items-center justify-center flex-shrink-0">
-                                      <span className="text-lime-400 text-xs font-bold">{asc.wordre}</span>
+                                      <span className="text-lime-400 text-xs font-bold">{asc.wordre2}</span>
                                     </div>
                                   )}
                                   <div className="flex-1 min-w-0">
@@ -3764,18 +3865,10 @@ export function ParcAscenseursPage() {
                 <div>
                   <h2 className="text-xl font-bold">Intelligence Artificielle</h2>
                   <p className="text-sm text-[var(--text-muted)]">
-                    Analyse prédictive et diagnostic assisté
+                    Analyse prédictive des pannes
                   </p>
                 </div>
               </div>
-              <Button 
-                variant="primary"
-                onClick={() => setShowDiagnostic(true)}
-                className="bg-gradient-to-r from-orange-500 to-red-500"
-              >
-                <Sparkles className="w-4 h-4 mr-2" />
-                Assistant Diagnostic
-              </Button>
             </div>
 
             {/* Dashboard Analyse Prédictive */}
@@ -3809,14 +3902,6 @@ export function ParcAscenseursPage() {
       {/* Modal synchronisation */}
       {showSyncModal && (
         <SyncModal onClose={() => setShowSyncModal(false)} />
-      )}
-
-      {/* Modal Assistant Diagnostic IA */}
-      {showDiagnostic && (
-        <DiagnosticAssistant 
-          onClose={() => setShowDiagnostic(false)}
-          defaultAscenseur={selectedAscenseur?.code_appareil}
-        />
       )}
     </div>
   );
