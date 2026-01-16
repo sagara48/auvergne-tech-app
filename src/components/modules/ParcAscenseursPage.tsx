@@ -177,14 +177,16 @@ const getAscenseurs = async (secteur?: number, userSecteurs?: number[]) => {
 // Récupérer TOUS les ascenseurs pour l'enrichissement (sans filtre secteur)
 const getAllAscenseursForEnrichment = async () => {
   try {
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
       .from('parc_ascenseurs')
-      .select('id_wsoucont, code_appareil, adresse, ville, secteur, marque, type_planning');
+      .select('id_wsoucont, code_appareil, adresse, ville, secteur, marque, type_planning', { count: 'exact' })
+      .range(0, 9999); // Récupérer jusqu'à 10000 ascenseurs
     
     if (error) {
       console.warn('Erreur récupération ascenseurs pour enrichissement:', error.message);
       return [];
     }
+    console.log(`Ascenseurs pour enrichissement: ${data?.length || 0} (total: ${count})`);
     return data || [];
   } catch {
     return [];
@@ -209,27 +211,37 @@ const getArrets = async () => {
 
 const getPannesRecentes = async () => {
   try {
-    // Récupérer les pannes les plus récentes
-    // Supabase a une limite par défaut de 1000, on doit la spécifier explicitement
+    // Récupérer les VRAIES pannes (exclure visites cause=99 et contrôles cause=0)
+    // Filtrage côté serveur pour avoir les pannes pertinentes
     const { data: pannes, error, count } = await supabase
       .from('parc_pannes')
       .select('*', { count: 'exact' })
+      .not('data_wpanne->>CAUSE', 'eq', '99')  // Exclure visites
+      .not('data_wpanne->>CAUSE', 'eq', '0')   // Exclure contrôles
+      .not('data_wpanne->>CAUSE', 'eq', '00')  // Exclure contrôles (format 00)
       .order('date_appel', { ascending: false, nullsFirst: false })
-      .range(0, 4999); // range pour contourner la limite par défaut
+      .range(0, 2999); // Récupérer jusqu'à 3000 vraies pannes
     
     if (error) {
-      console.warn('Table parc_pannes non disponible:', error.message);
-      return [];
+      console.warn('Erreur parc_pannes avec filtre:', error.message);
+      // Fallback sans filtre si erreur
+      const { data: allPannes } = await supabase
+        .from('parc_pannes')
+        .select('*')
+        .order('date_appel', { ascending: false, nullsFirst: false })
+        .range(0, 4999);
+      console.log(`Fallback: ${allPannes?.length || 0} pannes récupérées (sans filtre cause)`);
+      return allPannes || [];
     }
     
-    console.log(`Pannes récupérées: ${pannes?.length || 0} (total en base: ${count})`);
+    console.log(`Vraies pannes récupérées: ${pannes?.length || 0} (total vraies pannes: ${count})`);
     
     // Debug: afficher les dates des 5 premières pannes
     if (pannes && pannes.length > 0) {
-      console.log('5 premières pannes (plus récentes):');
+      console.log('5 premières vraies pannes (plus récentes):');
       pannes.slice(0, 5).forEach((p: any, i: number) => {
         const data = p.data_wpanne || {};
-        console.log(`  ${i+1}. date_appel=${p.date_appel}, data.DATE=${data.DATE}, code=${p.code_appareil}, cause=${data.CAUSE}`);
+        console.log(`  ${i+1}. date_appel=${p.date_appel}, data.DATE=${data.DATE}, cause=${data.CAUSE}, id_wsoucont=${p.id_wsoucont}`);
       });
     }
     
@@ -2268,7 +2280,7 @@ export function ParcAscenseursPage() {
     return result;
   }, [pannesRecentes, allAscenseurs]);
   
-  // Filtrer les vraies pannes (exclure visites cause=99 et contrôles cause=0) et trier par date
+  // Filtrer les pannes par secteur et trier par date (le filtrage cause est fait côté serveur)
   const vraisPannes = useMemo(() => {
     if (!enrichedPannes || enrichedPannes.length === 0) return [];
     
@@ -2293,31 +2305,10 @@ export function ParcAscenseursPage() {
       return null;
     };
     
-    // Debug: analyser les causes
-    const causeCounts: Record<string, number> = {};
-    enrichedPannes.forEach((p: any) => {
-      const data = p.data_wpanne || {};
-      const cause = data.CAUSE !== undefined ? String(data.CAUSE) : (p.cause !== undefined ? String(p.cause) : 'undefined');
-      causeCounts[cause] = (causeCounts[cause] || 0) + 1;
-    });
-    console.log('Répartition des causes:', causeCounts);
-    
-    // Filtrer les vraies pannes (exclure visites et contrôles)
-    let filtered = enrichedPannes.filter((p: any) => {
-      const data = p.data_wpanne || {};
-      const cause = data.CAUSE !== undefined ? data.CAUSE : p.cause;
-      if (cause === undefined || cause === null) return true; // Garder si pas de cause
-      const causeStr = String(cause);
-      const isVisite = causeStr === '99';
-      const isControle = causeStr === '0' || causeStr === '00';
-      return !isVisite && !isControle;
-    });
-    
-    console.log(`Après filtrage cause: ${filtered.length}/${enrichedPannes.length} pannes`);
+    let filtered = [...enrichedPannes];
     
     // Filtrer par secteurs autorisés si définis
     if (userSecteurs && userSecteurs.length > 0) {
-      const avantFiltrage = filtered.length;
       // Compter les pannes avec secteur défini
       const avecSecteur = filtered.filter((p: any) => p.secteur !== undefined && p.secteur !== null);
       console.log(`Pannes avec secteur défini: ${avecSecteur.length}/${filtered.length}`);
@@ -2333,6 +2324,7 @@ export function ParcAscenseursPage() {
       if (avecSecteur.length < filtered.length * 0.1) {
         console.warn('Enrichissement incomplet - filtrage secteur ignoré');
       } else {
+        const avantFiltrage = filtered.length;
         filtered = filtered.filter((p: any) => p.secteur && userSecteurs.includes(p.secteur));
         console.log(`Pannes après filtrage secteurs ${userSecteurs.join(',')}: ${filtered.length}/${avantFiltrage}`);
       }
