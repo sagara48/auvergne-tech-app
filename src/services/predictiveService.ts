@@ -84,33 +84,34 @@ function parseDateYYYYMMDD(dateStr: string): Date | null {
 /**
  * Calculer le score de risque pour un ascenseur
  */
-async function calculerScoreRisque(
+function calculerScoreRisque(
   ascenseur: any,
   pannes: any[],
   visites: any[]
-): Promise<PredictionPanne> {
-  const now = new Date();
-  const j7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const j30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const j90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-  
-  // Filtrer les vraies pannes (exclure visites cause=99 et contrôles cause=0)
-  const vraisPannes = pannes.filter(p => {
-    const data = p.data_wpanne || {};
-    const cause = data.CAUSE || p.cause;
-    return cause !== '99' && cause !== '0' && cause !== 99 && cause !== 0;
-  });
-  
-  // Extraire les dates des pannes
-  const pannesAvecDates = vraisPannes.map(p => {
-    const data = p.data_wpanne || {};
-    const dateStr = String(data.DATE || '');
-    return {
-      ...p,
-      datePanne: parseDateYYYYMMDD(dateStr),
-      type: data.ENSEMBLE || data.PANNES || 'Inconnu'
-    };
-  }).filter(p => p.datePanne);
+): PredictionPanne {
+  try {
+    const now = new Date();
+    const j7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const j30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const j90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    
+    // Filtrer les vraies pannes (exclure visites cause=99 et contrôles cause=0)
+    const vraisPannes = (pannes || []).filter(p => {
+      const data = p.data_wpanne || {};
+      const cause = data.CAUSE !== undefined ? data.CAUSE : p.cause;
+      return cause !== '99' && cause !== '0' && cause !== 99 && cause !== 0 && cause !== '00';
+    });
+    
+    // Extraire les dates des pannes
+    const pannesAvecDates = vraisPannes.map(p => {
+      const data = p.data_wpanne || {};
+      const dateStr = String(data.DATE || '');
+      return {
+        ...p,
+        datePanne: parseDateYYYYMMDD(dateStr),
+        type: String(data.ENSEMBLE || data.PANNES || 'Inconnu')
+      };
+    }).filter(p => p.datePanne);
   
   // Compter les pannes par période
   const pannes7j = pannesAvecDates.filter(p => p.datePanne! >= j7).length;
@@ -262,30 +263,30 @@ async function calculerScoreRisque(
   const recommandations: string[] = [];
   
   if (scoreRisque >= 70) {
-    recommandations.push('🚨 Intervention préventive urgente recommandée');
+    recommandations.push('[URGENT] Intervention préventive urgente recommandée');
   }
   if (pannesRecurrentes.length > 0) {
-    recommandations.push(`🔄 Investiguer la cause racine de "${pannesRecurrentes[0].type}"`);
+    recommandations.push(`[RECURRENCE] Investiguer la cause racine de "${pannesRecurrentes[0].type}"`);
   }
   if (ascenseur.en_arret) {
-    recommandations.push('⚠️ Prioriser la remise en service');
+    recommandations.push('[ARRET] Prioriser la remise en service');
   }
   if (!ascenseur.type_planning) {
-    recommandations.push('📋 Proposer un contrat de maintenance');
+    recommandations.push('[CONTRAT] Proposer un contrat de maintenance');
   }
   if (pannes30j >= 3) {
-    recommandations.push('📊 Analyser les patterns de pannes');
+    recommandations.push('[ANALYSE] Analyser les patterns de pannes');
   }
   if (recommandations.length === 0) {
-    recommandations.push('✅ Continuer la maintenance préventive régulière');
+    recommandations.push('Continuer la maintenance préventive régulière');
   }
   
   return {
-    ascenseurId: ascenseur.id,
-    codeAppareil: ascenseur.code_appareil,
-    adresse: ascenseur.adresse,
-    ville: ascenseur.ville,
-    secteur: ascenseur.secteur,
+    ascenseurId: ascenseur.id || '',
+    codeAppareil: ascenseur.code_appareil || 'Inconnu',
+    adresse: ascenseur.adresse || '',
+    ville: ascenseur.ville || '',
+    secteur: ascenseur.secteur || 0,
     scoreRisque: Math.round(scoreRisque),
     niveau,
     probabilitePanne7j: Math.round(probabilitePanne7j),
@@ -298,6 +299,27 @@ async function calculerScoreRisque(
     recommandations,
     pannesRecurrentes: pannesRecurrentes.length > 0 ? pannesRecurrentes : undefined
   };
+  } catch (err) {
+    // En cas d'erreur, retourner une prédiction par défaut
+    console.warn('Erreur calcul score pour', ascenseur?.code_appareil, err);
+    return {
+      ascenseurId: ascenseur?.id || '',
+      codeAppareil: ascenseur?.code_appareil || 'Inconnu',
+      adresse: ascenseur?.adresse || '',
+      ville: ascenseur?.ville || '',
+      secteur: ascenseur?.secteur || 0,
+      scoreRisque: 0,
+      niveau: 'faible',
+      probabilitePanne7j: 0,
+      probabilitePanne30j: 0,
+      dernierePanne: undefined,
+      nombrePannes30j: 0,
+      nombrePannes90j: 0,
+      facteurs: [],
+      tendance: 'stable',
+      recommandations: ['Données insuffisantes pour l\'analyse']
+    };
+  }
 }
 
 /**
@@ -305,26 +327,61 @@ async function calculerScoreRisque(
  */
 export async function analyserParcComplet(secteurs?: number[]): Promise<AnalyseGlobale> {
   try {
-    // Récupérer les ascenseurs
-    let query = supabase.from('parc_ascenseurs').select('*');
+    // Récupérer les ascenseurs (limiter pour éviter les problèmes de performance)
+    let query = supabase.from('parc_ascenseurs').select('*').limit(500);
     if (secteurs && secteurs.length > 0) {
       query = query.in('secteur', secteurs);
     }
     const { data: ascenseurs, error: errAsc } = await query;
     
-    if (errAsc || !ascenseurs) {
-      throw new Error('Erreur récupération ascenseurs');
+    if (errAsc) {
+      console.error('Erreur récupération ascenseurs:', errAsc.message);
+      return {
+        scoreGlobal: 0,
+        ascenseursACritiquer: 0,
+        ascenseursAEleveRisque: 0,
+        tendanceGenerale: 'stable',
+        predictions: [],
+        alertes: []
+      };
     }
     
-    // Récupérer toutes les pannes
+    if (!ascenseurs || ascenseurs.length === 0) {
+      console.log('Aucun ascenseur trouvé pour l\'analyse');
+      return {
+        scoreGlobal: 0,
+        ascenseursACritiquer: 0,
+        ascenseursAEleveRisque: 0,
+        tendanceGenerale: 'stable',
+        predictions: [],
+        alertes: []
+      };
+    }
+    
+    // Récupérer les pannes récentes (90 derniers jours suffisent pour l'analyse)
+    const dateLimit = new Date();
+    dateLimit.setDate(dateLimit.getDate() - 90);
+    
     const { data: pannes, error: errPannes } = await supabase
       .from('parc_pannes')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('id_wsoucont, data_wpanne, cause, date_appel')
+      .gte('date_appel', dateLimit.toISOString().split('T')[0])
+      .order('date_appel', { ascending: false, nullsFirst: false })
+      .limit(5000);
     
     if (errPannes) {
-      throw new Error('Erreur récupération pannes');
+      console.error('Erreur récupération pannes:', errPannes.message);
+      return {
+        scoreGlobal: 0,
+        ascenseursACritiquer: 0,
+        ascenseursAEleveRisque: 0,
+        tendanceGenerale: 'stable',
+        predictions: [],
+        alertes: []
+      };
     }
+    
+    console.log(`Analyse prédictive: ${ascenseurs.length} ascenseurs, ${pannes?.length || 0} pannes (90j)`);
     
     // Grouper les pannes par ascenseur
     const pannesParAscenseur: Record<string, any[]> = {};
@@ -350,7 +407,7 @@ export async function analyserParcComplet(secteurs?: number[]): Promise<AnalyseG
       const pannesAsc = pannesParAscenseur[String(ascenseur.id_wsoucont)] || [];
       const visitesAsc = visitesParAscenseur[String(ascenseur.id_wsoucont)] || [];
       
-      const prediction = await calculerScoreRisque(ascenseur, pannesAsc, visitesAsc);
+      const prediction = calculerScoreRisque(ascenseur, pannesAsc, visitesAsc);
       predictions.push(prediction);
     }
     
@@ -402,8 +459,10 @@ export async function analyserParcComplet(secteurs?: number[]): Promise<AnalyseG
       predictions,
       alertes
     };
-  } catch (error) {
-    console.error('Erreur analyse prédictive:', error);
+  } catch (error: any) {
+    console.error('Erreur analyse prédictive:', error?.message || error);
+    if (error?.code) console.error('Code erreur:', error.code);
+    if (error?.details) console.error('Détails:', error.details);
     return {
       scoreGlobal: 0,
       ascenseursACritiquer: 0,

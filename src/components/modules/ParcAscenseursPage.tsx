@@ -190,46 +190,32 @@ const getArrets = async () => {
   }
 };
 
-const getPannesRecentes = async (userSecteurs?: number[]) => {
+const getPannesRecentes = async () => {
   try {
-    // Si filtrage par secteurs, d'abord récupérer les id_wsoucont des ascenseurs de ces secteurs
-    let allowedIdWsoucont: number[] | null = null;
-    
-    if (userSecteurs && userSecteurs.length > 0) {
-      const { data: ascenseurs } = await supabase
-        .from('parc_ascenseurs')
-        .select('id_wsoucont')
-        .in('secteur', userSecteurs);
-      
-      if (ascenseurs && ascenseurs.length > 0) {
-        allowedIdWsoucont = ascenseurs.map((a: any) => a.id_wsoucont).filter(Boolean);
-        console.log(`Secteurs ${userSecteurs.join(',')} → ${allowedIdWsoucont.length} ascenseurs`);
-      }
-    }
-    
-    // Construire la requête - récupérer plus de données car le tri par date réelle sera fait côté client
-    let query = supabase
+    // Récupérer les pannes les plus récentes (triées par date_appel DESC côté serveur)
+    // Le filtrage par secteur se fait côté client dans vraisPannes
+    const { data: pannes, error } = await supabase
       .from('parc_pannes')
-      .select('*');
-    
-    // Si on a des id_wsoucont autorisés, filtrer dessus
-    if (allowedIdWsoucont && allowedIdWsoucont.length > 0) {
-      // Supabase a une limite sur le IN, donc on prend les 500 premiers
-      query = query.in('id_wsoucont', allowedIdWsoucont.slice(0, 500));
-    }
-    
-    // Récupérer plus de résultats pour être sûr d'avoir les dernières pannes
-    // Le tri par date réelle (data_wpanne.DATE) sera fait côté client
-    query = query.limit(500);
-    
-    const { data: pannes, error } = await query;
+      .select('*')
+      .order('date_appel', { ascending: false, nullsFirst: false })
+      .limit(5000);
     
     if (error) {
       console.warn('Table parc_pannes non disponible:', error.message);
       return [];
     }
     
-    console.log(`Pannes récupérées (après filtrage secteurs): ${pannes?.length || 0}`);
+    console.log(`Pannes récupérées: ${pannes?.length || 0}`);
+    
+    // Debug: afficher les dates des 5 premières pannes
+    if (pannes && pannes.length > 0) {
+      console.log('5 premières pannes (plus récentes):');
+      pannes.slice(0, 5).forEach((p: any, i: number) => {
+        const data = p.data_wpanne || {};
+        console.log(`  ${i+1}. date_appel=${p.date_appel}, data.DATE=${data.DATE}, code=${p.code_appareil}`);
+      });
+    }
+    
     return pannes || [];
   } catch (err) {
     console.error('Erreur getPannesRecentes:', err);
@@ -2166,11 +2152,10 @@ export function ParcAscenseursPage() {
     refetchInterval: 60000 // Refresh toutes les minutes
   });
   
-  // Pannes récentes filtrées par secteurs
+  // Pannes récentes (le filtrage par secteurs se fait côté client dans vraisPannes)
   const { data: pannesRecentes } = useQuery({
-    queryKey: ['parc-pannes-recentes', userSecteurs],
-    queryFn: () => getPannesRecentes(userSecteurs || []),
-    enabled: userSecteurs !== undefined
+    queryKey: ['parc-pannes-recentes'],
+    queryFn: () => getPannesRecentes()
   });
   
   // Enrichir les arrêts avec les données des ascenseurs
@@ -2259,17 +2244,18 @@ export function ParcAscenseursPage() {
           return new Date(year, month, day);
         }
       }
-      // Fallback sur date_appel (format ISO)
+      // Fallback sur date_appel (format ISO ou autre)
       if (p.date_appel) {
-        return new Date(p.date_appel);
+        const d = new Date(p.date_appel);
+        if (!isNaN(d.getTime())) return d;
       }
       return null;
     };
     
-    // Filtrer les vraies pannes
-    const filtered = enrichedPannes.filter((p: any) => {
+    // Filtrer les vraies pannes (exclure visites et contrôles)
+    let filtered = enrichedPannes.filter((p: any) => {
       const data = p.data_wpanne || {};
-      const cause = data.CAUSE || p.cause;
+      const cause = data.CAUSE !== undefined ? data.CAUSE : p.cause;
       if (cause === undefined || cause === null) return true;
       const causeStr = String(cause);
       const isVisite = causeStr === '99';
@@ -2277,25 +2263,40 @@ export function ParcAscenseursPage() {
       return !isVisite && !isControle;
     });
     
-    // Trier par date décroissante
+    // Filtrer par secteurs autorisés si définis
+    if (userSecteurs && userSecteurs.length > 0) {
+      filtered = filtered.filter((p: any) => userSecteurs.includes(p.secteur));
+      console.log(`Pannes après filtrage secteurs ${userSecteurs.join(',')}: ${filtered.length}`);
+    }
+    
+    // Trier par date décroissante (les plus récentes en premier)
     const sorted = filtered.sort((a: any, b: any) => {
       const dateA = getDateFromPanne(a);
       const dateB = getDateFromPanne(b);
       const timeA = dateA ? dateA.getTime() : 0;
       const timeB = dateB ? dateB.getTime() : 0;
-      return timeB - timeA;
+      return timeB - timeA; // Décroissant
     });
     
-    console.log(`vraisPannes: ${sorted.length} pannes après filtrage cause`);
+    console.log(`vraisPannes: ${enrichedPannes.length} total → ${filtered.length} après filtrage → ${sorted.length} triées`);
     if (sorted.length > 0) {
-      const firstDate = getDateFromPanne(sorted[0]);
-      const lastDate = getDateFromPanne(sorted[sorted.length-1]);
-      console.log('Première panne (plus récente):', firstDate?.toISOString().split('T')[0], sorted[0].code_appareil);
-      console.log('Dernière panne (plus ancienne):', lastDate?.toISOString().split('T')[0]);
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const firstDate = getDateFromPanne(first);
+      const lastDate = getDateFromPanne(last);
+      console.log(`Plus récente: ${firstDate?.toISOString().split('T')[0]} (${first.code_appareil})`);
+      console.log(`Plus ancienne: ${lastDate?.toISOString().split('T')[0]} (${last.code_appareil})`);
+      
+      // Afficher les 5 premières pannes pour debug
+      console.log('Top 5 pannes les plus récentes:');
+      sorted.slice(0, 5).forEach((p: any, i: number) => {
+        const d = getDateFromPanne(p);
+        console.log(`  ${i+1}. ${d?.toISOString().split('T')[0]} - ${p.code_appareil} (secteur ${p.secteur})`);
+      });
     }
     
     return sorted;
-  }, [enrichedPannes]);
+  }, [enrichedPannes, userSecteurs]);
   
   const { data: secteurs } = useQuery({
     queryKey: ['parc-secteurs'],
@@ -2360,11 +2361,11 @@ export function ParcAscenseursPage() {
     return count;
   }, [vraisPannes]);
   
-  // Compter les ascenseurs avec tournée (wordre2 défini) - uniquement dans les secteurs accessibles
+  // Compter les ascenseurs avec tournée (ordre2 défini) - uniquement dans les secteurs accessibles
   const ascenseursAvecTourneeCount = useMemo(() => {
     if (!ascenseurs) return 0;
     return ascenseurs.filter((a: any) => {
-      const hasOrdre = a.wordre2 !== null && a.wordre2 !== undefined && a.wordre2 > 0;
+      const hasOrdre = a.ordre2 !== null && a.ordre2 !== undefined && a.ordre2 > 0;
       const secteurAccessible = !userSecteurs || userSecteurs.length === 0 || userSecteurs.includes(a.secteur);
       return hasOrdre && secteurAccessible;
     }).length;
@@ -2888,18 +2889,18 @@ export function ParcAscenseursPage() {
         {mainTab === 'tournees' && (
           <div className="space-y-6">
             {(() => {
-              // Grouper les ascenseurs par secteur et trier par wordre2 (ordre de tournée)
+              // Grouper les ascenseurs par secteur et trier par ordre2
               const ascenseursBySecteur: Record<number, any[]> = {};
               
-              // Filtrer les ascenseurs qui ont un wordre2 défini (font partie d'une tournée)
+              // Filtrer les ascenseurs qui ont un ordre2 défini (font partie d'une tournée)
               // ET qui sont dans les secteurs accessibles par le technicien
               const ascenseursAvecTournee = (ascenseurs || []).filter((a: any) => {
-                // Vérifier que wordre2 est défini
-                const hasOrdre = a.wordre2 !== null && a.wordre2 !== undefined && a.wordre2 > 0;
-                // Vérifier que le secteur est accessible (si userSecteurs défini)
+                const hasOrdre = a.ordre2 !== null && a.ordre2 !== undefined && a.ordre2 > 0;
                 const secteurAccessible = !userSecteurs || userSecteurs.length === 0 || userSecteurs.includes(a.secteur);
                 return hasOrdre && secteurAccessible;
               });
+              
+              console.log(`Tournées: ${ascenseursAvecTournee.length} ascenseurs avec ordre2 sur ${ascenseurs?.length || 0} total`);
               
               ascenseursAvecTournee.forEach((a: any) => {
                 const secteur = a.secteur || 0;
@@ -2909,12 +2910,10 @@ export function ParcAscenseursPage() {
                 ascenseursBySecteur[secteur].push(a);
               });
               
-              // Trier chaque groupe par wordre2 (ordre de tournée)
+              // Trier chaque groupe par ordre2
               Object.keys(ascenseursBySecteur).forEach(secteur => {
                 ascenseursBySecteur[Number(secteur)].sort((a: any, b: any) => {
-                  const ordreA = a.wordre2 || 999;
-                  const ordreB = b.wordre2 || 999;
-                  return ordreA - ordreB;
+                  return (a.ordre2 || 999) - (b.ordre2 || 999);
                 });
               });
               
@@ -3187,7 +3186,7 @@ export function ParcAscenseursPage() {
                                 onClick={() => setSelectedAscenseur(asc)}
                               >
                                 <div className="w-8 h-8 rounded-full bg-lime-500/20 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-lime-400 font-bold text-sm">{asc.wordre2}</span>
+                                  <span className="text-lime-400 font-bold text-sm">{asc.ordre2}</span>
                                 </div>
                                 
                                 <div className="flex-1 min-w-0">
@@ -3759,7 +3758,7 @@ export function ParcAscenseursPage() {
                   <div className="space-y-4">
                     {villesSorted.map(([ville, ascenseursVille]) => {
                       const enArret = ascenseursVille.filter((a: any) => a.en_arret);
-                      const triParOrdre = [...ascenseursVille].sort((a, b) => (a.wordre2 || 999) - (b.wordre2 || 999));
+                      const triParOrdre = [...ascenseursVille].sort((a, b) => (a.ordre2 || 999) - (b.ordre2 || 999));
                       
                       return (
                         <Card key={ville} className="overflow-hidden">
@@ -3810,9 +3809,9 @@ export function ParcAscenseursPage() {
                                   className="p-3 flex items-center gap-3 hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
                                   onClick={() => setSelectedAscenseur(asc)}
                                 >
-                                  {asc.wordre2 && (
+                                  {asc.ordre2 > 0 && (
                                     <div className="w-6 h-6 rounded-full bg-lime-500/20 flex items-center justify-center flex-shrink-0">
-                                      <span className="text-lime-400 text-xs font-bold">{asc.wordre2}</span>
+                                      <span className="text-lime-400 text-xs font-bold">{asc.ordre2}</span>
                                     </div>
                                   )}
                                   <div className="flex-1 min-w-0">
