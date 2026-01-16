@@ -209,27 +209,27 @@ const getArrets = async () => {
 
 const getPannesRecentes = async () => {
   try {
-    // Récupérer les pannes les plus récentes (triées par date_appel DESC côté serveur)
-    // Le filtrage par secteur se fait côté client dans vraisPannes
-    const { data: pannes, error } = await supabase
+    // Récupérer les pannes les plus récentes
+    // Supabase a une limite par défaut de 1000, on doit la spécifier explicitement
+    const { data: pannes, error, count } = await supabase
       .from('parc_pannes')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('date_appel', { ascending: false, nullsFirst: false })
-      .limit(5000);
+      .range(0, 4999); // range pour contourner la limite par défaut
     
     if (error) {
       console.warn('Table parc_pannes non disponible:', error.message);
       return [];
     }
     
-    console.log(`Pannes récupérées: ${pannes?.length || 0}`);
+    console.log(`Pannes récupérées: ${pannes?.length || 0} (total en base: ${count})`);
     
     // Debug: afficher les dates des 5 premières pannes
     if (pannes && pannes.length > 0) {
       console.log('5 premières pannes (plus récentes):');
       pannes.slice(0, 5).forEach((p: any, i: number) => {
         const data = p.data_wpanne || {};
-        console.log(`  ${i+1}. date_appel=${p.date_appel}, data.DATE=${data.DATE}, code=${p.code_appareil}`);
+        console.log(`  ${i+1}. date_appel=${p.date_appel}, data.DATE=${data.DATE}, code=${p.code_appareil}, cause=${data.CAUSE}`);
       });
     }
     
@@ -2231,21 +2231,26 @@ export function ParcAscenseursPage() {
     
     console.log(`enrichedPannes: ${pannesRecentes.length} pannes à enrichir avec ${allAscenseurs.length} ascenseurs`);
     
-    // Créer un map des ascenseurs par id_wsoucont
-    const ascenseursMap: Record<number, any> = {};
+    // Créer un map des ascenseurs par id_wsoucont (essayer plusieurs types de clé)
+    const ascenseursMapNum: Record<number, any> = {};
+    const ascenseursMapStr: Record<string, any> = {};
     allAscenseurs.forEach((a: any) => {
-      if (a.id_wsoucont) ascenseursMap[a.id_wsoucont] = a;
+      if (a.id_wsoucont !== null && a.id_wsoucont !== undefined) {
+        ascenseursMapNum[Number(a.id_wsoucont)] = a;
+        ascenseursMapStr[String(a.id_wsoucont)] = a;
+      }
     });
     
-    // Debug: afficher quelques id_wsoucont
-    const ascIds = Object.keys(ascenseursMap).slice(0, 5);
-    const panneIds = pannesRecentes.slice(0, 5).map((p: any) => p.id_wsoucont);
-    console.log('Sample id_wsoucont ascenseurs:', ascIds);
-    console.log('Sample id_wsoucont pannes:', panneIds);
+    // Debug: afficher quelques id_wsoucont avec leurs types
+    const sampleAsc = allAscenseurs.slice(0, 3);
+    const samplePanne = pannesRecentes.slice(0, 3);
+    console.log('Sample ascenseurs:', sampleAsc.map((a: any) => ({ id: a.id_wsoucont, type: typeof a.id_wsoucont, code: a.code_appareil })));
+    console.log('Sample pannes:', samplePanne.map((p: any) => ({ id: p.id_wsoucont, type: typeof p.id_wsoucont, code: p.code_appareil })));
     
     let matchCount = 0;
     const result = pannesRecentes.map((panne: any) => {
-      const asc = ascenseursMap[panne.id_wsoucont];
+      // Essayer les deux types de clé
+      const asc = ascenseursMapNum[Number(panne.id_wsoucont)] || ascenseursMapStr[String(panne.id_wsoucont)];
       if (asc) matchCount++;
       return {
         ...panne,
@@ -2288,16 +2293,27 @@ export function ParcAscenseursPage() {
       return null;
     };
     
+    // Debug: analyser les causes
+    const causeCounts: Record<string, number> = {};
+    enrichedPannes.forEach((p: any) => {
+      const data = p.data_wpanne || {};
+      const cause = data.CAUSE !== undefined ? String(data.CAUSE) : (p.cause !== undefined ? String(p.cause) : 'undefined');
+      causeCounts[cause] = (causeCounts[cause] || 0) + 1;
+    });
+    console.log('Répartition des causes:', causeCounts);
+    
     // Filtrer les vraies pannes (exclure visites et contrôles)
     let filtered = enrichedPannes.filter((p: any) => {
       const data = p.data_wpanne || {};
       const cause = data.CAUSE !== undefined ? data.CAUSE : p.cause;
-      if (cause === undefined || cause === null) return true;
+      if (cause === undefined || cause === null) return true; // Garder si pas de cause
       const causeStr = String(cause);
       const isVisite = causeStr === '99';
       const isControle = causeStr === '0' || causeStr === '00';
       return !isVisite && !isControle;
     });
+    
+    console.log(`Après filtrage cause: ${filtered.length}/${enrichedPannes.length} pannes`);
     
     // Filtrer par secteurs autorisés si définis
     if (userSecteurs && userSecteurs.length > 0) {
@@ -2305,6 +2321,13 @@ export function ParcAscenseursPage() {
       // Compter les pannes avec secteur défini
       const avecSecteur = filtered.filter((p: any) => p.secteur !== undefined && p.secteur !== null);
       console.log(`Pannes avec secteur défini: ${avecSecteur.length}/${filtered.length}`);
+      
+      // Debug: afficher les secteurs présents
+      const secteursCounts: Record<number, number> = {};
+      avecSecteur.forEach((p: any) => {
+        secteursCounts[p.secteur] = (secteursCounts[p.secteur] || 0) + 1;
+      });
+      console.log('Secteurs présents dans les pannes:', secteursCounts);
       
       // Si moins de 10% des pannes ont un secteur, ne pas filtrer (problème d'enrichissement)
       if (avecSecteur.length < filtered.length * 0.1) {
