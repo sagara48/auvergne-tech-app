@@ -174,6 +174,23 @@ const getAscenseurs = async (secteur?: number, userSecteurs?: number[]) => {
   }
 };
 
+// Récupérer TOUS les ascenseurs pour l'enrichissement (sans filtre secteur)
+const getAllAscenseursForEnrichment = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('parc_ascenseurs')
+      .select('id_wsoucont, code_appareil, adresse, ville, secteur, marque, type_planning');
+    
+    if (error) {
+      console.warn('Erreur récupération ascenseurs pour enrichissement:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
+};
+
 const getArrets = async () => {
   try {
     const { data, error } = await supabase
@@ -2158,13 +2175,19 @@ export function ParcAscenseursPage() {
     queryFn: () => getPannesRecentes()
   });
   
-  // Enrichir les arrêts avec les données des ascenseurs
+  // TOUS les ascenseurs pour l'enrichissement des pannes (sans filtre secteur)
+  const { data: allAscenseurs } = useQuery({
+    queryKey: ['parc-all-ascenseurs-enrichment'],
+    queryFn: getAllAscenseursForEnrichment
+  });
+  
+  // Enrichir les arrêts avec les données des ascenseurs (utiliser TOUS les ascenseurs)
   const enrichedArrets = useMemo(() => {
-    if (!arrets || !ascenseurs) return [];
+    if (!arrets || !allAscenseurs) return [];
     
     // Créer un map id_wsoucont -> ascenseur
     const ascenseursMap: Record<number, any> = {};
-    ascenseurs.forEach((a: any) => {
+    allAscenseurs.forEach((a: any) => {
       if (a.id_wsoucont) {
         ascenseursMap[a.id_wsoucont] = a;
       }
@@ -2190,7 +2213,7 @@ export function ParcAscenseursPage() {
         hors_contrat: !asc?.type_planning
       };
     });
-  }, [arrets, ascenseurs]);
+  }, [arrets, allAscenseurs]);
   
   // Filtrer les arrêts selon les secteurs de l'utilisateur
   const filteredArrets = useMemo(() => {
@@ -2199,33 +2222,46 @@ export function ParcAscenseursPage() {
     return enrichedArrets.filter((a: Arret) => userSecteurs.includes(a.secteur));
   }, [enrichedArrets, userSecteurs]);
   
-  // Enrichir les pannes avec les données des ascenseurs
+  // Enrichir les pannes avec les données des ascenseurs (utiliser TOUS les ascenseurs)
   const enrichedPannes = useMemo(() => {
-    if (!pannesRecentes || !ascenseurs) {
-      console.log('enrichedPannes: données manquantes');
+    if (!pannesRecentes || !allAscenseurs) {
+      console.log('enrichedPannes: données manquantes', { pannes: pannesRecentes?.length, asc: allAscenseurs?.length });
       return [];
     }
     
-    console.log(`enrichedPannes: ${pannesRecentes.length} pannes à enrichir`);
+    console.log(`enrichedPannes: ${pannesRecentes.length} pannes à enrichir avec ${allAscenseurs.length} ascenseurs`);
     
+    // Créer un map des ascenseurs par id_wsoucont
     const ascenseursMap: Record<number, any> = {};
-    ascenseurs.forEach((a: any) => {
+    allAscenseurs.forEach((a: any) => {
       if (a.id_wsoucont) ascenseursMap[a.id_wsoucont] = a;
     });
     
-    return pannesRecentes.map((panne: any) => {
+    // Debug: afficher quelques id_wsoucont
+    const ascIds = Object.keys(ascenseursMap).slice(0, 5);
+    const panneIds = pannesRecentes.slice(0, 5).map((p: any) => p.id_wsoucont);
+    console.log('Sample id_wsoucont ascenseurs:', ascIds);
+    console.log('Sample id_wsoucont pannes:', panneIds);
+    
+    let matchCount = 0;
+    const result = pannesRecentes.map((panne: any) => {
       const asc = ascenseursMap[panne.id_wsoucont];
+      if (asc) matchCount++;
       return {
         ...panne,
-        code_appareil: asc?.code_appareil || panne.code_appareil,
-        adresse: asc?.adresse,
-        ville: asc?.ville,
+        code_appareil: asc?.code_appareil || panne.code_appareil || 'Inconnu',
+        adresse: asc?.adresse || '',
+        ville: asc?.ville || '',
         secteur: asc?.secteur,
-        marque: asc?.marque,
-        type_planning: asc?.type_planning
+        marque: asc?.marque || '',
+        type_planning: asc?.type_planning || ''
       };
     });
-  }, [pannesRecentes, ascenseurs]);
+    
+    console.log(`enrichedPannes: ${matchCount}/${pannesRecentes.length} pannes ont trouvé leur ascenseur`);
+    
+    return result;
+  }, [pannesRecentes, allAscenseurs]);
   
   // Filtrer les vraies pannes (exclure visites cause=99 et contrôles cause=0) et trier par date
   const vraisPannes = useMemo(() => {
@@ -2265,8 +2301,18 @@ export function ParcAscenseursPage() {
     
     // Filtrer par secteurs autorisés si définis
     if (userSecteurs && userSecteurs.length > 0) {
-      filtered = filtered.filter((p: any) => userSecteurs.includes(p.secteur));
-      console.log(`Pannes après filtrage secteurs ${userSecteurs.join(',')}: ${filtered.length}`);
+      const avantFiltrage = filtered.length;
+      // Compter les pannes avec secteur défini
+      const avecSecteur = filtered.filter((p: any) => p.secteur !== undefined && p.secteur !== null);
+      console.log(`Pannes avec secteur défini: ${avecSecteur.length}/${filtered.length}`);
+      
+      // Si moins de 10% des pannes ont un secteur, ne pas filtrer (problème d'enrichissement)
+      if (avecSecteur.length < filtered.length * 0.1) {
+        console.warn('Enrichissement incomplet - filtrage secteur ignoré');
+      } else {
+        filtered = filtered.filter((p: any) => p.secteur && userSecteurs.includes(p.secteur));
+        console.log(`Pannes après filtrage secteurs ${userSecteurs.join(',')}: ${filtered.length}/${avantFiltrage}`);
+      }
     }
     
     // Trier par date décroissante (les plus récentes en premier)
