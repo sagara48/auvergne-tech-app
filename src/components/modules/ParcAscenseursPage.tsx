@@ -177,18 +177,36 @@ const getAscenseurs = async (secteur?: number, userSecteurs?: number[]) => {
 // Récupérer TOUS les ascenseurs pour l'enrichissement (sans filtre secteur)
 const getAllAscenseursForEnrichment = async () => {
   try {
-    const { data, error, count } = await supabase
-      .from('parc_ascenseurs')
-      .select('id_wsoucont, code_appareil, adresse, ville, secteur, marque, type_planning', { count: 'exact' })
-      .range(0, 9999); // Récupérer jusqu'à 10000 ascenseurs
+    // Supabase limite à 1000 par requête, on doit paginer
+    const allAscenseurs: any[] = [];
+    let from = 0;
+    const batchSize = 1000;
+    let hasMore = true;
     
-    if (error) {
-      console.warn('Erreur récupération ascenseurs pour enrichissement:', error.message);
-      return [];
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('parc_ascenseurs')
+        .select('id_wsoucont, code_appareil, adresse, ville, secteur, marque, type_planning')
+        .range(from, from + batchSize - 1);
+      
+      if (error) {
+        console.warn('Erreur récupération ascenseurs batch:', error.message);
+        break;
+      }
+      
+      if (data && data.length > 0) {
+        allAscenseurs.push(...data);
+        from += batchSize;
+        hasMore = data.length === batchSize; // Continuer si on a reçu un batch complet
+      } else {
+        hasMore = false;
+      }
     }
-    console.log(`Ascenseurs pour enrichissement: ${data?.length || 0} (total: ${count})`);
-    return data || [];
-  } catch {
+    
+    console.log(`Ascenseurs pour enrichissement: ${allAscenseurs.length} (chargés en ${Math.ceil(allAscenseurs.length / batchSize)} batches)`);
+    return allAscenseurs;
+  } catch (err) {
+    console.error('Erreur getAllAscenseursForEnrichment:', err);
     return [];
   }
 };
@@ -211,41 +229,55 @@ const getArrets = async () => {
 
 const getPannesRecentes = async () => {
   try {
-    // Récupérer les VRAIES pannes (exclure visites cause=99 et contrôles cause=0)
-    // Filtrage côté serveur pour avoir les pannes pertinentes
-    const { data: pannes, error, count } = await supabase
-      .from('parc_pannes')
-      .select('*', { count: 'exact' })
-      .not('data_wpanne->>CAUSE', 'eq', '99')  // Exclure visites
-      .not('data_wpanne->>CAUSE', 'eq', '0')   // Exclure contrôles
-      .not('data_wpanne->>CAUSE', 'eq', '00')  // Exclure contrôles (format 00)
-      .order('date_appel', { ascending: false, nullsFirst: false })
-      .range(0, 2999); // Récupérer jusqu'à 3000 vraies pannes
+    // Récupérer les VRAIES pannes avec pagination (Supabase limite à 1000 par requête)
+    const allPannes: any[] = [];
+    let from = 0;
+    const batchSize = 1000;
+    const maxPannes = 3000; // Limiter à 3000 pannes max
     
-    if (error) {
-      console.warn('Erreur parc_pannes avec filtre:', error.message);
-      // Fallback sans filtre si erreur
-      const { data: allPannes } = await supabase
+    while (allPannes.length < maxPannes) {
+      const { data: pannes, error } = await supabase
         .from('parc_pannes')
         .select('*')
+        .not('data_wpanne->>CAUSE', 'eq', '99')  // Exclure visites
+        .not('data_wpanne->>CAUSE', 'eq', '0')   // Exclure contrôles
+        .not('data_wpanne->>CAUSE', 'eq', '00')  // Exclure contrôles (format 00)
         .order('date_appel', { ascending: false, nullsFirst: false })
-        .range(0, 4999);
-      console.log(`Fallback: ${allPannes?.length || 0} pannes récupérées (sans filtre cause)`);
-      return allPannes || [];
+        .range(from, from + batchSize - 1);
+      
+      if (error) {
+        console.warn('Erreur parc_pannes avec filtre:', error.message);
+        // Fallback sans filtre si erreur
+        const { data: fallbackPannes } = await supabase
+          .from('parc_pannes')
+          .select('*')
+          .order('date_appel', { ascending: false, nullsFirst: false })
+          .range(0, 2999);
+        console.log(`Fallback: ${fallbackPannes?.length || 0} pannes récupérées (sans filtre cause)`);
+        return fallbackPannes || [];
+      }
+      
+      if (pannes && pannes.length > 0) {
+        allPannes.push(...pannes);
+        from += batchSize;
+        if (pannes.length < batchSize) break; // Plus de données
+      } else {
+        break;
+      }
     }
     
-    console.log(`Vraies pannes récupérées: ${pannes?.length || 0} (total vraies pannes: ${count})`);
+    console.log(`Vraies pannes récupérées: ${allPannes.length} (en ${Math.ceil(allPannes.length / batchSize)} batches)`);
     
     // Debug: afficher les dates des 5 premières pannes
-    if (pannes && pannes.length > 0) {
+    if (allPannes.length > 0) {
       console.log('5 premières vraies pannes (plus récentes):');
-      pannes.slice(0, 5).forEach((p: any, i: number) => {
+      allPannes.slice(0, 5).forEach((p: any, i: number) => {
         const data = p.data_wpanne || {};
         console.log(`  ${i+1}. date_appel=${p.date_appel}, data.DATE=${data.DATE}, cause=${data.CAUSE}, id_wsoucont=${p.id_wsoucont}`);
       });
     }
     
-    return pannes || [];
+    return allPannes;
   } catch (err) {
     console.error('Erreur getPannesRecentes:', err);
     return [];
