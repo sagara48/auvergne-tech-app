@@ -7,7 +7,7 @@ import {
   CheckCircle, XCircle, Settings, Eye, FileText, BarChart3, Play,
   Pause, RotateCcw, Database, Cloud, CloudOff, Loader2, History,
   Server, Wifi, WifiOff, Download, Upload, X, Route, FileDown,
-  Navigation, Compass, Brain
+  Navigation, Compass, Brain, Globe
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
@@ -22,6 +22,7 @@ import {
   type Location,
   type OptimizedRoute
 } from '@/services/routeOptimizer';
+import { geocodeAndUpdateAll, geocodeAscenseur, updateAscenseurCoordinates } from '@/services/geocodingService';
 import { format, formatDistanceToNow, parseISO, differenceInHours, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -483,6 +484,47 @@ function SyncModal({ onClose }: { onClose: () => void }) {
       refetchLogs();
       queryClient.invalidateQueries({ queryKey: ['parc-ascenseurs'] });
       queryClient.invalidateQueries({ queryKey: ['parc-arrets'] });
+    }
+  };
+
+  // Fonction de géocodage en masse
+  const runGeocoding = async () => {
+    setGeocodingProgress({
+      isRunning: true,
+      current: 0,
+      total: 0,
+      success: 0,
+      failed: 0
+    });
+    
+    try {
+      const result = await geocodeAndUpdateAll((current, total, lastResult) => {
+        setGeocodingProgress(prev => ({
+          ...prev,
+          current,
+          total,
+          success: prev.success + (lastResult.success ? 1 : 0),
+          failed: prev.failed + (lastResult.success ? 0 : 1),
+          lastCode: lastResult.code,
+          lastSuccess: lastResult.success
+        }));
+      });
+      
+      setGeocodingProgress(prev => ({
+        ...prev,
+        isRunning: false,
+        success: result.success,
+        failed: result.failed
+      }));
+      
+      // Rafraîchir les données
+      queryClient.invalidateQueries({ queryKey: ['parc-ascenseurs'] });
+      
+      toast.success(`Géocodage terminé: ${result.success} succès, ${result.failed} échecs`);
+    } catch (error) {
+      console.error('Erreur géocodage:', error);
+      setGeocodingProgress(prev => ({ ...prev, isRunning: false }));
+      toast.error('Erreur lors du géocodage');
     }
   };
 
@@ -2403,6 +2445,18 @@ export function ParcAscenseursPage() {
     ascenseurs: any[];
   } | null>(null);
   
+  // État pour le géocodage
+  const [showGeocodingModal, setShowGeocodingModal] = useState(false);
+  const [geocodingProgress, setGeocodingProgress] = useState<{
+    isRunning: boolean;
+    current: number;
+    total: number;
+    success: number;
+    failed: number;
+    lastCode?: string;
+    lastSuccess?: boolean;
+  }>({ isRunning: false, current: 0, total: 0, success: 0, failed: 0 });
+  
   // Récupérer les secteurs autorisés de l'utilisateur
   const { data: userSecteurs } = useQuery({
     queryKey: ['user-secteurs'],
@@ -2762,6 +2816,9 @@ export function ParcAscenseursPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setShowGeocodingModal(true)}>
+              <Globe className="w-4 h-4" /> GPS
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => setShowSyncModal(true)}>
               <Cloud className="w-4 h-4" /> Sync
             </Button>
@@ -4432,19 +4489,49 @@ export function ParcAscenseursPage() {
                   planningParMois[i] = [];
                 }
                 
+                // Compteurs pour équilibrer la répartition par fréquence
+                const offsetCounters: Record<number, number> = { 2: 0, 4: 0, 6: 0, 12: 0 };
+                
                 tourneePlanningModal.ascenseurs.forEach((asc: any) => {
                   const nbVisites = asc.nb_visites_an || 1;
                   const intervalMois = Math.floor(12 / nbVisites); // Intervalle entre chaque visite
                   
+                  // Calculer un décalage pour équilibrer la charge sur les mois
+                  // Le décalage est basé sur le compteur de la fréquence correspondante
+                  let offset = 0;
+                  if (nbVisites === 2) {
+                    // 2 visites/an : décaler sur 6 mois possibles (0-5)
+                    offset = offsetCounters[2] % 6;
+                    offsetCounters[2]++;
+                  } else if (nbVisites === 4) {
+                    // 4 visites/an : décaler sur 3 mois possibles (0-2)
+                    offset = offsetCounters[4] % 3;
+                    offsetCounters[4]++;
+                  } else if (nbVisites === 6) {
+                    // 6 visites/an : décaler sur 2 mois possibles (0-1)
+                    offset = offsetCounters[6] % 2;
+                    offsetCounters[6]++;
+                  }
+                  // Pour 12 visites/an ou 1 visite/an, pas de décalage nécessaire
+                  
                   // Distribuer les visites de manière équilibrée sur l'année
+                  const moisVisites: number[] = [];
                   for (let v = 0; v < nbVisites; v++) {
-                    const moisVisite = (v * intervalMois) % 12;
+                    const moisVisite = (offset + v * intervalMois) % 12;
+                    moisVisites.push(moisVisite);
                     planningParMois[moisVisite].push({
                       ...asc,
                       visitNum: v + 1,
-                      totalVisites: nbVisites
+                      totalVisites: nbVisites,
+                      moisVisites: [] // Sera rempli après
                     });
                   }
+                  
+                  // Mettre à jour les mois de visite pour cet ascenseur dans toutes ses entrées
+                  moisVisites.forEach(m => {
+                    const entry = planningParMois[m].find((e: any) => e.id === asc.id);
+                    if (entry) entry.moisVisites = moisVisites;
+                  });
                 });
                 
                 // Statistiques
@@ -4557,35 +4644,54 @@ export function ParcAscenseursPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {tourneePlanningModal.ascenseurs.map((asc: any) => {
-                                const nbVisites = asc.nb_visites_an || 1;
-                                const intervalMois = Math.floor(12 / nbVisites);
-                                const moisVisites = [];
-                                for (let v = 0; v < nbVisites; v++) {
-                                  moisVisites.push(mois[(v * intervalMois) % 12].substring(0, 3));
-                                }
+                              {(() => {
+                                // Recalculer les mois avec les mêmes décalages
+                                const offsetCounters2: Record<number, number> = { 2: 0, 4: 0, 6: 0, 12: 0 };
                                 
-                                return (
-                                  <tr key={asc.id} className="border-b border-[var(--border-primary)] hover:bg-[var(--bg-secondary)]">
-                                    <td className="p-2 font-medium">{asc.code_appareil}</td>
-                                    <td className="p-2 text-[var(--text-muted)]">{asc.adresse}, {asc.ville}</td>
-                                    <td className="p-2 text-center">
-                                      <Badge variant={nbVisites >= 12 ? 'purple' : nbVisites >= 6 ? 'blue' : nbVisites >= 4 ? 'green' : 'yellow'}>
-                                        {nbVisites}
-                                      </Badge>
-                                    </td>
-                                    <td className="p-2">
-                                      <div className="flex flex-wrap gap-1">
-                                        {moisVisites.map((m, i) => (
-                                          <span key={i} className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs">
-                                            {m}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                                return tourneePlanningModal.ascenseurs.map((asc: any) => {
+                                  const nbVisites = asc.nb_visites_an || 1;
+                                  const intervalMois = Math.floor(12 / nbVisites);
+                                  
+                                  let offset = 0;
+                                  if (nbVisites === 2) {
+                                    offset = offsetCounters2[2] % 6;
+                                    offsetCounters2[2]++;
+                                  } else if (nbVisites === 4) {
+                                    offset = offsetCounters2[4] % 3;
+                                    offsetCounters2[4]++;
+                                  } else if (nbVisites === 6) {
+                                    offset = offsetCounters2[6] % 2;
+                                    offsetCounters2[6]++;
+                                  }
+                                  
+                                  const moisVisitesIdx: number[] = [];
+                                  for (let v = 0; v < nbVisites; v++) {
+                                    moisVisitesIdx.push((offset + v * intervalMois) % 12);
+                                  }
+                                  const moisVisitesNoms = moisVisitesIdx.map(m => mois[m].substring(0, 3));
+                                  
+                                  return (
+                                    <tr key={asc.id} className="border-b border-[var(--border-primary)] hover:bg-[var(--bg-secondary)]">
+                                      <td className="p-2 font-medium">{asc.code_appareil}</td>
+                                      <td className="p-2 text-[var(--text-muted)]">{asc.adresse}, {asc.ville}</td>
+                                      <td className="p-2 text-center">
+                                        <Badge variant={nbVisites >= 12 ? 'purple' : nbVisites >= 6 ? 'blue' : nbVisites >= 4 ? 'green' : 'yellow'}>
+                                          {nbVisites}
+                                        </Badge>
+                                      </td>
+                                      <td className="p-2">
+                                        <div className="flex flex-wrap gap-1">
+                                          {moisVisitesNoms.map((m, i) => (
+                                            <span key={i} className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs">
+                                              {m}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                });
+                              })()}
                             </tbody>
                           </table>
                         </div>
@@ -4618,6 +4724,157 @@ export function ParcAscenseursPage() {
       {/* Modal synchronisation */}
       {showSyncModal && (
         <SyncModal onClose={() => setShowSyncModal(false)} />
+      )}
+      
+      {/* Modal géocodage GPS */}
+      {showGeocodingModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => !geocodingProgress.isRunning && setShowGeocodingModal(false)}>
+          <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-[var(--border-primary)] flex items-center justify-between">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Globe className="w-5 h-5 text-blue-400" />
+                Géocodage GPS
+              </h2>
+              {!geocodingProgress.isRunning && (
+                <button onClick={() => setShowGeocodingModal(false)} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+            
+            <div className="p-6">
+              {!geocodingProgress.isRunning && geocodingProgress.total === 0 ? (
+                <>
+                  {/* État initial */}
+                  <div className="text-center mb-6">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-500/20 flex items-center justify-center">
+                      <MapPin className="w-8 h-8 text-blue-400" />
+                    </div>
+                    <p className="text-[var(--text-secondary)] mb-2">
+                      Récupérer les coordonnées GPS de tous les ascenseurs sans localisation.
+                    </p>
+                    <p className="text-sm text-[var(--text-muted)]">
+                      Utilise l'API Adresse du gouvernement français (gratuite).
+                    </p>
+                  </div>
+                  
+                  {/* Stats actuelles */}
+                  {(() => {
+                    const sansGPS = (ascenseurs || []).filter((a: any) => !a.latitude || !a.longitude).length;
+                    const avecGPS = (ascenseurs || []).filter((a: any) => a.latitude && a.longitude).length;
+                    const total = (ascenseurs || []).length;
+                    
+                    return (
+                      <div className="grid grid-cols-3 gap-3 mb-6">
+                        <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg text-center">
+                          <p className="text-2xl font-bold text-blue-400">{total}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Total</p>
+                        </div>
+                        <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg text-center">
+                          <p className="text-2xl font-bold text-green-400">{avecGPS}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Avec GPS</p>
+                        </div>
+                        <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg text-center">
+                          <p className="text-2xl font-bold text-orange-400">{sansGPS}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Sans GPS</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    onClick={runGeocoding}
+                  >
+                    <Globe className="w-4 h-4 mr-2" />
+                    Lancer le géocodage
+                  </Button>
+                </>
+              ) : geocodingProgress.isRunning ? (
+                <>
+                  {/* En cours */}
+                  <div className="text-center mb-4">
+                    <Loader2 className="w-12 h-12 mx-auto mb-3 text-blue-400 animate-spin" />
+                    <p className="font-semibold">Géocodage en cours...</p>
+                    <p className="text-sm text-[var(--text-muted)]">
+                      {geocodingProgress.current} / {geocodingProgress.total}
+                    </p>
+                  </div>
+                  
+                  {/* Barre de progression */}
+                  <div className="mb-4">
+                    <div className="h-3 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-300"
+                        style={{ width: `${geocodingProgress.total > 0 ? (geocodingProgress.current / geocodingProgress.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Stats en temps réel */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="p-3 bg-green-500/10 rounded-lg text-center border border-green-500/20">
+                      <p className="text-2xl font-bold text-green-400">{geocodingProgress.success}</p>
+                      <p className="text-xs text-[var(--text-muted)]">Succès</p>
+                    </div>
+                    <div className="p-3 bg-red-500/10 rounded-lg text-center border border-red-500/20">
+                      <p className="text-2xl font-bold text-red-400">{geocodingProgress.failed}</p>
+                      <p className="text-xs text-[var(--text-muted)]">Échecs</p>
+                    </div>
+                  </div>
+                  
+                  {/* Dernier traité */}
+                  {geocodingProgress.lastCode && (
+                    <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${
+                      geocodingProgress.lastSuccess ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                    }`}>
+                      {geocodingProgress.lastSuccess ? (
+                        <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                      ) : (
+                        <XCircle className="w-4 h-4 flex-shrink-0" />
+                      )}
+                      <span className="truncate">{geocodingProgress.lastCode}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Terminé */}
+                  <div className="text-center mb-4">
+                    <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-green-500/20 flex items-center justify-center">
+                      <CheckCircle className="w-8 h-8 text-green-400" />
+                    </div>
+                    <p className="font-semibold text-lg">Géocodage terminé !</p>
+                  </div>
+                  
+                  {/* Résultats */}
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="p-4 bg-green-500/10 rounded-lg text-center border border-green-500/20">
+                      <p className="text-3xl font-bold text-green-400">{geocodingProgress.success}</p>
+                      <p className="text-sm text-[var(--text-muted)]">Ascenseurs géocodés</p>
+                    </div>
+                    <div className="p-4 bg-red-500/10 rounded-lg text-center border border-red-500/20">
+                      <p className="text-3xl font-bold text-red-400">{geocodingProgress.failed}</p>
+                      <p className="text-sm text-[var(--text-muted)]">Échecs</p>
+                    </div>
+                  </div>
+                  
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    onClick={() => {
+                      setShowGeocodingModal(false);
+                      setGeocodingProgress({ isRunning: false, current: 0, total: 0, success: 0, failed: 0 });
+                    }}
+                  >
+                    Fermer
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
