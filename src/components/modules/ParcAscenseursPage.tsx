@@ -3436,8 +3436,23 @@ export function ParcAscenseursPage() {
                     const nbSousContrat = ascenseursDuSecteur.filter((a: any) => a.type_planning).length;
                     const nbEnArret = ascenseursDuSecteur.filter((a: any) => a.en_arret).length;
                     
+                    // Grouper les ascenseurs par ordre2
+                    const ascenseursByOrdre2: Record<number, any[]> = {};
+                    ascenseursDuSecteur.forEach((asc: any) => {
+                      const ordre = asc.ordre2 || 0;
+                      if (!ascenseursByOrdre2[ordre]) {
+                        ascenseursByOrdre2[ordre] = [];
+                      }
+                      ascenseursByOrdre2[ordre].push(asc);
+                    });
+                    
+                    // Trier les ordres
+                    const ordresTriees = Object.keys(ascenseursByOrdre2)
+                      .map(Number)
+                      .sort((a, b) => a - b);
+                    
                     return (
-                      <Card key={secteur} className="overflow-hidden">
+                      <Card key={secteur} className="overflow-hidden mb-4">
                         <CardBody className="p-0">
                           <div className="p-4 bg-[var(--bg-tertiary)] flex items-center justify-between">
                             <h3 className="text-lg font-semibold flex items-center gap-3">
@@ -3449,6 +3464,9 @@ export function ParcAscenseursPage() {
                                 <div className="flex gap-2 mt-1">
                                   <Badge variant="blue" className="text-[10px]">
                                     {ascenseursDuSecteur.length} asc.
+                                  </Badge>
+                                  <Badge variant="purple" className="text-[10px]">
+                                    {ordresTriees.length} tournées
                                   </Badge>
                                   <Badge variant="green" className="text-[10px]">
                                     {nbSousContrat} contrat
@@ -3486,47 +3504,75 @@ export function ParcAscenseursPage() {
                             </div>
                           </div>
                           
-                          <div className="divide-y divide-[var(--border-primary)]">
-                            {ascenseursDuSecteur.map((asc: any, index: number) => (
-                              <div 
-                                key={asc.id}
-                                className="flex items-center gap-3 p-3 hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
-                                onClick={() => setSelectedAscenseur(asc)}
-                              >
-                                <div className="w-8 h-8 rounded-full bg-lime-500/20 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-lime-400 font-bold text-sm">{asc.ordre2}</span>
-                                </div>
-                                
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-semibold truncate">{asc.code_appareil}</p>
-                                    {asc.en_arret && (
-                                      <Badge variant="red" className="text-[10px] animate-pulse">Arrêt</Badge>
-                                    )}
-                                    {!asc.type_planning && (
-                                      <Badge variant="gray" className="text-[10px]">HC</Badge>
-                                    )}
+                          {/* Volets par ordre2 */}
+                          <div className="p-2 space-y-2">
+                            {ordresTriees.map(ordre => {
+                              const ascenseursOrdre = ascenseursByOrdre2[ordre];
+                              const nbArretOrdre = ascenseursOrdre.filter((a: any) => a.en_arret).length;
+                              
+                              return (
+                                <details 
+                                  key={ordre} 
+                                  className="bg-[var(--bg-secondary)] rounded-lg overflow-hidden group"
+                                  open={nbArretOrdre > 0} // Ouvrir par défaut si arrêt
+                                >
+                                  <summary className="p-3 cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded-full bg-lime-500/20 flex items-center justify-center flex-shrink-0">
+                                        <span className="text-lime-400 font-bold text-sm">{ordre}</span>
+                                      </div>
+                                      <div>
+                                        <p className="font-semibold">Tournée {ordre}</p>
+                                        <p className="text-xs text-[var(--text-muted)]">
+                                          {ascenseursOrdre.length} ascenseur{ascenseursOrdre.length > 1 ? 's' : ''}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {nbArretOrdre > 0 && (
+                                        <Badge variant="red" className="text-[10px] animate-pulse">
+                                          {nbArretOrdre} arrêt
+                                        </Badge>
+                                      )}
+                                      <ChevronDown className="w-4 h-4 text-[var(--text-muted)] transition-transform group-open:rotate-180" />
+                                    </div>
+                                  </summary>
+                                  
+                                  <div className="divide-y divide-[var(--border-primary)] border-t border-[var(--border-primary)]">
+                                    {ascenseursOrdre.map((asc: any) => (
+                                      <div 
+                                        key={asc.id}
+                                        className="flex items-center gap-3 p-3 hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors"
+                                        onClick={() => setSelectedAscenseur(asc)}
+                                      >
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2">
+                                            <p className="font-semibold truncate">{asc.code_appareil}</p>
+                                            {asc.en_arret && (
+                                              <Badge variant="red" className="text-[10px] animate-pulse">Arrêt</Badge>
+                                            )}
+                                            {!asc.type_planning && (
+                                              <Badge variant="gray" className="text-[10px]">HC</Badge>
+                                            )}
+                                          </div>
+                                          <p className="text-sm text-[var(--text-muted)] truncate">
+                                            {asc.adresse}, {asc.ville}
+                                          </p>
+                                        </div>
+                                        
+                                        <div className="text-right flex-shrink-0">
+                                          {asc.type_planning && (
+                                            <Badge variant="green" className="text-[10px]">
+                                              {asc.type_planning}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
-                                  <p className="text-sm text-[var(--text-muted)] truncate">
-                                    {asc.adresse}, {asc.ville}
-                                  </p>
-                                </div>
-                                
-                                <div className="text-right flex-shrink-0">
-                                  {asc.type_planning && (
-                                    <Badge variant="green" className="text-[10px]">
-                                      {asc.type_planning}
-                                    </Badge>
-                                  )}
-                                  {index < ascenseursDuSecteur.length - 1 && (
-                                    <p className="text-xs text-[var(--text-muted)] mt-1 flex items-center justify-end gap-1">
-                                      <Clock className="w-3 h-3" />
-                                      ~15 min
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
+                                </details>
+                              );
+                            })}
                           </div>
                         </CardBody>
                       </Card>
