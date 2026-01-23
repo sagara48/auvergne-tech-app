@@ -1293,6 +1293,7 @@ function AscenseurRow({ ascenseur, onClick }: { ascenseur: any; onClick: () => v
 // Modal Détail Ascenseur
 function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse'>('info');
+  const [selectedIntervention, setSelectedIntervention] = useState<any>(null);
   
   const { data: allPannes } = useQuery({
     queryKey: ['pannes-ascenseur', ascenseur.id_wsoucont],
@@ -1342,45 +1343,47 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     const sample = allPannes[0];
     console.log('=== DEBUG MODAL ASCENSEUR ===');
     console.log('Champs disponibles:', Object.keys(sample));
-    console.log('Sample complet:', { 
-      motif: sample.motif, 
-      cause: sample.data_wpanne?.CAUSE,
-      MOTIF_data: sample.data_wpanne?.MOTIF,
-      date: sample.data_wpanne?.DATE
+    
+    // Analyser toutes les causes et motifs
+    const causeCounts: Record<string, number> = {};
+    const motifCounts: Record<string, number> = {};
+    allPannes.forEach((p: any) => {
+      const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? 'vide');
+      const motif = String(p.motif ?? 'vide').substring(0, 30);
+      causeCounts[cause] = (causeCounts[cause] || 0) + 1;
+      motifCounts[motif] = (motifCounts[motif] || 0) + 1;
     });
+    console.log('Répartition causes:', causeCounts);
+    console.log('Répartition motifs (30 premiers chars):', motifCounts);
   }
   
-  // Séparer par type
+  // Séparer par type basé sur la CAUSE uniquement
   // Visites = cause 99
   const visites = sortByDateDesc(allPannes?.filter((p: any) => {
     const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
     return cause === '99';
   }) || []);
   
-  // Contrôles = motif contient "CONTROLE" (vérifier le champ exact)
+  // Contrôles = cause 0 ou 00 OU motif contient exactement "CONTROLE" au début
   const controles = sortByDateDesc(allPannes?.filter((p: any) => {
-    // Chercher "CONTROLE" dans tous les champs possibles
-    const motif = String(p.motif ?? p.data_wpanne?.MOTIF ?? '').toUpperCase();
-    return motif.includes('CONTROLE');
+    const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
+    const motif = String(p.motif ?? '').toUpperCase().trim();
+    const isControleParCause = cause === '0' || cause === '00';
+    const isControleParMotif = motif.startsWith('CONTROLE');
+    return isControleParCause || isControleParMotif;
   }) || []);
   
   // Pannes = tout ce qui n'est ni visite ni contrôle
   const pannes = sortByDateDesc(allPannes?.filter((p: any) => {
     const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
-    const motif = String(p.motif ?? p.data_wpanne?.MOTIF ?? '').toUpperCase();
+    const motif = String(p.motif ?? '').toUpperCase().trim();
     const isVisite = cause === '99';
-    const isControle = motif.includes('CONTROLE');
+    const isControle = cause === '0' || cause === '00' || motif.startsWith('CONTROLE');
     return !isVisite && !isControle;
   }) || []);
   
   // Debug final
-  if (allPannes && allPannes.length > 0) {
-    console.log(`Modal: ${allPannes.length} total → ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
-    
-    // Montrer quelques exemples de motifs pour debug
-    const motifExamples = allPannes.slice(0, 5).map((p: any) => p.motif ?? p.data_wpanne?.MOTIF ?? 'VIDE');
-    console.log('Exemples motifs:', motifExamples);
-  }
+  console.log(`Modal: ${allPannes?.length || 0} total → ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
   
   // Fonction pour formater une date YYYYMMDD
   const formatDateYYYYMMDD = (dateStr: string | null) => {
@@ -1998,7 +2001,11 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                                                   event.color === 'purple' ? 'border-purple-500/30' : 'border-orange-500/30';
                               
                               return (
-                                <div key={idx} className={`flex items-start gap-3 p-3 bg-[var(--bg-tertiary)] rounded-lg border ${borderClass}`}>
+                                <div 
+                                  key={idx} 
+                                  className={`flex items-start gap-3 p-3 bg-[var(--bg-tertiary)] rounded-lg border ${borderClass} cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors`}
+                                  onClick={() => setSelectedIntervention(event)}
+                                >
                                   <div className={`w-8 h-8 rounded-full ${colorClass}/20 flex items-center justify-center flex-shrink-0`}>
                                     <Icon className={`w-4 h-4 text-${event.color}-400`} />
                                   </div>
@@ -2022,6 +2029,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                                         <User className="w-3 h-3 inline mr-1" />{data.DEPANNEUR}
                                       </p>
                                     )}
+                                    <p className="text-xs text-blue-400 mt-1">Cliquer pour voir le détail →</p>
                                   </div>
                                 </div>
                               );
@@ -2032,6 +2040,136 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                     </div>
                   );
                 })()}
+                
+                {/* Panel de détail de l'intervention sélectionnée */}
+                {selectedIntervention && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setSelectedIntervention(null)}>
+                    <div className="bg-[var(--bg-secondary)] rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                      <div className="p-4 bg-[var(--bg-tertiary)] flex items-center justify-between">
+                        <h3 className="font-semibold flex items-center gap-2">
+                          {selectedIntervention.type === 'visite' && <Calendar className="w-5 h-5 text-blue-400" />}
+                          {selectedIntervention.type === 'controle' && <Eye className="w-5 h-5 text-purple-400" />}
+                          {selectedIntervention.type === 'panne' && <AlertTriangle className="w-5 h-5 text-orange-400" />}
+                          {selectedIntervention.type === 'visite' ? 'Visite d\'entretien' : 
+                           selectedIntervention.type === 'controle' ? 'Contrôle technique' : 'Panne'}
+                          {selectedIntervention.date && (
+                            <span className="text-sm text-[var(--text-muted)] ml-2">
+                              {format(selectedIntervention.date, 'dd MMMM yyyy', { locale: fr })}
+                            </span>
+                          )}
+                        </h3>
+                        <button onClick={() => setSelectedIntervention(null)} className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg">
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <div className="p-4 overflow-y-auto max-h-[60vh]">
+                        {(() => {
+                          const data = selectedIntervention.data?.data_wpanne || selectedIntervention.data || {};
+                          const rawData = selectedIntervention.data || {};
+                          
+                          return (
+                            <div className="space-y-4">
+                              {/* Informations principales */}
+                              <div className="grid grid-cols-2 gap-4">
+                                {data.DATE && (
+                                  <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                    <p className="text-xs text-[var(--text-muted)]">Date</p>
+                                    <p className="font-medium">{String(data.DATE).replace(/(\d{4})(\d{2})(\d{2})/, '$3/$2/$1')}</p>
+                                  </div>
+                                )}
+                                {(data.HEURE || data.HEURE_DEBUT) && (
+                                  <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                    <p className="text-xs text-[var(--text-muted)]">Heure</p>
+                                    <p className="font-medium">{String(data.HEURE || data.HEURE_DEBUT).padStart(4, '0').replace(/(\d{2})(\d{2})/, '$1h$2')}</p>
+                                  </div>
+                                )}
+                                {data.DEPANNEUR && (
+                                  <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                    <p className="text-xs text-[var(--text-muted)]">Technicien</p>
+                                    <p className="font-medium">{data.DEPANNEUR}</p>
+                                  </div>
+                                )}
+                                {data.CAUSE && (
+                                  <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                    <p className="text-xs text-[var(--text-muted)]">Cause</p>
+                                    <p className="font-medium">{data.CAUSE}</p>
+                                  </div>
+                                )}
+                                {rawData.motif && (
+                                  <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg col-span-2">
+                                    <p className="text-xs text-[var(--text-muted)]">Motif</p>
+                                    <p className="font-medium">{rawData.motif}</p>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Libellé / Description */}
+                              {data.Libelle && (
+                                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                  <p className="text-xs text-[var(--text-muted)] mb-1">Description</p>
+                                  <p className="text-sm whitespace-pre-wrap">{decodeHtml(data.Libelle)}</p>
+                                </div>
+                              )}
+                              
+                              {/* Ensemble / Organe */}
+                              {(data.ENSEMBLE || data.ORGANE) && (
+                                <div className="grid grid-cols-2 gap-4">
+                                  {data.ENSEMBLE && (
+                                    <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                      <p className="text-xs text-[var(--text-muted)]">Ensemble</p>
+                                      <p className="font-medium">{data.ENSEMBLE}</p>
+                                    </div>
+                                  )}
+                                  {data.ORGANE && (
+                                    <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                      <p className="text-xs text-[var(--text-muted)]">Organe</p>
+                                      <p className="font-medium">{data.ORGANE}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {/* Actions / Travaux */}
+                              {(data.TRAVAUX || data.ACTION) && (
+                                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                  <p className="text-xs text-[var(--text-muted)] mb-1">Travaux effectués</p>
+                                  <p className="text-sm whitespace-pre-wrap">{decodeHtml(data.TRAVAUX || data.ACTION)}</p>
+                                </div>
+                              )}
+                              
+                              {/* Observations */}
+                              {data.OBSERVATIONS && (
+                                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                  <p className="text-xs text-[var(--text-muted)] mb-1">Observations</p>
+                                  <p className="text-sm whitespace-pre-wrap">{decodeHtml(data.OBSERVATIONS)}</p>
+                                </div>
+                              )}
+                              
+                              {/* Durée */}
+                              {(data.DUREE || (data.HEURE_DEBUT && data.HEURE_FIN)) && (
+                                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                  <p className="text-xs text-[var(--text-muted)]">Durée</p>
+                                  <p className="font-medium">
+                                    {data.DUREE ? `${data.DUREE} min` : 
+                                      `${String(data.HEURE_DEBUT).padStart(4,'0').replace(/(\d{2})(\d{2})/,'$1h$2')} - ${String(data.HEURE_FIN).padStart(4,'0').replace(/(\d{2})(\d{2})/,'$1h$2')}`}
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {/* Données brutes (debug) */}
+                              <details className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                                <summary className="text-xs text-[var(--text-muted)] cursor-pointer">Voir toutes les données</summary>
+                                <pre className="text-xs mt-2 overflow-auto max-h-40 text-[var(--text-muted)]">
+                                  {JSON.stringify(data, null, 2)}
+                                </pre>
+                              </details>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
@@ -2418,22 +2556,22 @@ export function ParcAscenseursPage() {
       return null;
     };
     
-    // Debug: afficher des exemples de motifs
+    // Debug: afficher des exemples de causes et motifs
     if (enrichedPannes.length > 0) {
-      const motifExamples = enrichedPannes.slice(0, 5).map((p: any) => ({
-        motif: p.motif,
-        motif_data: p.data_wpanne?.MOTIF,
-        cause: p.data_wpanne?.CAUSE
-      }));
-      console.log('Exemples pannes enrichies:', motifExamples);
+      const causeCounts: Record<string, number> = {};
+      enrichedPannes.slice(0, 100).forEach((p: any) => {
+        const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? 'vide');
+        causeCounts[cause] = (causeCounts[cause] || 0) + 1;
+      });
+      console.log('Répartition causes (100 premiers):', causeCounts);
     }
     
-    // Exclure visites (cause 99) et contrôles (motif contient CONTROLE)
+    // Exclure visites (cause 99) et contrôles (cause 0/00 ou motif commence par CONTROLE)
     let filtered = enrichedPannes.filter((p: any) => {
       const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
-      const motif = String(p.motif ?? p.data_wpanne?.MOTIF ?? '').toUpperCase();
+      const motif = String(p.motif ?? '').toUpperCase().trim();
       const isVisite = cause === '99';
-      const isControle = motif.includes('CONTROLE');
+      const isControle = cause === '0' || cause === '00' || motif.startsWith('CONTROLE');
       return !isVisite && !isControle;
     });
     
