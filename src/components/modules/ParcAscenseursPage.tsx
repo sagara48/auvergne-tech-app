@@ -3591,7 +3591,6 @@ export function ParcAscenseursPage() {
                                               {asc.nb_visites_an} vis/an
                                             </Badge>
                                           )}
-                                          )}
                                         </div>
                                       </div>
                                     ))}
