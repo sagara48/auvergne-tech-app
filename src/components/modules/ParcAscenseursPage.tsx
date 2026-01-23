@@ -250,31 +250,24 @@ const getArrets = async () => {
 const getPannesRecentes = async () => {
   try {
     // Récupérer les pannes avec pagination (Supabase limite à 1000 par requête)
-    // On exclut seulement les visites (cause 99) côté serveur
-    // Les contrôles (motif contient CONTROLE) sont filtrés côté client
+    // On exclut les visites (cause 99) côté serveur
+    // Le filtrage par secteurs se fait côté client après enrichissement
     const allPannes: any[] = [];
     let from = 0;
     const batchSize = 1000;
-    const maxPannes = 5000; // Augmenté pour avoir plus de pannes
+    const maxPannes = 10000; // Récupérer jusqu'à 10000 pannes
     
     while (allPannes.length < maxPannes) {
       const { data: pannes, error } = await supabase
         .from('parc_pannes')
         .select('*')
-        .not('data_wpanne->>CAUSE', 'eq', '99')  // Exclure visites seulement
+        .not('data_wpanne->>CAUSE', 'eq', '99')  // Exclure visites
         .order('date_appel', { ascending: false, nullsFirst: false })
         .range(from, from + batchSize - 1);
       
       if (error) {
-        console.warn('Erreur parc_pannes avec filtre:', error.message);
-        // Fallback sans filtre si erreur
-        const { data: fallbackPannes } = await supabase
-          .from('parc_pannes')
-          .select('*')
-          .order('date_appel', { ascending: false, nullsFirst: false })
-          .range(0, 4999);
-        console.log(`Fallback: ${fallbackPannes?.length || 0} pannes récupérées (sans filtre)`);
-        return fallbackPannes || [];
+        console.warn('Erreur parc_pannes:', error.message);
+        break;
       }
       
       if (pannes && pannes.length > 0) {
@@ -286,14 +279,14 @@ const getPannesRecentes = async () => {
       }
     }
     
-    console.log(`Pannes récupérées (hors visites): ${allPannes.length} (en ${Math.ceil(from / batchSize)} batches)`);
+    console.log(`Pannes récupérées: ${allPannes.length} (en ${Math.ceil(from / batchSize)} batches, max ${maxPannes})`);
     
     // Debug: afficher les dates des 5 premières pannes
     if (allPannes.length > 0) {
       console.log('5 premières pannes (plus récentes):');
       allPannes.slice(0, 5).forEach((p: any, i: number) => {
         const data = p.data_wpanne || {};
-        console.log(`  ${i+1}. date=${p.date_appel}, cause=${data.CAUSE}, motif=${data.MOTIF?.substring(0, 30)}...`);
+        console.log(`  ${i+1}. date=${p.date_appel}, cause=${data.CAUSE}, motif=${String(p.motif || '').substring(0, 30)}...`);
       });
     }
     
@@ -2429,10 +2422,10 @@ export function ParcAscenseursPage() {
     refetchInterval: 60000 // Refresh toutes les minutes
   });
   
-  // Pannes récentes (le filtrage par secteurs se fait côté client dans vraisPannes)
+  // Pannes récentes (le filtrage par secteurs se fait côté client après enrichissement)
   const { data: pannesRecentes } = useQuery({
     queryKey: ['parc-pannes-recentes'],
-    queryFn: () => getPannesRecentes()
+    queryFn: getPannesRecentes
   });
   
   // TOUS les ascenseurs pour l'enrichissement des pannes (sans filtre secteur)
@@ -2556,45 +2549,37 @@ export function ParcAscenseursPage() {
     // Debug: afficher des exemples de causes et motifs
     if (enrichedPannes.length > 0) {
       const causeCounts: Record<string, number> = {};
-      enrichedPannes.slice(0, 100).forEach((p: any) => {
+      const motifSample: string[] = [];
+      enrichedPannes.slice(0, 50).forEach((p: any) => {
         const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? 'vide');
         causeCounts[cause] = (causeCounts[cause] || 0) + 1;
+        if (motifSample.length < 3 && p.motif) motifSample.push(String(p.motif).substring(0, 30));
       });
-      console.log('Répartition causes (100 premiers):', causeCounts);
+      console.log('Répartition causes:', causeCounts);
+      if (motifSample.length > 0) console.log('Exemples motifs:', motifSample);
     }
     
     // Exclure visites (cause 99) et contrôles (motif commence par CONTROLE)
-    // NOTE: cause=0 est la valeur par défaut pour les vraies pannes, ne pas l'exclure
     let filtered = enrichedPannes.filter((p: any) => {
       const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
       const motif = String(p.motif ?? '').toUpperCase().trim();
       const isVisite = cause === '99';
-      const isControle = motif.startsWith('CONTROLE'); // Seulement par motif, pas par cause
+      const isControle = motif.startsWith('CONTROLE');
       return !isVisite && !isControle;
     });
     
-    console.log(`Filtrage pannes: ${enrichedPannes.length} total → ${filtered.length} après exclusion visites/contrôles`);
+    console.log(`Filtrage: ${enrichedPannes.length} → ${filtered.length} après exclusion visites/contrôles`);
     
     // Filtrer par secteurs autorisés si définis
     if (userSecteurs && userSecteurs.length > 0) {
-      // Compter les pannes avec secteur défini
       const avecSecteur = filtered.filter((p: any) => p.secteur !== undefined && p.secteur !== null);
-      console.log(`Pannes avec secteur défini: ${avecSecteur.length}/${filtered.length}`);
       
-      // Debug: afficher les secteurs présents
-      const secteursCounts: Record<number, number> = {};
-      avecSecteur.forEach((p: any) => {
-        secteursCounts[p.secteur] = (secteursCounts[p.secteur] || 0) + 1;
-      });
-      console.log('Secteurs présents dans les pannes:', secteursCounts);
-      
-      // Si moins de 10% des pannes ont un secteur, ne pas filtrer (problème d'enrichissement)
       if (avecSecteur.length < filtered.length * 0.1) {
         console.warn('Enrichissement incomplet - filtrage secteur ignoré');
       } else {
         const avantFiltrage = filtered.length;
         filtered = filtered.filter((p: any) => p.secteur && userSecteurs.includes(p.secteur));
-        console.log(`Pannes après filtrage secteurs ${userSecteurs.join(',')}: ${filtered.length}/${avantFiltrage}`);
+        console.log(`Filtrage secteurs ${userSecteurs.join(',')}: ${avantFiltrage} → ${filtered.length}`);
       }
     }
     
@@ -2607,21 +2592,11 @@ export function ParcAscenseursPage() {
       return timeB - timeA; // Décroissant
     });
     
-    console.log(`vraisPannes: ${enrichedPannes.length} total → ${filtered.length} après filtrage → ${sorted.length} triées`);
     if (sorted.length > 0) {
-      const first = sorted[0];
-      const last = sorted[sorted.length - 1];
-      const firstDate = getDateFromPanne(first);
-      const lastDate = getDateFromPanne(last);
-      console.log(`Plus récente: ${firstDate?.toISOString().split('T')[0]} (${first.code_appareil})`);
-      console.log(`Plus ancienne: ${lastDate?.toISOString().split('T')[0]} (${last.code_appareil})`);
-      
-      // Afficher les 5 premières pannes pour debug
-      console.log('Top 5 pannes les plus récentes:');
-      sorted.slice(0, 5).forEach((p: any, i: number) => {
-        const d = getDateFromPanne(p);
-        console.log(`  ${i+1}. ${d?.toISOString().split('T')[0]} - ${p.code_appareil} (secteur ${p.secteur})`);
-      });
+      const firstDate = getDateFromPanne(sorted[0]);
+      console.log(`vraisPannes: ${sorted.length} pannes (plus récente: ${firstDate?.toISOString().split('T')[0]})`);
+    } else {
+      console.log('vraisPannes: 0 pannes après filtrage');
     }
     
     return sorted;
