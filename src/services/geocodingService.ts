@@ -83,19 +83,16 @@ export async function geocodeAddress(
 /**
  * Géocode un ascenseur (adresse + ville + code postal)
  */
-export async function geocodeAscenseur(ascenseur: {
-  id: number;
-  adresse?: string;
-  ville?: string;
-  code_postal?: string;
-  nom_etablissement?: string;
-}): Promise<GeocodingResult | null> {
+export async function geocodeAscenseur(ascenseur: any): Promise<GeocodingResult | null> {
   // Construire l'adresse complète
   let address = ascenseur.adresse || '';
   
+  // Essayer différents noms de colonnes pour le nom de l'établissement
+  const nomEtablissement = ascenseur.nom_etablissement || ascenseur.nom_batiment || ascenseur.nom || '';
+  
   // Si on a un nom d'établissement, l'ajouter pour plus de précision
-  if (ascenseur.nom_etablissement && !address.includes(ascenseur.nom_etablissement)) {
-    address = `${ascenseur.nom_etablissement}, ${address}`;
+  if (nomEtablissement && !address.includes(nomEtablissement)) {
+    address = `${nomEtablissement}, ${address}`;
   }
   
   return geocodeAddress(address, ascenseur.ville, ascenseur.code_postal);
@@ -106,14 +103,7 @@ export async function geocodeAscenseur(ascenseur: {
  * Respecte la limite de l'API (environ 50 requêtes/seconde)
  */
 export async function geocodeBatch(
-  ascenseurs: Array<{
-    id: number;
-    code_appareil: string;
-    adresse?: string;
-    ville?: string;
-    code_postal?: string;
-    nom_etablissement?: string;
-  }>,
+  ascenseurs: any[],
   onProgress?: (current: number, total: number, lastResult: { code: string; success: boolean }) => void
 ): Promise<{
   success: number;
@@ -225,18 +215,18 @@ export async function geocodeAndUpdateAll(
   skipped: number;
 }> {
   // Récupérer tous les ascenseurs sans coordonnées
+  // On utilise select('*') pour éviter les erreurs de colonnes inexistantes
   const { data: ascenseurs, error } = await supabase
     .from('parc_ascenseurs')
-    .select('id, code_appareil, adresse, ville, code_postal, nom_etablissement, latitude, longitude')
-    .or('latitude.is.null,longitude.is.null');
+    .select('*');
   
   if (error || !ascenseurs) {
     console.error('Erreur récupération ascenseurs:', error);
     return { total: 0, success: 0, failed: 0, skipped: 0 };
   }
   
-  // Filtrer ceux qui ont déjà des coordonnées
-  const toGeocode = ascenseurs.filter(a => !a.latitude || !a.longitude);
+  // Filtrer ceux qui n'ont pas de coordonnées
+  const toGeocode = ascenseurs.filter((a: any) => !a.latitude || !a.longitude);
   const skipped = ascenseurs.length - toGeocode.length;
   
   console.log(`Géocodage de ${toGeocode.length} ascenseurs (${skipped} déjà géocodés)`);

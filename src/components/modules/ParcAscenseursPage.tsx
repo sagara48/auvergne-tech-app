@@ -22,7 +22,7 @@ import {
   type Location,
   type OptimizedRoute
 } from '@/services/routeOptimizer';
-import { geocodeAndUpdateAll, geocodeAscenseur, updateAscenseurCoordinates } from '@/services/geocodingService';
+import { geocodeAndUpdateAll } from '@/services/geocodingService';
 import { format, formatDistanceToNow, parseISO, differenceInHours, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -2429,24 +2429,37 @@ export function ParcAscenseursPage() {
     });
     
     try {
+      let successCount = 0;
+      let failedCount = 0;
+      
       const result = await geocodeAndUpdateAll((current, total, lastResult) => {
-        setGeocodingProgress(prev => ({
-          ...prev,
+        // Compter les succès et échecs
+        if (lastResult.success) {
+          successCount++;
+        } else {
+          failedCount++;
+        }
+        
+        setGeocodingProgress({
+          isRunning: true,
           current,
           total,
-          success: prev.success + (lastResult.success ? 1 : 0),
-          failed: prev.failed + (lastResult.success ? 0 : 1),
+          success: successCount,
+          failed: failedCount,
           lastCode: lastResult.code,
           lastSuccess: lastResult.success
-        }));
+        });
       });
       
-      setGeocodingProgress(prev => ({
-        ...prev,
+      setGeocodingProgress({
         isRunning: false,
+        current: result.total,
+        total: result.total,
         success: result.success,
-        failed: result.failed
-      }));
+        failed: result.failed,
+        lastCode: undefined,
+        lastSuccess: undefined
+      });
       
       // Rafraîchir les données
       queryClient.invalidateQueries({ queryKey: ['parc-ascenseurs'] });
