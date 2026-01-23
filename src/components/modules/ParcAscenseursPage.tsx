@@ -2150,12 +2150,77 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                                 </div>
                               )}
                               
-                              {/* Données brutes (debug) */}
+                              {/* Toutes les données structurées */}
                               <details className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                                <summary className="text-xs text-[var(--text-muted)] cursor-pointer">Voir toutes les données</summary>
-                                <pre className="text-xs mt-2 overflow-auto max-h-40 text-[var(--text-muted)]">
-                                  {JSON.stringify(data, null, 2)}
-                                </pre>
+                                <summary className="text-xs text-[var(--text-muted)] cursor-pointer hover:text-[var(--text-primary)] transition-colors">
+                                  Voir toutes les données
+                                </summary>
+                                <div className="mt-3 space-y-3">
+                                  {/* Données de la table parc_pannes */}
+                                  {rawData && Object.keys(rawData).length > 0 && (
+                                    <div>
+                                      <p className="text-xs font-semibold text-blue-400 mb-2 flex items-center gap-1">
+                                        <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                                        Données parc_pannes
+                                      </p>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {Object.entries(rawData)
+                                          .filter(([key]) => key !== 'data_wpanne' && key !== 'id')
+                                          .map(([key, value]) => (
+                                            <div key={key} className="p-2 bg-[var(--bg-secondary)] rounded text-xs">
+                                              <span className="text-[var(--text-muted)] block">{key}</span>
+                                              <span className="font-medium break-words">
+                                                {value === null ? <span className="italic text-gray-500">null</span> : 
+                                                 value === '' ? <span className="italic text-gray-500">vide</span> :
+                                                 typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                              </span>
+                                            </div>
+                                          ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Données data_wpanne (de Progilift) */}
+                                  {data && Object.keys(data).length > 0 && (
+                                    <div>
+                                      <p className="text-xs font-semibold text-orange-400 mb-2 flex items-center gap-1">
+                                        <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                                        Données Progilift (data_wpanne)
+                                      </p>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {Object.entries(data)
+                                          .sort(([a], [b]) => a.localeCompare(b))
+                                          .map(([key, value]) => {
+                                            // Formater les valeurs connues
+                                            let displayValue: any = value;
+                                            if (key === 'DATE' && value) {
+                                              const ds = String(value);
+                                              if (ds.length === 8) {
+                                                displayValue = `${ds.substring(6,8)}/${ds.substring(4,6)}/${ds.substring(0,4)}`;
+                                              }
+                                            } else if ((key.includes('HEURE') || key === 'APPEL' || key === 'INTER' || key === 'HRFININTER') && value) {
+                                              const h = String(value).padStart(4, '0');
+                                              displayValue = `${h.substring(0,2)}h${h.substring(2,4)}`;
+                                            }
+                                            
+                                            return (
+                                              <div key={key} className={`p-2 bg-[var(--bg-secondary)] rounded text-xs ${
+                                                key === 'Libelle' || key === 'NOTE2' || key === 'TRAVAUX' ? 'col-span-2' : ''
+                                              }`}>
+                                                <span className="text-[var(--text-muted)] block">{key}</span>
+                                                <span className="font-medium break-words whitespace-pre-wrap">
+                                                  {value === null ? <span className="italic text-gray-500">null</span> : 
+                                                   value === '' ? <span className="italic text-gray-500">vide</span> :
+                                                   typeof value === 'object' ? JSON.stringify(value) : 
+                                                   String(displayValue).replace(/&#13;/g, '\n')}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               </details>
                             </div>
                           );
