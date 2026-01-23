@@ -1357,20 +1357,17 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     console.log('Répartition motifs (30 premiers chars):', motifCounts);
   }
   
-  // Séparer par type basé sur la CAUSE uniquement
+  // Séparer par type basé sur la CAUSE et MOTIF
   // Visites = cause 99
   const visites = sortByDateDesc(allPannes?.filter((p: any) => {
     const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
     return cause === '99';
   }) || []);
   
-  // Contrôles = cause 0 ou 00 OU motif contient exactement "CONTROLE" au début
+  // Contrôles = motif commence par "CONTROLE" (cause=0 est la valeur par défaut, pas un contrôle)
   const controles = sortByDateDesc(allPannes?.filter((p: any) => {
-    const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
     const motif = String(p.motif ?? '').toUpperCase().trim();
-    const isControleParCause = cause === '0' || cause === '00';
-    const isControleParMotif = motif.startsWith('CONTROLE');
-    return isControleParCause || isControleParMotif;
+    return motif.startsWith('CONTROLE');
   }) || []);
   
   // Pannes = tout ce qui n'est ni visite ni contrôle
@@ -1378,7 +1375,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
     const motif = String(p.motif ?? '').toUpperCase().trim();
     const isVisite = cause === '99';
-    const isControle = cause === '0' || cause === '00' || motif.startsWith('CONTROLE');
+    const isControle = motif.startsWith('CONTROLE');
     return !isVisite && !isControle;
   }) || []);
   
@@ -2566,12 +2563,13 @@ export function ParcAscenseursPage() {
       console.log('Répartition causes (100 premiers):', causeCounts);
     }
     
-    // Exclure visites (cause 99) et contrôles (cause 0/00 ou motif commence par CONTROLE)
+    // Exclure visites (cause 99) et contrôles (motif commence par CONTROLE)
+    // NOTE: cause=0 est la valeur par défaut pour les vraies pannes, ne pas l'exclure
     let filtered = enrichedPannes.filter((p: any) => {
       const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
       const motif = String(p.motif ?? '').toUpperCase().trim();
       const isVisite = cause === '99';
-      const isControle = cause === '0' || cause === '00' || motif.startsWith('CONTROLE');
+      const isControle = motif.startsWith('CONTROLE'); // Seulement par motif, pas par cause
       return !isVisite && !isControle;
     });
     
