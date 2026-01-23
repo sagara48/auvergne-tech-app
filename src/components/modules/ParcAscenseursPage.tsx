@@ -940,26 +940,28 @@ function ArretsWidget({ count, onClick }: { count: number; onClick?: () => void 
 function PanneDetailModal({ panne, onClose }: { panne: any; onClose: () => void }) {
   const data = panne.data_wpanne || {};
   
-  // Fonction pour formater une date YYYYMMDD
-  const formatDateYYYYMMDD = (dateStr: string | null) => {
-    if (!dateStr) return null;
+  // Fonction pour formater une date YYYYMMDD (peut être string ou number)
+  const formatDateYYYYMMDD = (dateVal: string | number | null) => {
+    if (!dateVal) return null;
+    const dateStr = String(dateVal);
+    if (dateStr.length !== 8) return null;
     const year = parseInt(dateStr.substring(0, 4));
     const month = parseInt(dateStr.substring(4, 6)) - 1;
     const day = parseInt(dateStr.substring(6, 8));
     return new Date(year, month, day);
   };
   
-  // Fonction pour formater une heure HHMM
-  const formatHeureHHMM = (heureStr: string | null) => {
-    if (!heureStr) return null;
-    const h = heureStr.toString().padStart(4, '0');
+  // Fonction pour formater une heure HHMM (peut être string ou number)
+  const formatHeureHHMM = (heureVal: string | number | null) => {
+    if (!heureVal && heureVal !== 0) return null;
+    const h = String(heureVal).padStart(4, '0');
     return `${h.substring(0, 2)}h${h.substring(2, 4)}`;
   };
   
   // Fonction pour décoder les entités HTML
   const decodeHtml = (text: string | null) => {
     if (!text) return null;
-    return text
+    return String(text)
       .replace(/&#13;/g, '\n')
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
@@ -969,10 +971,10 @@ function PanneDetailModal({ panne, onClose }: { panne: any; onClose: () => void 
   };
   
   // Calculer la durée d'intervention
-  const calcDuree = (debut: string | null, fin: string | null) => {
+  const calcDuree = (debut: string | number | null, fin: string | number | null) => {
     if (!debut || !fin) return null;
-    const d = debut.toString().padStart(4, '0');
-    const f = fin.toString().padStart(4, '0');
+    const d = String(debut).padStart(4, '0');
+    const f = String(fin).padStart(4, '0');
     const debutMin = parseInt(d.substring(0, 2)) * 60 + parseInt(d.substring(2, 4));
     const finMin = parseInt(f.substring(0, 2)) * 60 + parseInt(f.substring(2, 4));
     const duree = finMin - debutMin;
@@ -1375,9 +1377,11 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
   // Debug final
   console.log(`Modal: ${allPannes?.length || 0} total → ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
   
-  // Fonction pour formater une date YYYYMMDD
-  const formatDateYYYYMMDD = (dateStr: string | null) => {
-    if (!dateStr || dateStr.length !== 8) return null;
+  // Fonction pour formater une date YYYYMMDD (peut être string ou number)
+  const formatDateYYYYMMDD = (dateVal: string | number | null) => {
+    if (!dateVal) return null;
+    const dateStr = String(dateVal);
+    if (dateStr.length !== 8) return null;
     try {
       const year = dateStr.substring(0, 4);
       const month = dateStr.substring(4, 6);
@@ -1388,17 +1392,17 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     }
   };
   
-  // Fonction pour formater une heure HHMM ou HMM
-  const formatHeureHHMM = (heureStr: string | null) => {
-    if (!heureStr) return null;
-    const h = heureStr.padStart(4, '0');
+  // Fonction pour formater une heure HHMM ou HMM (peut être string ou number)
+  const formatHeureHHMM = (heureVal: string | number | null) => {
+    if (!heureVal && heureVal !== 0) return null;
+    const h = String(heureVal).padStart(4, '0');
     return `${h.substring(0, 2)}h${h.substring(2, 4)}`;
   };
   
   // Fonction pour décoder les entités HTML
-  const decodeHtml = (text: string | null) => {
-    if (!text) return null;
-    return text
+  const decodeHtml = (text: string | number | null) => {
+    if (!text && text !== 0) return null;
+    return String(text)
       .replace(/&#13;/g, '\n')
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
@@ -2708,10 +2712,10 @@ export function ParcAscenseursPage() {
     return `${jours}j`;
   };
   
-  // Fonction pour décoder les entités HTML
-  const decodeHtml = (text: string | null) => {
-    if (!text) return null;
-    return text
+  // Fonction pour décoder les entités HTML (peut être string ou number)
+  const decodeHtml = (text: string | number | null) => {
+    if (!text && text !== 0) return null;
+    return String(text)
       .replace(/&#13;/g, '\n')
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
@@ -2720,10 +2724,10 @@ export function ParcAscenseursPage() {
       .trim();
   };
   
-  // Fonction pour formater une heure HHMM
-  const formatHeureHHMM = (heureStr: string | null) => {
-    if (!heureStr) return null;
-    const h = heureStr.toString().padStart(4, '0');
+  // Fonction pour formater une heure HHMM (peut être string ou number)
+  const formatHeureHHMM = (heureVal: string | number | null) => {
+    if (!heureVal && heureVal !== 0) return null;
+    const h = String(heureVal).padStart(4, '0');
     return `${h.substring(0, 2)}h${h.substring(2, 4)}`;
   };
   
