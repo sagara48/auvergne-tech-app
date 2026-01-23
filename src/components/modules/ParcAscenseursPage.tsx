@@ -4378,7 +4378,7 @@ export function ParcAscenseursPage() {
       {/* Modal carte de la tournée */}
       {tourneeMapModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setTourneeMapModal(null)}>
-          <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-[var(--border-primary)] flex items-center justify-between">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Map className="w-5 h-5 text-lime-400" />
@@ -4388,57 +4388,191 @@ export function ParcAscenseursPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {/* Liste des ascenseurs */}
-              <div className="space-y-2 mb-4">
-                {tourneeMapModal.ascenseurs.map((asc: any, idx: number) => (
-                  <div key={asc.id} className="p-3 bg-[var(--bg-secondary)] rounded-lg flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-full bg-lime-500/20 text-lime-400 font-bold flex items-center justify-center flex-shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium">{asc.code_appareil}</p>
-                      <p className="text-sm text-[var(--text-muted)]">{asc.adresse}, {asc.ville}</p>
+            <div className="p-4">
+              {(() => {
+                // Filtrer les ascenseurs avec coordonnées GPS
+                const ascenseursAvecGPS = tourneeMapModal.ascenseurs.filter(
+                  (a: any) => a.latitude && a.longitude
+                );
+                const ascenseursSansGPS = tourneeMapModal.ascenseurs.filter(
+                  (a: any) => !a.latitude || !a.longitude
+                );
+                
+                // Calculer le centre de la carte
+                let centerLat = 45.7833; // Clermont-Ferrand par défaut
+                let centerLng = 3.0833;
+                let zoom = 12;
+                
+                if (ascenseursAvecGPS.length > 0) {
+                  const lats = ascenseursAvecGPS.map((a: any) => a.latitude);
+                  const lngs = ascenseursAvecGPS.map((a: any) => a.longitude);
+                  centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+                  centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+                  
+                  // Ajuster le zoom selon l'étendue
+                  const latDiff = Math.max(...lats) - Math.min(...lats);
+                  const lngDiff = Math.max(...lngs) - Math.min(...lngs);
+                  const maxDiff = Math.max(latDiff, lngDiff);
+                  if (maxDiff > 0.5) zoom = 10;
+                  else if (maxDiff > 0.2) zoom = 11;
+                  else if (maxDiff > 0.1) zoom = 12;
+                  else if (maxDiff > 0.05) zoom = 13;
+                  else zoom = 14;
+                }
+                
+                return (
+                  <div className="space-y-4">
+                    {/* Stats rapides */}
+                    <div className="flex gap-4 text-sm">
+                      <span className="flex items-center gap-1">
+                        <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                        {ascenseursAvecGPS.length} avec GPS
+                      </span>
+                      {ascenseursSansGPS.length > 0 && (
+                        <span className="flex items-center gap-1 text-yellow-400">
+                          <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
+                          {ascenseursSansGPS.length} sans GPS
+                        </span>
+                      )}
                     </div>
-                    {asc.latitude && asc.longitude && (
-                      <Badge variant="green" className="text-[10px]">GPS</Badge>
+                    
+                    {/* Carte */}
+                    {ascenseursAvecGPS.length > 0 ? (
+                      <div 
+                        id="tournee-map-container"
+                        className="h-[400px] rounded-lg overflow-hidden border border-[var(--border-primary)]"
+                        ref={(el) => {
+                          if (el && !el.hasAttribute('data-map-initialized')) {
+                            el.setAttribute('data-map-initialized', 'true');
+                            
+                            // Charger Leaflet CSS
+                            if (!document.getElementById('leaflet-css')) {
+                              const link = document.createElement('link');
+                              link.id = 'leaflet-css';
+                              link.rel = 'stylesheet';
+                              link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+                              document.head.appendChild(link);
+                            }
+                            
+                            // Charger Leaflet JS et initialiser la carte
+                            const initMap = () => {
+                              const L = (window as any).L;
+                              if (!L) return;
+                              
+                              // Créer la carte
+                              const map = L.map(el).setView([centerLat, centerLng], zoom);
+                              
+                              // Ajouter les tuiles OpenStreetMap
+                              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                attribution: '© OpenStreetMap'
+                              }).addTo(map);
+                              
+                              // Ajouter les marqueurs
+                              const markers: any[] = [];
+                              ascenseursAvecGPS.forEach((asc: any, idx: number) => {
+                                const marker = L.marker([asc.latitude, asc.longitude])
+                                  .addTo(map)
+                                  .bindPopup(`
+                                    <div style="min-width: 150px">
+                                      <strong>${idx + 1}. ${asc.code_appareil}</strong><br/>
+                                      <span style="font-size: 12px; color: #666">${asc.adresse}<br/>${asc.ville}</span>
+                                    </div>
+                                  `);
+                                markers.push(marker);
+                              });
+                              
+                              // Tracer la ligne de l'itinéraire
+                              if (ascenseursAvecGPS.length > 1) {
+                                const latlngs = ascenseursAvecGPS.map((a: any) => [a.latitude, a.longitude]);
+                                L.polyline(latlngs, { color: '#84cc16', weight: 3, opacity: 0.7 }).addTo(map);
+                              }
+                              
+                              // Ajuster la vue pour montrer tous les marqueurs
+                              if (markers.length > 1) {
+                                const group = L.featureGroup(markers);
+                                map.fitBounds(group.getBounds().pad(0.1));
+                              }
+                            };
+                            
+                            // Charger Leaflet JS si nécessaire
+                            if (!(window as any).L) {
+                              const script = document.createElement('script');
+                              script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+                              script.onload = () => setTimeout(initMap, 100);
+                              document.head.appendChild(script);
+                            } else {
+                              setTimeout(initMap, 100);
+                            }
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="h-[300px] rounded-lg bg-[var(--bg-secondary)] flex flex-col items-center justify-center text-[var(--text-muted)]">
+                        <Map className="w-12 h-12 mb-2 opacity-50" />
+                        <p>Aucune coordonnée GPS disponible</p>
+                        <p className="text-sm mt-1">Lancez le géocodage pour obtenir les positions</p>
+                      </div>
                     )}
+                    
+                    {/* Liste des ascenseurs */}
+                    <div className="max-h-[200px] overflow-y-auto space-y-1">
+                      {tourneeMapModal.ascenseurs.map((asc: any, idx: number) => (
+                        <div key={asc.id} className="p-2 bg-[var(--bg-secondary)] rounded-lg flex items-center gap-2 text-sm">
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                            asc.latitude && asc.longitude 
+                              ? 'bg-lime-500/20 text-lime-400' 
+                              : 'bg-yellow-500/20 text-yellow-400'
+                          }`}>
+                            {idx + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium">{asc.code_appareil}</span>
+                            <span className="text-[var(--text-muted)] ml-2 truncate">{asc.adresse}, {asc.ville}</span>
+                          </div>
+                          {asc.en_arret && <Badge variant="red" className="text-[10px]">Arrêt</Badge>}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Boutons d'action */}
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          // Utiliser les coordonnées GPS si disponibles
+                          const points = tourneeMapModal.ascenseurs.map((a: any) => {
+                            if (a.latitude && a.longitude) {
+                              return `${a.latitude},${a.longitude}`;
+                            }
+                            return encodeURIComponent(`${a.adresse}, ${a.ville}, France`);
+                          });
+                          const url = `https://www.google.com/maps/dir/${points.join('/')}`;
+                          window.open(url, '_blank');
+                        }}
+                      >
+                        <Map className="w-4 h-4 mr-2" />
+                        Google Maps
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          const first = tourneeMapModal.ascenseurs[0];
+                          if (first) {
+                            if (first.latitude && first.longitude) {
+                              window.open(`https://waze.com/ul?ll=${first.latitude},${first.longitude}&navigate=yes`, '_blank');
+                            } else {
+                              window.open(`https://waze.com/ul?q=${encodeURIComponent(first.adresse + ', ' + first.ville)}&navigate=yes`, '_blank');
+                            }
+                          }
+                        }}
+                      >
+                        <Navigation className="w-4 h-4 mr-2" />
+                        Waze
+                      </Button>
+                    </div>
                   </div>
-                ))}
-              </div>
-              
-              {/* Boutons d'action */}
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    const addresses = tourneeMapModal.ascenseurs.map((a: any) => 
-                      encodeURIComponent(`${a.adresse}, ${a.ville}, France`)
-                    );
-                    const url = `https://www.google.com/maps/dir/${addresses.join('/')}`;
-                    window.open(url, '_blank');
-                  }}
-                >
-                  <Map className="w-4 h-4 mr-2" />
-                  Ouvrir dans Google Maps
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    const first = tourneeMapModal.ascenseurs[0];
-                    if (first) {
-                      if (first.latitude && first.longitude) {
-                        window.open(`https://waze.com/ul?ll=${first.latitude},${first.longitude}&navigate=yes`, '_blank');
-                      } else {
-                        window.open(`https://waze.com/ul?q=${encodeURIComponent(first.adresse + ', ' + first.ville)}&navigate=yes`, '_blank');
-                      }
-                    }
-                  }}
-                >
-                  <Navigation className="w-4 h-4 mr-2" />
-                  Waze (1er point)
-                </Button>
-              </div>
+                );
+              })()}
             </div>
           </div>
         </div>
