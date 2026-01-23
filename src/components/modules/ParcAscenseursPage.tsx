@@ -2390,6 +2390,19 @@ export function ParcAscenseursPage() {
     optimizedRoute?: OptimizedRoute;
   } | null>(null);
   
+  // États pour la carte et le planning des tournées
+  const [tourneeMapModal, setTourneeMapModal] = useState<{
+    secteur: number;
+    ordre: number;
+    ascenseurs: any[];
+  } | null>(null);
+  
+  const [tourneePlanningModal, setTourneePlanningModal] = useState<{
+    secteur: number;
+    ordre: number;
+    ascenseurs: any[];
+  } | null>(null);
+  
   // Récupérer les secteurs autorisés de l'utilisateur
   const { data: userSecteurs } = useQuery({
     queryKey: ['user-secteurs'],
@@ -3566,6 +3579,32 @@ export function ParcAscenseursPage() {
                                     </div>
                                   </summary>
                                   
+                                  {/* Boutons d'action pour la tournée */}
+                                  <div className="px-3 py-2 bg-[var(--bg-tertiary)] border-t border-[var(--border-primary)] flex gap-2">
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setTourneeMapModal({ secteur, ordre, ascenseurs: ascenseursOrdre });
+                                      }}
+                                    >
+                                      <Map className="w-4 h-4 mr-1" />
+                                      Carte
+                                    </Button>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setTourneePlanningModal({ secteur, ordre, ascenseurs: ascenseursOrdre });
+                                      }}
+                                    >
+                                      <Calendar className="w-4 h-4 mr-1" />
+                                      Planning
+                                    </Button>
+                                  </div>
+                                  
                                   <div className="divide-y divide-[var(--border-primary)] border-t border-[var(--border-primary)]">
                                     {ascenseursOrdre.map((asc: any) => (
                                       <div 
@@ -4260,6 +4299,305 @@ export function ParcAscenseursPage() {
           </div>
         )}
       </div>
+      
+      {/* Modal carte de la tournée */}
+      {tourneeMapModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setTourneeMapModal(null)}>
+          <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-[var(--border-primary)] flex items-center justify-between">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Map className="w-5 h-5 text-lime-400" />
+                Carte - Secteur {tourneeMapModal.secteur} / Tournée {tourneeMapModal.ordre}
+              </h2>
+              <button onClick={() => setTourneeMapModal(null)} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              {/* Liste des ascenseurs avec coordonnées */}
+              <div className="mb-4 grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+                {tourneeMapModal.ascenseurs.map((asc: any, idx: number) => (
+                  <div key={asc.id} className="p-2 bg-[var(--bg-secondary)] rounded-lg text-sm flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-lime-500/20 text-lime-400 text-xs font-bold flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{asc.code_appareil}</p>
+                      <p className="text-xs text-[var(--text-muted)] truncate">{asc.ville}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Carte OpenStreetMap */}
+              <div className="h-96 rounded-lg overflow-hidden border border-[var(--border-primary)]">
+                {(() => {
+                  // Calculer le centre et le zoom basé sur les ascenseurs
+                  const lats = tourneeMapModal.ascenseurs
+                    .filter((a: any) => a.latitude && a.longitude)
+                    .map((a: any) => a.latitude);
+                  const lngs = tourneeMapModal.ascenseurs
+                    .filter((a: any) => a.latitude && a.longitude)
+                    .map((a: any) => a.longitude);
+                  
+                  if (lats.length > 0 && lngs.length > 0) {
+                    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+                    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+                    
+                    // Créer les marqueurs pour chaque ascenseur
+                    const markers = tourneeMapModal.ascenseurs
+                      .filter((a: any) => a.latitude && a.longitude)
+                      .map((a: any, idx: number) => `${a.latitude},${a.longitude}`)
+                      .join('~');
+                    
+                    return (
+                      <iframe
+                        title="Carte tournée"
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0 }}
+                        loading="lazy"
+                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${Math.min(...lngs) - 0.02}%2C${Math.min(...lats) - 0.02}%2C${Math.max(...lngs) + 0.02}%2C${Math.max(...lats) + 0.02}&layer=mapnik&marker=${centerLat}%2C${centerLng}`}
+                      />
+                    );
+                  }
+                  
+                  return (
+                    <div className="h-full flex flex-col items-center justify-center bg-[var(--bg-secondary)] text-[var(--text-muted)]">
+                      <Map className="w-12 h-12 mb-2 opacity-50" />
+                      <p>Coordonnées GPS non disponibles</p>
+                      <p className="text-sm mt-2">Utilisez le bouton ci-dessous pour ouvrir Google Maps</p>
+                    </div>
+                  );
+                })()}
+              </div>
+              
+              {/* Boutons d'action */}
+              <div className="mt-4 flex gap-2 flex-wrap">
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    const addresses = tourneeMapModal.ascenseurs.map((a: any) => encodeURIComponent(a.adresse + ', ' + a.ville));
+                    const url = `https://www.google.com/maps/dir/${addresses.join('/')}`;
+                    window.open(url, '_blank');
+                  }}
+                >
+                  <Map className="w-4 h-4 mr-2" />
+                  Google Maps
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    // Ouvrir Waze avec le premier point
+                    const first = tourneeMapModal.ascenseurs[0];
+                    if (first.latitude && first.longitude) {
+                      window.open(`https://waze.com/ul?ll=${first.latitude},${first.longitude}&navigate=yes`, '_blank');
+                    } else {
+                      window.open(`https://waze.com/ul?q=${encodeURIComponent(first.adresse + ', ' + first.ville)}&navigate=yes`, '_blank');
+                    }
+                  }}
+                >
+                  <Navigation className="w-4 h-4 mr-2" />
+                  Waze
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal planning de la tournée */}
+      {tourneePlanningModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setTourneePlanningModal(null)}>
+          <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-[var(--border-primary)] flex items-center justify-between">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-400" />
+                Planning - Secteur {tourneePlanningModal.secteur} / Tournée {tourneePlanningModal.ordre}
+              </h2>
+              <button onClick={() => setTourneePlanningModal(null)} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[calc(90vh-80px)]">
+              {(() => {
+                // Générer le planning automatique basé sur nb_visites_an
+                const mois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+                const currentMonth = new Date().getMonth();
+                const currentYear = new Date().getFullYear();
+                
+                // Calculer les visites par mois pour chaque ascenseur
+                const planningParMois: Record<number, any[]> = {};
+                for (let i = 0; i < 12; i++) {
+                  planningParMois[i] = [];
+                }
+                
+                tourneePlanningModal.ascenseurs.forEach((asc: any) => {
+                  const nbVisites = asc.nb_visites_an || 1;
+                  const intervalMois = Math.floor(12 / nbVisites); // Intervalle entre chaque visite
+                  
+                  // Distribuer les visites de manière équilibrée sur l'année
+                  for (let v = 0; v < nbVisites; v++) {
+                    const moisVisite = (v * intervalMois) % 12;
+                    planningParMois[moisVisite].push({
+                      ...asc,
+                      visitNum: v + 1,
+                      totalVisites: nbVisites
+                    });
+                  }
+                });
+                
+                // Statistiques
+                const totalVisitesAn = tourneePlanningModal.ascenseurs.reduce((sum: number, a: any) => sum + (a.nb_visites_an || 1), 0);
+                const moyenneParMois = (totalVisitesAn / 12).toFixed(1);
+                
+                return (
+                  <div className="space-y-6">
+                    {/* Statistiques globales */}
+                    <div className="grid grid-cols-4 gap-4">
+                      <Card className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border-blue-500/30">
+                        <CardBody className="p-4 text-center">
+                          <p className="text-2xl font-bold text-blue-400">{tourneePlanningModal.ascenseurs.length}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Ascenseurs</p>
+                        </CardBody>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border-purple-500/30">
+                        <CardBody className="p-4 text-center">
+                          <p className="text-2xl font-bold text-purple-400">{totalVisitesAn}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Visites/an</p>
+                        </CardBody>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-green-500/20 to-green-600/10 border-green-500/30">
+                        <CardBody className="p-4 text-center">
+                          <p className="text-2xl font-bold text-green-400">{moyenneParMois}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Moy. visites/mois</p>
+                        </CardBody>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 border-orange-500/30">
+                        <CardBody className="p-4 text-center">
+                          <p className="text-2xl font-bold text-orange-400">
+                            {Math.max(...Object.values(planningParMois).map(v => v.length))}
+                          </p>
+                          <p className="text-xs text-[var(--text-muted)]">Max visites/mois</p>
+                        </CardBody>
+                      </Card>
+                    </div>
+                    
+                    {/* Calendrier annuel */}
+                    <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                      {mois.map((nomMois, idx) => {
+                        const visitesMois = planningParMois[idx];
+                        const isPast = idx < currentMonth;
+                        const isCurrent = idx === currentMonth;
+                        
+                        return (
+                          <Card 
+                            key={idx} 
+                            className={`overflow-hidden ${
+                              isCurrent ? 'ring-2 ring-blue-500' : 
+                              isPast ? 'opacity-60' : ''
+                            }`}
+                          >
+                            <div className={`p-2 text-center font-semibold ${
+                              isCurrent ? 'bg-blue-500/30 text-blue-400' :
+                              isPast ? 'bg-gray-500/20 text-gray-400' :
+                              'bg-[var(--bg-tertiary)]'
+                            }`}>
+                              {nomMois} {currentYear}
+                            </div>
+                            <CardBody className="p-2">
+                              {visitesMois.length === 0 ? (
+                                <p className="text-xs text-[var(--text-muted)] text-center py-2">Aucune visite</p>
+                              ) : (
+                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                  {visitesMois.map((v: any, vIdx: number) => (
+                                    <div 
+                                      key={`${v.id}-${vIdx}`} 
+                                      className="p-1.5 bg-[var(--bg-secondary)] rounded text-xs flex items-center gap-1"
+                                    >
+                                      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                        v.nb_visites_an >= 12 ? 'bg-purple-500/30 text-purple-400' :
+                                        v.nb_visites_an >= 6 ? 'bg-blue-500/30 text-blue-400' :
+                                        v.nb_visites_an >= 4 ? 'bg-green-500/30 text-green-400' :
+                                        'bg-yellow-500/30 text-yellow-400'
+                                      }`}>
+                                        {v.visitNum}
+                                      </span>
+                                      <span className="truncate flex-1">{v.code_appareil}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="mt-1 text-center">
+                                <Badge variant={visitesMois.length > 5 ? 'red' : visitesMois.length > 3 ? 'yellow' : 'green'} className="text-[10px]">
+                                  {visitesMois.length} visite{visitesMois.length > 1 ? 's' : ''}
+                                </Badge>
+                              </div>
+                            </CardBody>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Détail par ascenseur */}
+                    <Card>
+                      <CardBody className="p-4">
+                        <h3 className="font-semibold mb-3 flex items-center gap-2">
+                          <Wrench className="w-4 h-4 text-[var(--text-muted)]" />
+                          Détail par ascenseur
+                        </h3>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-[var(--border-primary)]">
+                                <th className="text-left p-2">Code</th>
+                                <th className="text-left p-2">Adresse</th>
+                                <th className="text-center p-2">Vis/an</th>
+                                <th className="text-left p-2">Mois de visite</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {tourneePlanningModal.ascenseurs.map((asc: any) => {
+                                const nbVisites = asc.nb_visites_an || 1;
+                                const intervalMois = Math.floor(12 / nbVisites);
+                                const moisVisites = [];
+                                for (let v = 0; v < nbVisites; v++) {
+                                  moisVisites.push(mois[(v * intervalMois) % 12].substring(0, 3));
+                                }
+                                
+                                return (
+                                  <tr key={asc.id} className="border-b border-[var(--border-primary)] hover:bg-[var(--bg-secondary)]">
+                                    <td className="p-2 font-medium">{asc.code_appareil}</td>
+                                    <td className="p-2 text-[var(--text-muted)]">{asc.adresse}, {asc.ville}</td>
+                                    <td className="p-2 text-center">
+                                      <Badge variant={nbVisites >= 12 ? 'purple' : nbVisites >= 6 ? 'blue' : nbVisites >= 4 ? 'green' : 'yellow'}>
+                                        {nbVisites}
+                                      </Badge>
+                                    </td>
+                                    <td className="p-2">
+                                      <div className="flex flex-wrap gap-1">
+                                        {moisVisites.map((m, i) => (
+                                          <span key={i} className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs">
+                                            {m}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardBody>
+                    </Card>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Modal détail ascenseur */}
       {selectedAscenseur && (
