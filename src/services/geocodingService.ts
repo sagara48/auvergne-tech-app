@@ -478,13 +478,36 @@ export async function geocodeAndUpdateAll(
   skipped: number;
   failures: Array<{ id: number; code: string; adresse: string; ville: string; error: string }>;
 }> {
-  // Récupérer tous les ascenseurs
-  const { data: ascenseurs, error } = await supabase
-    .from('parc_ascenseurs')
-    .select('*');
+  // Récupérer TOUS les ascenseurs avec pagination (Supabase limite à 1000)
+  console.log('Récupération de tous les ascenseurs...');
+  const allAscenseurs: any[] = [];
+  let from = 0;
+  const batchSize = 1000;
   
-  if (error || !ascenseurs) {
-    console.error('Erreur récupération ascenseurs:', error);
+  while (true) {
+    const { data, error } = await supabase
+      .from('parc_ascenseurs')
+      .select('*')
+      .range(from, from + batchSize - 1);
+    
+    if (error) {
+      console.error('Erreur récupération ascenseurs:', error);
+      break;
+    }
+    
+    if (data && data.length > 0) {
+      allAscenseurs.push(...data);
+      console.log(`Récupéré ${allAscenseurs.length} ascenseurs...`);
+      from += batchSize;
+      if (data.length < batchSize) break; // Plus de données
+    } else {
+      break;
+    }
+  }
+  
+  console.log(`Total ascenseurs récupérés: ${allAscenseurs.length}`);
+  
+  if (allAscenseurs.length === 0) {
     return { total: 0, success: 0, failed: 0, skipped: 0, failures: [] };
   }
   
@@ -493,12 +516,12 @@ export async function geocodeAndUpdateAll(
   let skipped: number;
   
   if (forceAll) {
-    toGeocode = ascenseurs;
+    toGeocode = allAscenseurs;
     skipped = 0;
     console.log(`Géocodage FORCÉ de ${toGeocode.length} ascenseurs`);
   } else {
-    toGeocode = ascenseurs.filter((a: any) => !a.latitude || !a.longitude);
-    skipped = ascenseurs.length - toGeocode.length;
+    toGeocode = allAscenseurs.filter((a: any) => !a.latitude || !a.longitude);
+    skipped = allAscenseurs.length - toGeocode.length;
     console.log(`Géocodage de ${toGeocode.length} ascenseurs (${skipped} déjà géocodés)`);
   }
   
@@ -545,20 +568,36 @@ export async function geocodeAndUpdateAll(
 }
 
 /**
- * Récupère les ascenseurs non géocodés
+ * Récupère les ascenseurs non géocodés (avec pagination)
  */
 export async function getUnGeocodedAscenseurs(): Promise<any[]> {
-  const { data, error } = await supabase
-    .from('parc_ascenseurs')
-    .select('id, code_appareil, adresse, ville, code_postal')
-    .or('latitude.is.null,longitude.is.null');
+  const allAscenseurs: any[] = [];
+  let from = 0;
+  const batchSize = 1000;
   
-  if (error) {
-    console.error('Erreur récupération ascenseurs non géocodés:', error);
-    return [];
+  while (true) {
+    const { data, error } = await supabase
+      .from('parc_ascenseurs')
+      .select('id, code_appareil, adresse, ville, code_postal, latitude, longitude')
+      .range(from, from + batchSize - 1);
+    
+    if (error) {
+      console.error('Erreur récupération ascenseurs:', error);
+      break;
+    }
+    
+    if (data && data.length > 0) {
+      // Filtrer ceux sans GPS
+      const sansGPS = data.filter((a: any) => !a.latitude || !a.longitude);
+      allAscenseurs.push(...sansGPS);
+      from += batchSize;
+      if (data.length < batchSize) break;
+    } else {
+      break;
+    }
   }
   
-  return data || [];
+  return allAscenseurs;
 }
 
 /**
