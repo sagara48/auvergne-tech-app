@@ -149,27 +149,47 @@ const getTypesPlanning = async (): Promise<Record<string, number>> => {
 
 const getAscenseurs = async (secteur?: number, userSecteurs?: number[]) => {
   try {
-    let query = supabase
-      .from('parc_ascenseurs')
-      .select('*')
-      .order('code_appareil');
+    // Pagination pour récupérer tous les ascenseurs (Supabase limite à 1000 par requête)
+    const allAscenseurs: any[] = [];
+    let from = 0;
+    const batchSize = 1000;
     
-    // Filtre par secteur spécifique
-    if (secteur) {
-      query = query.eq('secteur', secteur);
-    } 
-    // Filtre par secteurs de l'utilisateur (si définis)
-    else if (userSecteurs && userSecteurs.length > 0) {
-      query = query.in('secteur', userSecteurs);
+    while (true) {
+      let query = supabase
+        .from('parc_ascenseurs')
+        .select('*')
+        .order('code_appareil')
+        .range(from, from + batchSize - 1);
+      
+      // Filtre par secteur spécifique
+      if (secteur) {
+        query = query.eq('secteur', secteur);
+      } 
+      // Filtre par secteurs de l'utilisateur (si définis)
+      else if (userSecteurs && userSecteurs.length > 0) {
+        query = query.in('secteur', userSecteurs);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        console.warn('Table parc_ascenseurs non disponible:', error.message);
+        break;
+      }
+      
+      if (data && data.length > 0) {
+        allAscenseurs.push(...data);
+        from += batchSize;
+        if (data.length < batchSize) break; // Plus de données
+      } else {
+        break;
+      }
     }
     
-    const { data, error } = await query;
-    if (error) {
-      console.warn('Table parc_ascenseurs non disponible:', error.message);
-      return [];
-    }
-    return data || [];
-  } catch {
+    console.log(`Ascenseurs récupérés: ${allAscenseurs.length}`);
+    return allAscenseurs;
+  } catch (err) {
+    console.error('Erreur getAscenseurs:', err);
     return [];
   }
 };
@@ -1287,39 +1307,79 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     }
   });
   
+  // Fonction pour extraire la date d'une panne
+  const getPanneDate = (p: any): Date | null => {
+    const data = p.data_wpanne || {};
+    if (data.DATE) {
+      const dateStr = String(data.DATE);
+      if (dateStr.length === 8) {
+        const year = parseInt(dateStr.substring(0, 4));
+        const month = parseInt(dateStr.substring(4, 6)) - 1;
+        const day = parseInt(dateStr.substring(6, 8));
+        return new Date(year, month, day);
+      }
+    }
+    if (p.date_appel) {
+      const d = new Date(p.date_appel);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return null;
+  };
+  
+  // Fonction pour trier par date décroissante
+  const sortByDateDesc = (items: any[]) => {
+    return [...items].sort((a, b) => {
+      const dateA = getPanneDate(a);
+      const dateB = getPanneDate(b);
+      const timeA = dateA ? dateA.getTime() : 0;
+      const timeB = dateB ? dateB.getTime() : 0;
+      return timeB - timeA; // Plus récent en premier
+    });
+  };
+  
+  // Debug: afficher les champs disponibles
+  if (allPannes && allPannes.length > 0) {
+    const sample = allPannes[0];
+    console.log('=== DEBUG MODAL ASCENSEUR ===');
+    console.log('Champs disponibles:', Object.keys(sample));
+    console.log('Sample complet:', { 
+      motif: sample.motif, 
+      cause: sample.data_wpanne?.CAUSE,
+      MOTIF_data: sample.data_wpanne?.MOTIF,
+      date: sample.data_wpanne?.DATE
+    });
+  }
+  
   // Séparer par type
   // Visites = cause 99
-  const visites = allPannes?.filter((p: any) => {
+  const visites = sortByDateDesc(allPannes?.filter((p: any) => {
     const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
     return cause === '99';
-  }) || [];
+  }) || []);
   
-  // Contrôles = motif contient "CONTROLE" (chercher dans plusieurs champs possibles)
-  const controles = allPannes?.filter((p: any) => {
-    const motif1 = String(p.motif ?? '').toUpperCase();
-    const motif2 = String(p.data_wpanne?.MOTIF ?? '').toUpperCase();
-    const motif3 = String(p.data_wpanne?.motif ?? '').toUpperCase();
-    return motif1.includes('CONTROLE') || motif2.includes('CONTROLE') || motif3.includes('CONTROLE');
-  }) || [];
+  // Contrôles = motif contient "CONTROLE" (vérifier le champ exact)
+  const controles = sortByDateDesc(allPannes?.filter((p: any) => {
+    // Chercher "CONTROLE" dans tous les champs possibles
+    const motif = String(p.motif ?? p.data_wpanne?.MOTIF ?? '').toUpperCase();
+    return motif.includes('CONTROLE');
+  }) || []);
   
-  // Pannes = ni visite (cause 99), ni contrôle (motif contient CONTROLE)
-  const pannes = allPannes?.filter((p: any) => {
+  // Pannes = tout ce qui n'est ni visite ni contrôle
+  const pannes = sortByDateDesc(allPannes?.filter((p: any) => {
     const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
-    const motif1 = String(p.motif ?? '').toUpperCase();
-    const motif2 = String(p.data_wpanne?.MOTIF ?? '').toUpperCase();
-    const motif3 = String(p.data_wpanne?.motif ?? '').toUpperCase();
+    const motif = String(p.motif ?? p.data_wpanne?.MOTIF ?? '').toUpperCase();
     const isVisite = cause === '99';
-    const isControle = motif1.includes('CONTROLE') || motif2.includes('CONTROLE') || motif3.includes('CONTROLE');
+    const isControle = motif.includes('CONTROLE');
     return !isVisite && !isControle;
-  }) || [];
+  }) || []);
   
-  // Debug: afficher la répartition pour cet ascenseur
+  // Debug final
   if (allPannes && allPannes.length > 0) {
-    // Afficher les champs disponibles sur la première entrée
-    const sample = allPannes[0];
-    console.log('Champs parc_pannes:', Object.keys(sample));
-    console.log('Sample motif:', { motif: sample.motif, 'data_wpanne.MOTIF': sample.data_wpanne?.MOTIF });
-    console.log(`Modal ascenseur - ${allPannes.length} interventions: ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
+    console.log(`Modal: ${allPannes.length} total → ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
+    
+    // Montrer quelques exemples de motifs pour debug
+    const motifExamples = allPannes.slice(0, 5).map((p: any) => p.motif ?? p.data_wpanne?.MOTIF ?? 'VIDE');
+    console.log('Exemples motifs:', motifExamples);
   }
   
   // Fonction pour formater une date YYYYMMDD
@@ -2358,14 +2418,22 @@ export function ParcAscenseursPage() {
       return null;
     };
     
+    // Debug: afficher des exemples de motifs
+    if (enrichedPannes.length > 0) {
+      const motifExamples = enrichedPannes.slice(0, 5).map((p: any) => ({
+        motif: p.motif,
+        motif_data: p.data_wpanne?.MOTIF,
+        cause: p.data_wpanne?.CAUSE
+      }));
+      console.log('Exemples pannes enrichies:', motifExamples);
+    }
+    
     // Exclure visites (cause 99) et contrôles (motif contient CONTROLE)
     let filtered = enrichedPannes.filter((p: any) => {
       const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
-      const motif1 = String(p.motif ?? '').toUpperCase();
-      const motif2 = String(p.data_wpanne?.MOTIF ?? '').toUpperCase();
-      const motif3 = String(p.data_wpanne?.motif ?? '').toUpperCase();
+      const motif = String(p.motif ?? p.data_wpanne?.MOTIF ?? '').toUpperCase();
       const isVisite = cause === '99';
-      const isControle = motif1.includes('CONTROLE') || motif2.includes('CONTROLE') || motif3.includes('CONTROLE');
+      const isControle = motif.includes('CONTROLE');
       return !isVisite && !isControle;
     });
     
