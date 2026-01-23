@@ -3652,7 +3652,9 @@ export function ParcAscenseursPage() {
                                       variant="secondary"
                                       size="sm"
                                       onClick={(e) => {
+                                        e.preventDefault();
                                         e.stopPropagation();
+                                        console.log('Ouverture carte tournée', { secteur, ordre, ascenseurs: ascenseursOrdre.length });
                                         setTourneeMapModal({ secteur, ordre, ascenseurs: ascenseursOrdre });
                                       }}
                                     >
@@ -3663,6 +3665,7 @@ export function ParcAscenseursPage() {
                                       variant="secondary"
                                       size="sm"
                                       onClick={(e) => {
+                                        e.preventDefault();
                                         e.stopPropagation();
                                         setTourneePlanningModal({ secteur, ordre, ascenseurs: ascenseursOrdre });
                                       }}
@@ -4385,92 +4388,55 @@ export function ParcAscenseursPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4">
-              {/* Liste des ascenseurs avec coordonnées */}
-              <div className="mb-4 grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+            <div className="p-4 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {/* Liste des ascenseurs */}
+              <div className="space-y-2 mb-4">
                 {tourneeMapModal.ascenseurs.map((asc: any, idx: number) => (
-                  <div key={asc.id} className="p-2 bg-[var(--bg-secondary)] rounded-lg text-sm flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-lime-500/20 text-lime-400 text-xs font-bold flex items-center justify-center">
+                  <div key={asc.id} className="p-3 bg-[var(--bg-secondary)] rounded-lg flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-lime-500/20 text-lime-400 font-bold flex items-center justify-center flex-shrink-0">
                       {idx + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{asc.code_appareil}</p>
-                      <p className="text-xs text-[var(--text-muted)] truncate">{asc.ville}</p>
+                      <p className="font-medium">{asc.code_appareil}</p>
+                      <p className="text-sm text-[var(--text-muted)]">{asc.adresse}, {asc.ville}</p>
                     </div>
+                    {asc.latitude && asc.longitude && (
+                      <Badge variant="green" className="text-[10px]">GPS</Badge>
+                    )}
                   </div>
                 ))}
               </div>
               
-              {/* Carte OpenStreetMap */}
-              <div className="h-96 rounded-lg overflow-hidden border border-[var(--border-primary)]">
-                {(() => {
-                  // Calculer le centre et le zoom basé sur les ascenseurs
-                  const lats = tourneeMapModal.ascenseurs
-                    .filter((a: any) => a.latitude && a.longitude)
-                    .map((a: any) => a.latitude);
-                  const lngs = tourneeMapModal.ascenseurs
-                    .filter((a: any) => a.latitude && a.longitude)
-                    .map((a: any) => a.longitude);
-                  
-                  if (lats.length > 0 && lngs.length > 0) {
-                    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-                    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-                    
-                    // Créer les marqueurs pour chaque ascenseur
-                    const markers = tourneeMapModal.ascenseurs
-                      .filter((a: any) => a.latitude && a.longitude)
-                      .map((a: any, idx: number) => `${a.latitude},${a.longitude}`)
-                      .join('~');
-                    
-                    return (
-                      <iframe
-                        title="Carte tournée"
-                        width="100%"
-                        height="100%"
-                        style={{ border: 0 }}
-                        loading="lazy"
-                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${Math.min(...lngs) - 0.02}%2C${Math.min(...lats) - 0.02}%2C${Math.max(...lngs) + 0.02}%2C${Math.max(...lats) + 0.02}&layer=mapnik&marker=${centerLat}%2C${centerLng}`}
-                      />
-                    );
-                  }
-                  
-                  return (
-                    <div className="h-full flex flex-col items-center justify-center bg-[var(--bg-secondary)] text-[var(--text-muted)]">
-                      <Map className="w-12 h-12 mb-2 opacity-50" />
-                      <p>Coordonnées GPS non disponibles</p>
-                      <p className="text-sm mt-2">Utilisez le bouton ci-dessous pour ouvrir Google Maps</p>
-                    </div>
-                  );
-                })()}
-              </div>
-              
               {/* Boutons d'action */}
-              <div className="mt-4 flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   variant="primary"
                   onClick={() => {
-                    const addresses = tourneeMapModal.ascenseurs.map((a: any) => encodeURIComponent(a.adresse + ', ' + a.ville));
+                    const addresses = tourneeMapModal.ascenseurs.map((a: any) => 
+                      encodeURIComponent(`${a.adresse}, ${a.ville}, France`)
+                    );
                     const url = `https://www.google.com/maps/dir/${addresses.join('/')}`;
                     window.open(url, '_blank');
                   }}
                 >
                   <Map className="w-4 h-4 mr-2" />
-                  Google Maps
+                  Ouvrir dans Google Maps
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={() => {
-                    // Ouvrir Waze avec le premier point
                     const first = tourneeMapModal.ascenseurs[0];
-                    if (first.latitude && first.longitude) {
-                      window.open(`https://waze.com/ul?ll=${first.latitude},${first.longitude}&navigate=yes`, '_blank');
-                    } else {
-                      window.open(`https://waze.com/ul?q=${encodeURIComponent(first.adresse + ', ' + first.ville)}&navigate=yes`, '_blank');
+                    if (first) {
+                      if (first.latitude && first.longitude) {
+                        window.open(`https://waze.com/ul?ll=${first.latitude},${first.longitude}&navigate=yes`, '_blank');
+                      } else {
+                        window.open(`https://waze.com/ul?q=${encodeURIComponent(first.adresse + ', ' + first.ville)}&navigate=yes`, '_blank');
+                      }
                     }
                   }}
                 >
                   <Navigation className="w-4 h-4 mr-2" />
-                  Waze
+                  Waze (1er point)
                 </Button>
               </div>
             </div>
