@@ -487,47 +487,6 @@ function SyncModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  // Fonction de géocodage en masse
-  const runGeocoding = async () => {
-    setGeocodingProgress({
-      isRunning: true,
-      current: 0,
-      total: 0,
-      success: 0,
-      failed: 0
-    });
-    
-    try {
-      const result = await geocodeAndUpdateAll((current, total, lastResult) => {
-        setGeocodingProgress(prev => ({
-          ...prev,
-          current,
-          total,
-          success: prev.success + (lastResult.success ? 1 : 0),
-          failed: prev.failed + (lastResult.success ? 0 : 1),
-          lastCode: lastResult.code,
-          lastSuccess: lastResult.success
-        }));
-      });
-      
-      setGeocodingProgress(prev => ({
-        ...prev,
-        isRunning: false,
-        success: result.success,
-        failed: result.failed
-      }));
-      
-      // Rafraîchir les données
-      queryClient.invalidateQueries({ queryKey: ['parc-ascenseurs'] });
-      
-      toast.success(`Géocodage terminé: ${result.success} succès, ${result.failed} échecs`);
-    } catch (error) {
-      console.error('Erreur géocodage:', error);
-      setGeocodingProgress(prev => ({ ...prev, isRunning: false }));
-      toast.error('Erreur lors du géocodage');
-    }
-  };
-
   const runFullSync = async () => {
     setIsRunning(true);
     isRunningRef.current = true;
@@ -2456,6 +2415,49 @@ export function ParcAscenseursPage() {
     lastCode?: string;
     lastSuccess?: boolean;
   }>({ isRunning: false, current: 0, total: 0, success: 0, failed: 0 });
+  
+  const queryClient = useQueryClient();
+  
+  // Fonction de géocodage en masse
+  const runGeocoding = async () => {
+    setGeocodingProgress({
+      isRunning: true,
+      current: 0,
+      total: 0,
+      success: 0,
+      failed: 0
+    });
+    
+    try {
+      const result = await geocodeAndUpdateAll((current, total, lastResult) => {
+        setGeocodingProgress(prev => ({
+          ...prev,
+          current,
+          total,
+          success: prev.success + (lastResult.success ? 1 : 0),
+          failed: prev.failed + (lastResult.success ? 0 : 1),
+          lastCode: lastResult.code,
+          lastSuccess: lastResult.success
+        }));
+      });
+      
+      setGeocodingProgress(prev => ({
+        ...prev,
+        isRunning: false,
+        success: result.success,
+        failed: result.failed
+      }));
+      
+      // Rafraîchir les données
+      queryClient.invalidateQueries({ queryKey: ['parc-ascenseurs'] });
+      
+      toast.success(`Géocodage terminé: ${result.success} succès, ${result.failed} échecs`);
+    } catch (error) {
+      console.error('Erreur géocodage:', error);
+      setGeocodingProgress(prev => ({ ...prev, isRunning: false }));
+      toast.error('Erreur lors du géocodage');
+    }
+  };
   
   // Récupérer les secteurs autorisés de l'utilisateur
   const { data: userSecteurs } = useQuery({
