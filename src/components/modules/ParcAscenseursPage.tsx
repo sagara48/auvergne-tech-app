@@ -229,19 +229,19 @@ const getArrets = async () => {
 
 const getPannesRecentes = async () => {
   try {
-    // Récupérer les VRAIES pannes avec pagination (Supabase limite à 1000 par requête)
+    // Récupérer les pannes avec pagination (Supabase limite à 1000 par requête)
+    // On exclut seulement les visites (cause 99) côté serveur
+    // Les contrôles (motif contient CONTROLE) sont filtrés côté client
     const allPannes: any[] = [];
     let from = 0;
     const batchSize = 1000;
-    const maxPannes = 3000; // Limiter à 3000 pannes max
+    const maxPannes = 5000; // Augmenté pour avoir plus de pannes
     
     while (allPannes.length < maxPannes) {
       const { data: pannes, error } = await supabase
         .from('parc_pannes')
         .select('*')
-        .not('data_wpanne->>CAUSE', 'eq', '99')  // Exclure visites
-        .not('data_wpanne->>CAUSE', 'eq', '0')   // Exclure contrôles
-        .not('data_wpanne->>CAUSE', 'eq', '00')  // Exclure contrôles (format 00)
+        .not('data_wpanne->>CAUSE', 'eq', '99')  // Exclure visites seulement
         .order('date_appel', { ascending: false, nullsFirst: false })
         .range(from, from + batchSize - 1);
       
@@ -252,8 +252,8 @@ const getPannesRecentes = async () => {
           .from('parc_pannes')
           .select('*')
           .order('date_appel', { ascending: false, nullsFirst: false })
-          .range(0, 2999);
-        console.log(`Fallback: ${fallbackPannes?.length || 0} pannes récupérées (sans filtre cause)`);
+          .range(0, 4999);
+        console.log(`Fallback: ${fallbackPannes?.length || 0} pannes récupérées (sans filtre)`);
         return fallbackPannes || [];
       }
       
@@ -266,14 +266,14 @@ const getPannesRecentes = async () => {
       }
     }
     
-    console.log(`Vraies pannes récupérées: ${allPannes.length} (en ${Math.ceil(allPannes.length / batchSize)} batches)`);
+    console.log(`Pannes récupérées (hors visites): ${allPannes.length} (en ${Math.ceil(from / batchSize)} batches)`);
     
     // Debug: afficher les dates des 5 premières pannes
     if (allPannes.length > 0) {
-      console.log('5 premières vraies pannes (plus récentes):');
+      console.log('5 premières pannes (plus récentes):');
       allPannes.slice(0, 5).forEach((p: any, i: number) => {
         const data = p.data_wpanne || {};
-        console.log(`  ${i+1}. date_appel=${p.date_appel}, data.DATE=${data.DATE}, cause=${data.CAUSE}, id_wsoucont=${p.id_wsoucont}`);
+        console.log(`  ${i+1}. date=${p.date_appel}, cause=${data.CAUSE}, motif=${data.MOTIF?.substring(0, 30)}...`);
       });
     }
     
@@ -1287,19 +1287,40 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     }
   });
   
-  // Séparer par type de cause
+  // Séparer par type
+  // Visites = cause 99
   const visites = allPannes?.filter((p: any) => {
-    const cause = p.data_wpanne?.CAUSE || p.cause;
-    return cause === '99' || cause === 99;
+    const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
+    return cause === '99';
   }) || [];
+  
+  // Contrôles = motif contient "CONTROLE" (chercher dans plusieurs champs possibles)
   const controles = allPannes?.filter((p: any) => {
-    const cause = p.data_wpanne?.CAUSE || p.cause;
-    return cause === '0' || cause === 0 || cause === '00';
+    const motif1 = String(p.motif ?? '').toUpperCase();
+    const motif2 = String(p.data_wpanne?.MOTIF ?? '').toUpperCase();
+    const motif3 = String(p.data_wpanne?.motif ?? '').toUpperCase();
+    return motif1.includes('CONTROLE') || motif2.includes('CONTROLE') || motif3.includes('CONTROLE');
   }) || [];
+  
+  // Pannes = ni visite (cause 99), ni contrôle (motif contient CONTROLE)
   const pannes = allPannes?.filter((p: any) => {
-    const cause = String(p.data_wpanne?.CAUSE || p.cause || '');
-    return cause !== '99' && cause !== '0' && cause !== '00' && cause !== '';
+    const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
+    const motif1 = String(p.motif ?? '').toUpperCase();
+    const motif2 = String(p.data_wpanne?.MOTIF ?? '').toUpperCase();
+    const motif3 = String(p.data_wpanne?.motif ?? '').toUpperCase();
+    const isVisite = cause === '99';
+    const isControle = motif1.includes('CONTROLE') || motif2.includes('CONTROLE') || motif3.includes('CONTROLE');
+    return !isVisite && !isControle;
   }) || [];
+  
+  // Debug: afficher la répartition pour cet ascenseur
+  if (allPannes && allPannes.length > 0) {
+    // Afficher les champs disponibles sur la première entrée
+    const sample = allPannes[0];
+    console.log('Champs parc_pannes:', Object.keys(sample));
+    console.log('Sample motif:', { motif: sample.motif, 'data_wpanne.MOTIF': sample.data_wpanne?.MOTIF });
+    console.log(`Modal ascenseur - ${allPannes.length} interventions: ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
+  }
   
   // Fonction pour formater une date YYYYMMDD
   const formatDateYYYYMMDD = (dateStr: string | null) => {
@@ -2312,7 +2333,7 @@ export function ParcAscenseursPage() {
     return result;
   }, [pannesRecentes, allAscenseurs]);
   
-  // Filtrer les pannes par secteur et trier par date (le filtrage cause est fait côté serveur)
+  // Filtrer les vraies pannes : exclure visites (cause 99) et contrôles (motif contient CONTROLE)
   const vraisPannes = useMemo(() => {
     if (!enrichedPannes || enrichedPannes.length === 0) return [];
     
@@ -2337,7 +2358,18 @@ export function ParcAscenseursPage() {
       return null;
     };
     
-    let filtered = [...enrichedPannes];
+    // Exclure visites (cause 99) et contrôles (motif contient CONTROLE)
+    let filtered = enrichedPannes.filter((p: any) => {
+      const cause = String(p.data_wpanne?.CAUSE ?? p.cause ?? '').trim();
+      const motif1 = String(p.motif ?? '').toUpperCase();
+      const motif2 = String(p.data_wpanne?.MOTIF ?? '').toUpperCase();
+      const motif3 = String(p.data_wpanne?.motif ?? '').toUpperCase();
+      const isVisite = cause === '99';
+      const isControle = motif1.includes('CONTROLE') || motif2.includes('CONTROLE') || motif3.includes('CONTROLE');
+      return !isVisite && !isControle;
+    });
+    
+    console.log(`Filtrage pannes: ${enrichedPannes.length} total → ${filtered.length} après exclusion visites/contrôles`);
     
     // Filtrer par secteurs autorisés si définis
     if (userSecteurs && userSecteurs.length > 0) {
