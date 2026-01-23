@@ -2669,13 +2669,14 @@ export function ParcAscenseursPage() {
     return count;
   }, [vraisPannes]);
   
-  // Compter les ascenseurs avec tournée (ordre2 défini) - uniquement dans les secteurs accessibles
+  // Compter les ascenseurs avec tournée (ordre2 défini) - uniquement sous contrat et dans les secteurs accessibles
   const ascenseursAvecTourneeCount = useMemo(() => {
     if (!ascenseurs) return 0;
     return ascenseurs.filter((a: any) => {
       const hasOrdre = a.ordre2 !== null && a.ordre2 !== undefined && a.ordre2 > 0;
       const secteurAccessible = !userSecteurs || userSecteurs.length === 0 || userSecteurs.includes(a.secteur);
-      return hasOrdre && secteurAccessible;
+      const sousContrat = a.type_planning; // Exclure les hors contrat
+      return hasOrdre && secteurAccessible && sousContrat;
     }).length;
   }, [ascenseurs, userSecteurs]);
   
@@ -3202,10 +3203,12 @@ export function ParcAscenseursPage() {
               
               // Filtrer les ascenseurs qui ont un ordre2 défini (font partie d'une tournée)
               // ET qui sont dans les secteurs accessibles par le technicien
+              // ET qui sont sous contrat (ont un type_planning)
               const ascenseursAvecTournee = (ascenseurs || []).filter((a: any) => {
                 const hasOrdre = a.ordre2 !== null && a.ordre2 !== undefined && a.ordre2 > 0;
                 const secteurAccessible = !userSecteurs || userSecteurs.length === 0 || userSecteurs.includes(a.secteur);
-                return hasOrdre && secteurAccessible;
+                const sousContrat = a.type_planning; // Exclure les hors contrat
+                return hasOrdre && secteurAccessible && sousContrat;
               });
               
               console.log(`Tournées: ${ascenseursAvecTournee.length} ascenseurs avec ordre2 sur ${ascenseurs?.length || 0} total`);
@@ -3510,6 +3513,18 @@ export function ParcAscenseursPage() {
                               const ascenseursOrdre = ascenseursByOrdre2[ordre];
                               const nbArretOrdre = ascenseursOrdre.filter((a: any) => a.en_arret).length;
                               
+                              // Compter par nb_visites_an
+                              const parNbVisites: Record<number, number> = {};
+                              ascenseursOrdre.forEach((a: any) => {
+                                const nbVisites = a.nb_visites_an || 0;
+                                parNbVisites[nbVisites] = (parNbVisites[nbVisites] || 0) + 1;
+                              });
+                              
+                              // Trier par nb de visites décroissant
+                              const visitesTriees = Object.entries(parNbVisites)
+                                .map(([nb, count]) => ({ nb: Number(nb), count }))
+                                .sort((a, b) => b.nb - a.nb);
+                              
                               return (
                                 <details 
                                   key={ordre} 
@@ -3523,9 +3538,22 @@ export function ParcAscenseursPage() {
                                       </div>
                                       <div>
                                         <p className="font-semibold">Tournée {ordre}</p>
-                                        <p className="text-xs text-[var(--text-muted)]">
-                                          {ascenseursOrdre.length} ascenseur{ascenseursOrdre.length > 1 ? 's' : ''}
-                                        </p>
+                                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                          {visitesTriees.map(({ nb, count }) => (
+                                            <span 
+                                              key={nb} 
+                                              className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                                nb >= 12 ? 'bg-purple-500/20 text-purple-400' :
+                                                nb >= 6 ? 'bg-blue-500/20 text-blue-400' :
+                                                nb >= 4 ? 'bg-green-500/20 text-green-400' :
+                                                nb >= 2 ? 'bg-yellow-500/20 text-yellow-400' :
+                                                'bg-gray-500/20 text-gray-400'
+                                              }`}
+                                            >
+                                              {count}×{nb}v/an
+                                            </span>
+                                          ))}
+                                        </div>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -3551,9 +3579,6 @@ export function ParcAscenseursPage() {
                                             {asc.en_arret && (
                                               <Badge variant="red" className="text-[10px] animate-pulse">Arrêt</Badge>
                                             )}
-                                            {!asc.type_planning && (
-                                              <Badge variant="gray" className="text-[10px]">HC</Badge>
-                                            )}
                                           </div>
                                           <p className="text-sm text-[var(--text-muted)] truncate">
                                             {asc.adresse}, {asc.ville}
@@ -3561,10 +3586,11 @@ export function ParcAscenseursPage() {
                                         </div>
                                         
                                         <div className="text-right flex-shrink-0">
-                                          {asc.type_planning && (
-                                            <Badge variant="green" className="text-[10px]">
-                                              {asc.type_planning}
+                                          {asc.nb_visites_an > 0 && (
+                                            <Badge variant="blue" className="text-[10px]">
+                                              {asc.nb_visites_an} vis/an
                                             </Badge>
+                                          )}
                                           )}
                                         </div>
                                       </div>
