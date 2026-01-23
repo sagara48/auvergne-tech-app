@@ -4481,7 +4481,7 @@ export function ParcAscenseursPage() {
       {/* Modal planning de la tournée */}
       {tourneePlanningModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setTourneePlanningModal(null)}>
-          <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-[var(--border-primary)] flex items-center justify-between">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-blue-400" />
@@ -4493,255 +4493,155 @@ export function ParcAscenseursPage() {
             </div>
             <div className="p-4 overflow-y-auto max-h-[calc(90vh-80px)]">
               {(() => {
-                // Planning basé sur un cycle de 6 semaines, répété 9 fois = 54 semaines
+                // La tournée entière est effectuée toutes les 6 semaines
+                // 54 semaines / 6 = 9 passages par an
                 const CYCLE_WEEKS = 6;
-                const NB_CYCLES = 9;
-                const TOTAL_WEEKS = CYCLE_WEEKS * NB_CYCLES; // 54 semaines
-                const VISITES_PAR_AN = 9; // 1 visite par cycle
+                const NB_PASSAGES = 9;
+                
+                // La semaine de départ dans le cycle dépend du numéro de tournée (ordre2)
+                // Tournée 1 → S1, Tournée 2 → S2, etc.
+                const semaineDepart = ((tourneePlanningModal.ordre - 1) % CYCLE_WEEKS) + 1;
+                
+                // Calculer les 9 semaines de passage
+                const semainesPassage: number[] = [];
+                for (let i = 0; i < NB_PASSAGES; i++) {
+                  semainesPassage.push(semaineDepart + (i * CYCLE_WEEKS));
+                }
                 
                 // Obtenir le numéro de semaine actuel
                 const now = new Date();
                 const startOfYear = new Date(now.getFullYear(), 0, 1);
                 const currentWeek = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7);
-                const currentYear = now.getFullYear();
                 
-                // Calculer dans quel cycle on se trouve (1-9)
-                const currentCycle = Math.min(Math.ceil(currentWeek / CYCLE_WEEKS), NB_CYCLES);
-                // Semaine dans le cycle actuel (1-6)
-                const weekInCurrentCycle = ((currentWeek - 1) % CYCLE_WEEKS) + 1;
-                
-                // Répartir équitablement les ascenseurs sur les 6 semaines du cycle
-                const nbAscenseurs = tourneePlanningModal.ascenseurs.length;
-                const ascenseursParSemaine = Math.ceil(nbAscenseurs / CYCLE_WEEKS);
-                
-                // Attribuer une semaine du cycle à chaque ascenseur
-                const planningParSemaineCycle: Record<number, any[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
-                
-                tourneePlanningModal.ascenseurs.forEach((asc: any, index: number) => {
-                  // Répartition équilibrée : ascenseur 0 -> S1, asc 1 -> S2, ... asc 6 -> S1, etc.
-                  const semaineInCycle = (index % CYCLE_WEEKS) + 1;
-                  planningParSemaineCycle[semaineInCycle].push({
-                    ...asc,
-                    semaineInCycle
-                  });
-                });
-                
-                // Générer le planning complet sur 54 semaines
-                const planningParSemaine: Record<number, any[]> = {};
-                for (let s = 1; s <= TOTAL_WEEKS; s++) {
-                  const semaineInCycle = ((s - 1) % CYCLE_WEEKS) + 1;
-                  planningParSemaine[s] = planningParSemaineCycle[semaineInCycle].map(asc => ({
-                    ...asc,
-                    semaine: s,
-                    cycle: Math.ceil(s / CYCLE_WEEKS)
-                  }));
-                }
+                // Trouver le prochain passage
+                const prochainPassage = semainesPassage.find(s => s >= currentWeek) || semainesPassage[0];
+                const passagesEffectues = semainesPassage.filter(s => s < currentWeek).length;
                 
                 // Statistiques
-                const totalVisitesAn = nbAscenseurs * VISITES_PAR_AN;
-                const moyenneParCycle = nbAscenseurs;
-                const moyenneParSemaine = (nbAscenseurs / CYCLE_WEEKS).toFixed(1);
+                const nbAscenseurs = tourneePlanningModal.ascenseurs.length;
+                const totalVisitesAn = nbAscenseurs * NB_PASSAGES;
                 
                 return (
                   <div className="space-y-6">
-                    {/* Info cycle */}
-                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                      <p className="text-sm text-blue-400">
-                        <strong>Cycle de {CYCLE_WEEKS} semaines</strong> × {NB_CYCLES} cycles = <strong>{TOTAL_WEEKS} semaines/an</strong>
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)] mt-1">
-                        Chaque ascenseur est visité <strong>1 fois par cycle</strong> = <strong>{VISITES_PAR_AN} visites/an</strong>
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)] mt-1">
-                        Aujourd'hui : <strong>Semaine {currentWeek}</strong> (Cycle {currentCycle}, S{weekInCurrentCycle} du cycle)
-                      </p>
+                    {/* Info principale */}
+                    <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-lg font-semibold text-blue-400">
+                            Tournée toutes les {CYCLE_WEEKS} semaines
+                          </p>
+                          <p className="text-sm text-[var(--text-muted)] mt-1">
+                            {NB_PASSAGES} passages/an × {nbAscenseurs} ascenseurs = <strong>{totalVisitesAn} visites/an</strong>
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-[var(--text-muted)]">Semaine actuelle</p>
+                          <p className="text-2xl font-bold">S{currentWeek}</p>
+                        </div>
+                      </div>
                     </div>
                     
-                    {/* Statistiques globales */}
-                    <div className="grid grid-cols-4 gap-4">
+                    {/* Statistiques */}
+                    <div className="grid grid-cols-4 gap-3">
                       <Card className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border-blue-500/30">
-                        <CardBody className="p-4 text-center">
+                        <CardBody className="p-3 text-center">
                           <p className="text-2xl font-bold text-blue-400">{nbAscenseurs}</p>
                           <p className="text-xs text-[var(--text-muted)]">Ascenseurs</p>
                         </CardBody>
                       </Card>
                       <Card className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border-purple-500/30">
-                        <CardBody className="p-4 text-center">
-                          <p className="text-2xl font-bold text-purple-400">{totalVisitesAn}</p>
-                          <p className="text-xs text-[var(--text-muted)]">Visites/an total</p>
+                        <CardBody className="p-3 text-center">
+                          <p className="text-2xl font-bold text-purple-400">{NB_PASSAGES}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Passages/an</p>
                         </CardBody>
                       </Card>
                       <Card className="bg-gradient-to-br from-green-500/20 to-green-600/10 border-green-500/30">
-                        <CardBody className="p-4 text-center">
-                          <p className="text-2xl font-bold text-green-400">{moyenneParCycle}</p>
-                          <p className="text-xs text-[var(--text-muted)]">Visites/cycle</p>
+                        <CardBody className="p-3 text-center">
+                          <p className="text-2xl font-bold text-green-400">{passagesEffectues}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Effectués</p>
                         </CardBody>
                       </Card>
                       <Card className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 border-orange-500/30">
-                        <CardBody className="p-4 text-center">
-                          <p className="text-2xl font-bold text-orange-400">{moyenneParSemaine}</p>
-                          <p className="text-xs text-[var(--text-muted)]">Moy. visites/sem.</p>
+                        <CardBody className="p-3 text-center">
+                          <p className="text-2xl font-bold text-orange-400">S{prochainPassage}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Prochain</p>
                         </CardBody>
                       </Card>
                     </div>
                     
-                    {/* Répartition sur le cycle de 6 semaines */}
+                    {/* Calendrier des 9 passages */}
                     <Card>
                       <CardBody className="p-4">
-                        <h3 className="font-semibold mb-3">Répartition sur le cycle de {CYCLE_WEEKS} semaines</h3>
-                        <div className="grid grid-cols-6 gap-2">
-                          {[1, 2, 3, 4, 5, 6].map(semaine => {
-                            const ascenseursSemaine = planningParSemaineCycle[semaine] || [];
-                            const isCurrent = semaine === weekInCurrentCycle;
-                            return (
-                              <div 
-                                key={semaine}
-                                className={`p-3 rounded-lg text-center ${
-                                  isCurrent 
-                                    ? 'bg-blue-500/30 ring-2 ring-blue-500' 
-                                    : 'bg-[var(--bg-tertiary)]'
-                                }`}
-                              >
-                                <p className="text-lg font-bold">S{semaine}</p>
-                                <p className={`text-2xl font-bold ${isCurrent ? 'text-blue-400' : 'text-[var(--text-primary)]'}`}>
-                                  {ascenseursSemaine.length}
-                                </p>
-                                <p className="text-xs text-[var(--text-muted)]">ascenseur{ascenseursSemaine.length > 1 ? 's' : ''}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </CardBody>
-                    </Card>
-                    
-                    {/* Calendrier par cycles */}
-                    <Card>
-                      <CardBody className="p-4">
-                        <h3 className="font-semibold mb-3">Planning annuel ({NB_CYCLES} cycles)</h3>
-                        <div className="space-y-3">
-                          {Array.from({ length: NB_CYCLES }, (_, cycleIdx) => {
-                            const cycleNum = cycleIdx + 1;
-                            const startWeek = (cycleIdx * CYCLE_WEEKS) + 1;
-                            const endWeek = startWeek + CYCLE_WEEKS - 1;
-                            const isCurrent = cycleNum === currentCycle;
-                            const isPast = cycleNum < currentCycle;
+                        <h3 className="font-semibold mb-3">Calendrier des {NB_PASSAGES} passages</h3>
+                        <div className="grid grid-cols-9 gap-2">
+                          {semainesPassage.map((semaine, index) => {
+                            const isPast = semaine < currentWeek;
+                            const isCurrent = semaine === currentWeek;
+                            const isNext = semaine === prochainPassage && !isCurrent;
                             
                             return (
                               <div 
-                                key={cycleNum}
-                                className={`p-3 rounded-lg border ${
-                                  isCurrent ? 'border-blue-500 bg-blue-500/10' :
-                                  isPast ? 'border-[var(--border-primary)] opacity-60' :
-                                  'border-[var(--border-primary)]'
+                                key={index}
+                                className={`p-3 rounded-lg text-center ${
+                                  isCurrent ? 'bg-blue-500 text-white ring-2 ring-blue-300' :
+                                  isNext ? 'bg-orange-500/20 border-2 border-orange-500' :
+                                  isPast ? 'bg-green-500/20 text-green-400' :
+                                  'bg-[var(--bg-tertiary)]'
                                 }`}
                               >
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`font-semibold ${isCurrent ? 'text-blue-400' : ''}`}>
-                                      Cycle {cycleNum}
-                                    </span>
-                                    <span className="text-xs text-[var(--text-muted)]">
-                                      (S{startWeek} → S{endWeek})
-                                    </span>
-                                    {isCurrent && <Badge variant="blue" className="text-[10px]">En cours</Badge>}
-                                    {isPast && <Badge variant="green" className="text-[10px]">Terminé</Badge>}
-                                  </div>
-                                  <Badge variant="purple">
-                                    {nbAscenseurs} visite{nbAscenseurs > 1 ? 's' : ''}
-                                  </Badge>
-                                </div>
-                                
-                                <div className="grid grid-cols-6 gap-1">
-                                  {Array.from({ length: CYCLE_WEEKS }, (_, weekIdx) => {
-                                    const weekNum = startWeek + weekIdx;
-                                    const semaineInCycle = weekIdx + 1;
-                                    const visites = planningParSemaineCycle[semaineInCycle] || [];
-                                    const isCurrentWeek = weekNum === currentWeek;
-                                    const isPastWeek = weekNum < currentWeek;
-                                    
-                                    return (
-                                      <div 
-                                        key={weekNum}
-                                        className={`p-2 rounded text-center text-xs ${
-                                          isCurrentWeek ? 'bg-blue-500/30 ring-1 ring-blue-500' :
-                                          isPastWeek ? 'bg-green-500/10 opacity-60' :
-                                          visites.length > 0 ? 'bg-[var(--bg-tertiary)]' : 'bg-[var(--bg-secondary)]'
-                                        }`}
-                                      >
-                                        <p className="font-medium">S{weekNum}</p>
-                                        <p className={`font-bold ${isCurrentWeek ? 'text-blue-400' : isPastWeek ? 'text-green-400' : ''}`}>
-                                          {visites.length}
-                                        </p>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
+                                <p className="text-xs text-opacity-70 mb-1">
+                                  {isPast ? '✓' : isCurrent ? '●' : isNext ? '→' : '○'}
+                                </p>
+                                <p className="text-lg font-bold">S{semaine}</p>
+                                <p className="text-[10px] opacity-70">Pass. {index + 1}</p>
                               </div>
                             );
                           })}
                         </div>
+                        
+                        {/* Légende */}
+                        <div className="flex items-center gap-4 mt-4 text-xs text-[var(--text-muted)]">
+                          <span className="flex items-center gap-1">
+                            <span className="w-3 h-3 rounded bg-green-500/30"></span> Effectué
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-3 h-3 rounded bg-blue-500"></span> Cette semaine
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-3 h-3 rounded border-2 border-orange-500"></span> Prochain
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-3 h-3 rounded bg-[var(--bg-tertiary)]"></span> À venir
+                          </span>
+                        </div>
                       </CardBody>
                     </Card>
                     
-                    {/* Détail par ascenseur */}
+                    {/* Liste des ascenseurs */}
                     <Card>
                       <CardBody className="p-4">
                         <h3 className="font-semibold mb-3 flex items-center gap-2">
                           <Wrench className="w-4 h-4 text-[var(--text-muted)]" />
-                          Détail par ascenseur ({nbAscenseurs})
+                          Ascenseurs de la tournée ({nbAscenseurs})
                         </h3>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b border-[var(--border-primary)]">
-                                <th className="text-left p-2">Code</th>
-                                <th className="text-left p-2">Adresse</th>
-                                <th className="text-center p-2">Sem. cycle</th>
-                                <th className="text-left p-2">Semaines de visite (9 visites/an)</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {tourneePlanningModal.ascenseurs.map((asc: any, index: number) => {
-                                const semaineInCycle = (index % CYCLE_WEEKS) + 1;
-                                
-                                // Générer les 9 semaines de visite
-                                const semaines: number[] = [];
-                                for (let cycle = 0; cycle < NB_CYCLES; cycle++) {
-                                  semaines.push((cycle * CYCLE_WEEKS) + semaineInCycle);
-                                }
-                                
-                                return (
-                                  <tr key={asc.id} className="border-b border-[var(--border-primary)] hover:bg-[var(--bg-secondary)]">
-                                    <td className="p-2 font-medium">{asc.code_appareil}</td>
-                                    <td className="p-2 text-[var(--text-muted)] truncate max-w-[200px]">{asc.adresse}, {asc.ville}</td>
-                                    <td className="p-2 text-center">
-                                      <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                        semaineInCycle === weekInCurrentCycle ? 'bg-blue-500 text-white' : 'bg-[var(--bg-tertiary)]'
-                                      }`}>
-                                        S{semaineInCycle}
-                                      </span>
-                                    </td>
-                                    <td className="p-2">
-                                      <div className="flex flex-wrap gap-1">
-                                        {semaines.map((s, i) => (
-                                          <span 
-                                            key={i} 
-                                            className={`px-1.5 py-0.5 rounded text-xs ${
-                                              s === currentWeek ? 'bg-blue-500 text-white' :
-                                              s < currentWeek ? 'bg-green-500/20 text-green-400' :
-                                              'bg-[var(--bg-tertiary)]'
-                                            }`}
-                                          >
-                                            {s}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                          {tourneePlanningModal.ascenseurs.map((asc: any, index: number) => (
+                            <div 
+                              key={asc.id}
+                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-secondary)]"
+                            >
+                              <span className="w-6 h-6 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-xs font-bold">
+                                {index + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate">{asc.code_appareil}</p>
+                                <p className="text-xs text-[var(--text-muted)] truncate">{asc.adresse}, {asc.ville}</p>
+                              </div>
+                              {asc.en_arret && (
+                                <Badge variant="red" className="text-[10px]">Arrêt</Badge>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </CardBody>
                     </Card>
