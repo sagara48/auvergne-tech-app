@@ -2414,18 +2414,20 @@ export function ParcAscenseursPage() {
     failed: number;
     lastCode?: string;
     lastSuccess?: boolean;
+    failures?: Array<{ id: number; code: string; adresse: string; ville: string; error: string }>;
   }>({ isRunning: false, current: 0, total: 0, success: 0, failed: 0 });
   
   const queryClient = useQueryClient();
   
   // Fonction de géocodage en masse
-  const runGeocoding = async () => {
+  const runGeocoding = async (forceAll: boolean = false) => {
     setGeocodingProgress({
       isRunning: true,
       current: 0,
       total: 0,
       success: 0,
-      failed: 0
+      failed: 0,
+      failures: []
     });
     
     try {
@@ -2440,7 +2442,8 @@ export function ParcAscenseursPage() {
           failedCount++;
         }
         
-        setGeocodingProgress({
+        setGeocodingProgress(prev => ({
+          ...prev,
           isRunning: true,
           current,
           total,
@@ -2448,8 +2451,8 @@ export function ParcAscenseursPage() {
           failed: failedCount,
           lastCode: lastResult.code,
           lastSuccess: lastResult.success
-        });
-      });
+        }));
+      }, forceAll);
       
       setGeocodingProgress({
         isRunning: false,
@@ -2458,7 +2461,8 @@ export function ParcAscenseursPage() {
         success: result.success,
         failed: result.failed,
         lastCode: undefined,
-        lastSuccess: undefined
+        lastSuccess: undefined,
+        failures: result.failures || []
       });
       
       // Rafraîchir les données
@@ -4940,7 +4944,7 @@ export function ParcAscenseursPage() {
       {/* Modal géocodage GPS */}
       {showGeocodingModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => !geocodingProgress.isRunning && setShowGeocodingModal(false)}>
-          <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-[var(--border-primary)] flex items-center justify-between">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Globe className="w-5 h-5 text-blue-400" />
@@ -4953,7 +4957,7 @@ export function ParcAscenseursPage() {
               )}
             </div>
             
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
               {!geocodingProgress.isRunning && geocodingProgress.total === 0 ? (
                 <>
                   {/* État initial */}
@@ -4962,10 +4966,10 @@ export function ParcAscenseursPage() {
                       <MapPin className="w-8 h-8 text-blue-400" />
                     </div>
                     <p className="text-[var(--text-secondary)] mb-2">
-                      Récupérer les coordonnées GPS de tous les ascenseurs sans localisation.
+                      Récupérer les coordonnées GPS des ascenseurs.
                     </p>
                     <p className="text-sm text-[var(--text-muted)]">
-                      Utilise l'API Adresse du gouvernement français (gratuite).
+                      Utilise l'API Adresse + Nominatim (OpenStreetMap) en fallback.
                     </p>
                   </div>
                   
@@ -4993,14 +4997,37 @@ export function ParcAscenseursPage() {
                     );
                   })()}
                   
-                  <Button
-                    variant="primary"
-                    className="w-full"
-                    onClick={runGeocoding}
-                  >
-                    <Globe className="w-4 h-4 mr-2" />
-                    Lancer le géocodage
-                  </Button>
+                  {/* Stratégies utilisées */}
+                  <div className="mb-6 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm">
+                    <p className="font-semibold text-blue-400 mb-2">Stratégies de géocodage :</p>
+                    <ol className="list-decimal list-inside text-[var(--text-muted)] space-y-1 text-xs">
+                      <li>Adresse complète + ville + code postal</li>
+                      <li>Numéro + rue + ville</li>
+                      <li>Rue + ville (sans numéro)</li>
+                      <li>Nom du bâtiment + ville</li>
+                      <li>Ville seule (approximatif)</li>
+                      <li>Nominatim (OpenStreetMap) en fallback</li>
+                    </ol>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <Button
+                      variant="primary"
+                      className="flex-1"
+                      onClick={() => runGeocoding(false)}
+                    >
+                      <Globe className="w-4 h-4 mr-2" />
+                      Géocoder les manquants
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="flex-1"
+                      onClick={() => runGeocoding(true)}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Forcer tout
+                    </Button>
+                  </div>
                 </>
               ) : geocodingProgress.isRunning ? (
                 <>
@@ -5060,7 +5087,7 @@ export function ParcAscenseursPage() {
                   </div>
                   
                   {/* Résultats */}
-                  <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="p-4 bg-green-500/10 rounded-lg text-center border border-green-500/20">
                       <p className="text-3xl font-bold text-green-400">{geocodingProgress.success}</p>
                       <p className="text-sm text-[var(--text-muted)]">Ascenseurs géocodés</p>
@@ -5071,16 +5098,112 @@ export function ParcAscenseursPage() {
                     </div>
                   </div>
                   
-                  <Button
-                    variant="primary"
-                    className="w-full"
-                    onClick={() => {
-                      setShowGeocodingModal(false);
-                      setGeocodingProgress({ isRunning: false, current: 0, total: 0, success: 0, failed: 0 });
-                    }}
-                  >
-                    Fermer
-                  </Button>
+                  {/* Liste des échecs avec options */}
+                  {geocodingProgress.failures && geocodingProgress.failures.length > 0 && (
+                    <div className="mb-4">
+                      <p className="font-semibold mb-2 flex items-center gap-2 text-red-400">
+                        <AlertTriangle className="w-4 h-4" />
+                        Adresses non trouvées ({geocodingProgress.failures.length})
+                      </p>
+                      <div className="max-h-64 overflow-y-auto space-y-2 bg-[var(--bg-secondary)] rounded-lg p-2">
+                        {geocodingProgress.failures.map((f, idx) => (
+                          <div key={f.id || idx} className="p-2 bg-[var(--bg-tertiary)] rounded text-sm">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium">{f.code}</span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    // Ouvrir Google Maps pour chercher l'adresse
+                                    const query = encodeURIComponent(`${f.adresse}, ${f.ville}, France`);
+                                    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+                                  }}
+                                  className="text-xs text-blue-400 hover:underline"
+                                >
+                                  🗺️ Maps
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    // Demander les coordonnées manuellement
+                                    const coords = prompt(
+                                      `Saisir les coordonnées GPS pour ${f.code}:\n(format: latitude, longitude)\nEx: 45.7772, 3.0870`,
+                                      ''
+                                    );
+                                    if (coords) {
+                                      const match = coords.match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
+                                      if (match) {
+                                        const lat = parseFloat(match[1]);
+                                        const lng = parseFloat(match[2]);
+                                        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                                          // Mettre à jour en base
+                                          const { error } = await supabase
+                                            .from('parc_ascenseurs')
+                                            .update({
+                                              latitude: lat,
+                                              longitude: lng,
+                                              geocoded_at: new Date().toISOString()
+                                            })
+                                            .eq('id', f.id);
+                                          
+                                          if (error) {
+                                            toast.error('Erreur lors de la mise à jour');
+                                          } else {
+                                            toast.success(`GPS mis à jour pour ${f.code}`);
+                                            // Retirer de la liste des échecs
+                                            setGeocodingProgress(prev => ({
+                                              ...prev,
+                                              failures: prev.failures?.filter(x => x.id !== f.id),
+                                              success: prev.success + 1,
+                                              failed: prev.failed - 1
+                                            }));
+                                          }
+                                        } else {
+                                          toast.error('Coordonnées invalides');
+                                        }
+                                      } else {
+                                        toast.error('Format invalide. Utilisez: latitude, longitude');
+                                      }
+                                    }
+                                  }}
+                                  className="text-xs text-green-400 hover:underline"
+                                >
+                                  ✏️ Saisir GPS
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-xs text-[var(--text-muted)] truncate">
+                              {f.adresse}, {f.ville}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] mt-2">
+                        💡 Cliquez sur "Maps" pour localiser l'adresse, puis "Saisir GPS" pour entrer les coordonnées manuellement.
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="flex gap-3">
+                    <Button
+                      variant="secondary"
+                      className="flex-1"
+                      onClick={() => {
+                        setGeocodingProgress({ isRunning: false, current: 0, total: 0, success: 0, failed: 0, failures: [] });
+                      }}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Relancer
+                    </Button>
+                    <Button
+                      variant="primary"
+                      className="flex-1"
+                      onClick={() => {
+                        setShowGeocodingModal(false);
+                        setGeocodingProgress({ isRunning: false, current: 0, total: 0, success: 0, failed: 0, failures: [] });
+                      }}
+                    >
+                      Fermer
+                    </Button>
+                  </div>
                 </>
               )}
             </div>
