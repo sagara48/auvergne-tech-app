@@ -4511,68 +4511,116 @@ export function ParcAscenseursPage() {
                 const startOfYear = new Date(now.getFullYear(), 0, 1);
                 const currentWeek = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7);
                 
-                // Fonction pour calculer les semaines de visite selon nb_visites_an
-                const getSemainesVisite = (nbVisites: number, offset: number = 0): number[] => {
-                  if (nbVisites >= 6) {
-                    // 6+ visites = tous les passages (9)
+                // ========== REGROUPEMENT PAR SITE ==========
+                // Clé de site = adresse normalisée + ville (ou code_client si disponible)
+                const getSiteKey = (asc: any): string => {
+                  // Priorité au code_client s'il existe
+                  if (asc.code_client) {
+                    return `client_${asc.code_client}`;
+                  }
+                  // Sinon, utiliser adresse + ville normalisées
+                  const adresse = (asc.adresse || '').toLowerCase().trim().replace(/\s+/g, ' ');
+                  const ville = (asc.ville || '').toLowerCase().trim();
+                  return `${adresse}_${ville}`;
+                };
+                
+                // Regrouper les ascenseurs par site
+                const siteMap: Record<string, any[]> = {};
+                tourneePlanningModal.ascenseurs.forEach((asc: any) => {
+                  const key = getSiteKey(asc);
+                  if (!siteMap[key]) siteMap[key] = [];
+                  siteMap[key].push(asc);
+                });
+                
+                // Convertir en tableau de sites
+                const sites = Object.entries(siteMap).map(([key, ascenseurs]) => {
+                  // La fréquence du site = fréquence MAX des ascenseurs (pour ne pas manquer de visites)
+                  const maxVisites = Math.max(...ascenseurs.map((a: any) => a.nb_visites_an || 9));
+                  const frequence = maxVisites >= 6 ? 9 : maxVisites >= 3 ? 4 : 2;
+                  
+                  return {
+                    key,
+                    ascenseurs,
+                    adresse: ascenseurs[0].adresse,
+                    ville: ascenseurs[0].ville,
+                    codeClient: ascenseurs[0].code_client,
+                    nbAscenseurs: ascenseurs.length,
+                    frequence,
+                    maxVisites
+                  };
+                });
+                
+                // Trier les sites par fréquence décroissante puis par nombre d'ascenseurs
+                sites.sort((a, b) => b.frequence - a.frequence || b.nbAscenseurs - a.nbAscenseurs);
+                
+                // ========== CALCUL DES SEMAINES DE VISITE PAR SITE ==========
+                // Fonction pour calculer les semaines selon la fréquence
+                const getSemainesVisite = (frequence: number, offset: number = 0): number[] => {
+                  if (frequence === 9) {
                     return [...semainesPassage];
-                  } else if (nbVisites >= 4) {
-                    // 4 visites = passages 1, 3, 5, 7 (ou décalés selon offset)
+                  } else if (frequence === 4) {
+                    // 4 visites réparties : passages 1, 3, 5, 7 (décalés selon offset)
                     const indices = [0, 2, 4, 7].map(i => (i + offset) % NB_PASSAGES);
                     return indices.map(i => semainesPassage[i]).sort((a, b) => a - b);
                   } else {
-                    // 2 visites = passages 1, 5 (ou décalés selon offset)
+                    // 2 visites : passages 1, 5 (décalés selon offset)
                     const indices = [0, 4].map(i => (i + offset) % NB_PASSAGES);
                     return indices.map(i => semainesPassage[i]).sort((a, b) => a - b);
                   }
                 };
                 
-                // Compter les ascenseurs par type de visite
-                const asc9 = tourneePlanningModal.ascenseurs.filter((a: any) => (a.nb_visites_an || 9) >= 6);
-                const asc4 = tourneePlanningModal.ascenseurs.filter((a: any) => (a.nb_visites_an || 9) >= 3 && (a.nb_visites_an || 9) < 6);
-                const asc2 = tourneePlanningModal.ascenseurs.filter((a: any) => (a.nb_visites_an || 9) < 3);
-                
-                // Compteurs pour répartir équitablement les 4 et 2 visites
+                // Compteurs pour répartir équitablement les sites 4 et 2 visites
                 let offset4 = 0;
                 let offset2 = 0;
                 
-                // Calculer le planning de chaque ascenseur
-                const ascenseursAvecPlanning = tourneePlanningModal.ascenseurs.map((asc: any) => {
-                  const nbVisites = asc.nb_visites_an || 9;
+                // Calculer les semaines pour chaque site
+                const sitesAvecPlanning = sites.map(site => {
                   let semaines: number[];
-                  
-                  if (nbVisites >= 6) {
-                    semaines = getSemainesVisite(nbVisites);
-                  } else if (nbVisites >= 3) {
-                    semaines = getSemainesVisite(nbVisites, offset4);
+                  if (site.frequence === 9) {
+                    semaines = getSemainesVisite(9);
+                  } else if (site.frequence === 4) {
+                    semaines = getSemainesVisite(4, offset4);
                     offset4++;
                   } else {
-                    semaines = getSemainesVisite(nbVisites, offset2);
+                    semaines = getSemainesVisite(2, offset2);
                     offset2++;
                   }
                   
-                  return { ...asc, semaines, nbVisitesEffectif: semaines.length };
+                  return {
+                    ...site,
+                    semaines,
+                    // Marquer chaque ascenseur du site avec les mêmes semaines
+                    ascenseurs: site.ascenseurs.map((asc: any) => ({
+                      ...asc,
+                      semaines,
+                      frequenceEffective: site.frequence
+                    }))
+                  };
                 });
                 
-                // Calculer les visites par passage
-                const visitesParPassage: Record<number, any[]> = {};
-                semainesPassage.forEach(s => { visitesParPassage[s] = []; });
+                // Calculer les visites par passage (compte les ascenseurs, pas les sites)
+                const visitesParPassage: Record<number, { sites: any[], ascenseurs: any[] }> = {};
+                semainesPassage.forEach(s => { visitesParPassage[s] = { sites: [], ascenseurs: [] }; });
                 
-                ascenseursAvecPlanning.forEach((asc: any) => {
-                  asc.semaines.forEach((s: number) => {
+                sitesAvecPlanning.forEach(site => {
+                  site.semaines.forEach((s: number) => {
                     if (visitesParPassage[s]) {
-                      visitesParPassage[s].push(asc);
+                      visitesParPassage[s].sites.push(site);
+                      visitesParPassage[s].ascenseurs.push(...site.ascenseurs);
                     }
                   });
                 });
                 
-                // Trouver le prochain passage
-                const prochainPassage = semainesPassage.find(s => s >= currentWeek) || semainesPassage[0];
-                const passagesEffectues = semainesPassage.filter(s => s < currentWeek).length;
-                
                 // Statistiques
+                const nbSites = sites.length;
                 const nbAscenseurs = tourneePlanningModal.ascenseurs.length;
-                const totalVisitesAn = ascenseursAvecPlanning.reduce((sum: number, a: any) => sum + a.nbVisitesEffectif, 0);
+                const sites9 = sites.filter(s => s.frequence === 9);
+                const sites4 = sites.filter(s => s.frequence === 4);
+                const sites2 = sites.filter(s => s.frequence === 2);
+                const totalVisitesAn = sitesAvecPlanning.reduce((sum, s) => sum + s.ascenseurs.length * s.frequence, 0);
+                
+                // Prochain passage
+                const prochainPassage = semainesPassage.find(s => s >= currentWeek) || semainesPassage[0];
                 
                 return (
                   <div className="space-y-6">
@@ -4584,7 +4632,7 @@ export function ParcAscenseursPage() {
                             Tournée toutes les {CYCLE_WEEKS} semaines
                           </p>
                           <p className="text-sm text-[var(--text-muted)] mt-1">
-                            {NB_PASSAGES} passages/an • Semaine de passage : <strong>S{semaineDepart}</strong> du cycle
+                            <strong>{nbSites} sites</strong> • {nbAscenseurs} ascenseurs • {totalVisitesAn} visites/an
                           </p>
                         </div>
                         <div className="text-right">
@@ -4594,38 +4642,38 @@ export function ParcAscenseursPage() {
                       </div>
                     </div>
                     
-                    {/* Répartition par type de visite */}
+                    {/* Répartition par fréquence de visite */}
                     <div className="grid grid-cols-3 gap-3">
-                      <Card className={`border-2 ${asc9.length > 0 ? 'border-purple-500/50 bg-purple-500/10' : 'border-[var(--border-primary)]'}`}>
+                      <Card className={`border-2 ${sites9.length > 0 ? 'border-purple-500/50 bg-purple-500/10' : 'border-[var(--border-primary)]'}`}>
                         <CardBody className="p-3">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-2xl font-bold text-purple-400">{asc9.length}</p>
-                              <p className="text-xs text-[var(--text-muted)]">ascenseurs</p>
+                              <p className="text-2xl font-bold text-purple-400">{sites9.length}</p>
+                              <p className="text-xs text-[var(--text-muted)]">sites ({sites9.reduce((s, x) => s + x.nbAscenseurs, 0)} asc.)</p>
                             </div>
                             <Badge variant="purple" className="text-sm">9 vis/an</Badge>
                           </div>
                           <p className="text-[10px] text-[var(--text-muted)] mt-1">Tous les passages</p>
                         </CardBody>
                       </Card>
-                      <Card className={`border-2 ${asc4.length > 0 ? 'border-blue-500/50 bg-blue-500/10' : 'border-[var(--border-primary)]'}`}>
+                      <Card className={`border-2 ${sites4.length > 0 ? 'border-blue-500/50 bg-blue-500/10' : 'border-[var(--border-primary)]'}`}>
                         <CardBody className="p-3">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-2xl font-bold text-blue-400">{asc4.length}</p>
-                              <p className="text-xs text-[var(--text-muted)]">ascenseurs</p>
+                              <p className="text-2xl font-bold text-blue-400">{sites4.length}</p>
+                              <p className="text-xs text-[var(--text-muted)]">sites ({sites4.reduce((s, x) => s + x.nbAscenseurs, 0)} asc.)</p>
                             </div>
                             <Badge variant="blue" className="text-sm">4 vis/an</Badge>
                           </div>
                           <p className="text-[10px] text-[var(--text-muted)] mt-1">1 passage sur 2</p>
                         </CardBody>
                       </Card>
-                      <Card className={`border-2 ${asc2.length > 0 ? 'border-yellow-500/50 bg-yellow-500/10' : 'border-[var(--border-primary)]'}`}>
+                      <Card className={`border-2 ${sites2.length > 0 ? 'border-yellow-500/50 bg-yellow-500/10' : 'border-[var(--border-primary)]'}`}>
                         <CardBody className="p-3">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-2xl font-bold text-yellow-400">{asc2.length}</p>
-                              <p className="text-xs text-[var(--text-muted)]">ascenseurs</p>
+                              <p className="text-2xl font-bold text-yellow-400">{sites2.length}</p>
+                              <p className="text-xs text-[var(--text-muted)]">sites ({sites2.reduce((s, x) => s + x.nbAscenseurs, 0)} asc.)</p>
                             </div>
                             <Badge variant="yellow" className="text-sm">2 vis/an</Badge>
                           </div>
@@ -4634,7 +4682,7 @@ export function ParcAscenseursPage() {
                       </Card>
                     </div>
                     
-                    {/* Calendrier des 9 passages avec nb visites */}
+                    {/* Calendrier des 9 passages */}
                     <Card>
                       <CardBody className="p-4">
                         <h3 className="font-semibold mb-3">Calendrier des {NB_PASSAGES} passages</h3>
@@ -4643,7 +4691,9 @@ export function ParcAscenseursPage() {
                             const isPast = semaine < currentWeek;
                             const isCurrent = semaine === currentWeek;
                             const isNext = semaine === prochainPassage && !isCurrent;
-                            const nbVisites = visitesParPassage[semaine]?.length || 0;
+                            const data = visitesParPassage[semaine];
+                            const nbSitesPassage = data?.sites.length || 0;
+                            const nbAscPassage = data?.ascenseurs.length || 0;
                             
                             return (
                               <div 
@@ -4661,9 +4711,9 @@ export function ParcAscenseursPage() {
                                   isPast ? 'text-green-400' :
                                   isNext ? 'text-orange-400' : ''
                                 }`}>
-                                  {nbVisites}
+                                  {nbAscPassage}
                                 </p>
-                                <p className="text-[10px] opacity-70">asc.</p>
+                                <p className="text-[10px] opacity-70">{nbSitesPassage} site{nbSitesPassage > 1 ? 's' : ''}</p>
                               </div>
                             );
                           })}
@@ -4684,65 +4734,77 @@ export function ParcAscenseursPage() {
                       </CardBody>
                     </Card>
                     
-                    {/* Détail par ascenseur */}
+                    {/* Détail par site */}
                     <Card>
                       <CardBody className="p-4">
                         <h3 className="font-semibold mb-3 flex items-center gap-2">
-                          <Wrench className="w-4 h-4 text-[var(--text-muted)]" />
-                          Détail par ascenseur ({nbAscenseurs}) - {totalVisitesAn} visites/an total
+                          <Building2 className="w-4 h-4 text-[var(--text-muted)]" />
+                          Planning par site ({nbSites} sites)
                         </h3>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b border-[var(--border-primary)]">
-                                <th className="text-left p-2">Code</th>
-                                <th className="text-left p-2">Adresse</th>
-                                <th className="text-center p-2">Vis/an</th>
-                                <th className="text-left p-2">Semaines de visite</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {ascenseursAvecPlanning.map((asc: any) => {
-                                const nbVisites = asc.nb_visites_an || 9;
-                                const badgeVariant = nbVisites >= 6 ? 'purple' : nbVisites >= 3 ? 'blue' : 'yellow';
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                          {sitesAvecPlanning.map((site, siteIndex) => {
+                            const badgeVariant = site.frequence === 9 ? 'purple' : site.frequence === 4 ? 'blue' : 'yellow';
+                            
+                            return (
+                              <div 
+                                key={site.key}
+                                className="p-3 bg-[var(--bg-secondary)] rounded-lg"
+                              >
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-6 h-6 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                        {siteIndex + 1}
+                                      </span>
+                                      <p className="font-medium truncate">{site.adresse}</p>
+                                    </div>
+                                    <p className="text-xs text-[var(--text-muted)] ml-8">{site.ville}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <Badge variant={badgeVariant}>{site.frequence}v/an</Badge>
+                                    <span className="text-xs bg-[var(--bg-tertiary)] px-2 py-1 rounded">
+                                      {site.nbAscenseurs} asc.
+                                    </span>
+                                  </div>
+                                </div>
                                 
-                                return (
-                                  <tr key={asc.id} className="border-b border-[var(--border-primary)] hover:bg-[var(--bg-secondary)]">
-                                    <td className="p-2 font-medium">
-                                      <div className="flex items-center gap-2">
-                                        {asc.code_appareil}
-                                        {asc.en_arret && <Badge variant="red" className="text-[10px]">Arrêt</Badge>}
-                                      </div>
-                                    </td>
-                                    <td className="p-2 text-[var(--text-muted)] truncate max-w-[180px]">{asc.adresse}, {asc.ville}</td>
-                                    <td className="p-2 text-center">
-                                      <Badge variant={badgeVariant}>{asc.nbVisitesEffectif}</Badge>
-                                    </td>
-                                    <td className="p-2">
-                                      <div className="flex flex-wrap gap-1">
-                                        {asc.semaines.map((s: number, i: number) => {
-                                          const isPast = s < currentWeek;
-                                          const isCurrent = s === currentWeek;
-                                          return (
-                                            <span 
-                                              key={i} 
-                                              className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                                                isCurrent ? 'bg-blue-500 text-white' :
-                                                isPast ? 'bg-green-500/20 text-green-400' :
-                                                'bg-[var(--bg-tertiary)]'
-                                              }`}
-                                            >
-                                              S{s}
-                                            </span>
-                                          );
-                                        })}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                                {/* Ascenseurs du site */}
+                                <div className="ml-8 flex flex-wrap gap-1 mb-2">
+                                  {site.ascenseurs.map((asc: any) => (
+                                    <span 
+                                      key={asc.id}
+                                      className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                        asc.en_arret ? 'bg-red-500/20 text-red-400' : 'bg-[var(--bg-tertiary)]'
+                                      }`}
+                                    >
+                                      {asc.code_appareil}
+                                      {asc.en_arret && ' ⚠️'}
+                                    </span>
+                                  ))}
+                                </div>
+                                
+                                {/* Semaines de visite */}
+                                <div className="ml-8 flex flex-wrap gap-1">
+                                  {site.semaines.map((s: number, i: number) => {
+                                    const isPast = s < currentWeek;
+                                    const isCurrent = s === currentWeek;
+                                    return (
+                                      <span 
+                                        key={i} 
+                                        className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                          isCurrent ? 'bg-blue-500 text-white' :
+                                          isPast ? 'bg-green-500/20 text-green-400' :
+                                          'bg-[var(--bg-tertiary)]'
+                                        }`}
+                                      >
+                                        S{s}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </CardBody>
                     </Card>
