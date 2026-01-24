@@ -2,14 +2,14 @@
  * Module "Mon Catalogue" - Favoris et Dossiers de pièces détachées
  */
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Package, X, Plus, Heart, FolderPlus, Grid3X3, List,
   ChevronRight, Trash2, FolderInput, StickyNote, ExternalLink,
   Loader2, FolderHeart, Star, Zap, Truck, Building2, ShoppingCart,
   Bookmark, Tag, Box, Wrench, AlertCircle, Clock, Settings, Folder,
-  Check, Edit2
+  Check, Edit2, Copy, Globe
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import {
@@ -152,6 +152,28 @@ function NouveauDossierModal({
   );
 }
 
+// Fonction pour générer l'URL vers le site fournisseur
+function getUrlPieceFournisseur(fournisseur: string | undefined, reference: string): string | null {
+  if (!fournisseur || !reference) return null;
+  
+  const ref = encodeURIComponent(reference);
+  
+  switch (fournisseur.toUpperCase()) {
+    case 'SODIMAS':
+      // Sodimas: recherche par référence
+      return `https://my.sodimas.com/recherche?q=${ref}`;
+    case 'HAUER':
+      // Hauer (HF Répartition): recherche par référence
+      return `https://www.hfrepartition.com/catalogsearch/result/?q=${ref}`;
+    case 'MGTI':
+      // MGTI: recherche par référence
+      return `https://www.mgti.fr/?s=${ref}&post_type=product`;
+    default:
+      // Recherche Google générique
+      return `https://www.google.com/search?q=${ref}+${encodeURIComponent(fournisseur)}+ascenseur`;
+  }
+}
+
 // Modal détail pièce favorite
 function DetailFavoriModal({
   favori,
@@ -170,54 +192,178 @@ function DetailFavoriModal({
 }) {
   const [notes, setNotes] = useState(favori.favori_notes || '');
   const [editNotes, setEditNotes] = useState(false);
+  
+  // URL vers le site fournisseur
+  const urlFournisseur = getUrlPieceFournisseur(favori.fournisseur, favori.reference);
+
+  // Couleur du fournisseur
+  const getFournisseurColor = (f: string | undefined) => {
+    switch (f?.toUpperCase()) {
+      case 'HAUER': return 'purple';
+      case 'SODIMAS': return 'blue';
+      case 'MGTI': return 'orange';
+      default: return 'gray';
+    }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <Card className="w-full max-w-2xl" onClick={e => e.stopPropagation()}>
-        <CardBody>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto" onClick={onClose}>
+      <Card className="w-full max-w-3xl my-4" onClick={e => e.stopPropagation()}>
+        <CardBody className="max-h-[85vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold">Détail de la pièce</h2>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <Package className="w-6 h-6 text-blue-400" />
+              Détail de la pièce
+            </h2>
             <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
               <X className="w-5 h-5" />
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Image */}
-            <div className="aspect-square bg-[var(--bg-tertiary)] rounded-xl flex items-center justify-center overflow-hidden">
-              {favori.photo_url ? (
-                <img
-                  src={favori.photo_url}
-                  alt={favori.designation}
-                  className="max-w-[90%] max-h-[90%] object-contain"
-                  onError={e => (e.currentTarget.style.display = 'none')}
-                />
-              ) : (
-                <Package className="w-16 h-16 text-[var(--text-muted)]" />
+            {/* Colonne gauche - Image */}
+            <div className="space-y-4">
+              <div className="aspect-square bg-[var(--bg-tertiary)] rounded-xl flex items-center justify-center overflow-hidden relative">
+                {favori.photo_url ? (
+                  <img
+                    src={favori.photo_url}
+                    alt={favori.designation}
+                    className="max-w-[90%] max-h-[90%] object-contain"
+                    onError={e => (e.currentTarget.style.display = 'none')}
+                  />
+                ) : (
+                  <div className="text-center">
+                    <Package className="w-16 h-16 text-[var(--text-muted)] mx-auto" />
+                    <p className="text-sm text-[var(--text-muted)] mt-2">Pas d'image</p>
+                  </div>
+                )}
+                
+                {/* Badge source */}
+                <div className="absolute top-2 right-2">
+                  <Badge variant={favori.source === 'catalogue' ? 'blue' : 'purple'} className="text-xs">
+                    {favori.source === 'catalogue' ? '📚 Catalogue' : '👤 Personnel'}
+                  </Badge>
+                </div>
+              </div>
+              
+              {/* Bouton principal accès site fournisseur */}
+              {urlFournisseur && (
+                <a
+                  href={urlFournisseur}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full p-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold rounded-xl hover:opacity-90 transition-opacity"
+                >
+                  <ExternalLink className="w-5 h-5" />
+                  Voir sur {favori.fournisseur}
+                </a>
               )}
+              
+              {/* Liens rapides vers autres fournisseurs */}
+              <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <Globe className="w-3 h-3" />
+                  Rechercher ailleurs
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {['SODIMAS', 'HAUER', 'MGTI'].map(f => {
+                    const url = getUrlPieceFournisseur(f, favori.reference);
+                    const isActive = f === favori.fournisseur?.toUpperCase();
+                    return (
+                      <a
+                        key={f}
+                        href={url || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
+                          isActive 
+                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                            : 'bg-[var(--bg-elevated)] hover:bg-[var(--bg-card)] text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        {f}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
-            {/* Infos */}
+            {/* Colonne droite - Infos */}
             <div className="space-y-4">
+              {/* Référence et désignation */}
+              <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Référence</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-mono text-2xl font-bold text-blue-400 flex-1">{favori.reference}</p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(favori.reference);
+                      toast.success('Référence copiée !');
+                    }}
+                    className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors"
+                    title="Copier la référence"
+                  >
+                    <Copy className="w-5 h-5 text-blue-400" />
+                  </button>
+                </div>
+              </div>
+              
               <div>
-                <p className="font-mono text-xl font-bold text-blue-400">{favori.reference}</p>
-                <p className="text-[var(--text-secondary)] mt-1">{favori.designation}</p>
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Désignation</p>
+                <p className="text-lg text-[var(--text-primary)]">{favori.designation}</p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Badge variant={favori.fournisseur === 'HAUER' ? 'purple' : 'blue'}>
+              {/* Badges */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={getFournisseurColor(favori.fournisseur) as any}>
                   {favori.fournisseur || 'Non spécifié'}
                 </Badge>
-                <Badge variant="gray">{favori.source === 'catalogue' ? 'Catalogue' : 'Personnel'}</Badge>
+                <Badge variant="gray">
+                  {favori.source === 'catalogue' ? 'Catalogue officiel' : 'Ajout manuel'}
+                </Badge>
+                {favori.marque_compatible && (
+                  <Badge variant="cyan">{favori.marque_compatible}</Badge>
+                )}
+                {favori.categorie_code && (
+                  <Badge variant="amber">{favori.categorie_code}</Badge>
+                )}
               </div>
 
+              {/* Prix */}
               {favori.prix_ht && (
-                <p className="text-lg font-semibold text-green-400">{favori.prix_ht.toFixed(2)} € HT</p>
+                <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
+                  <p className="text-xs text-green-400 uppercase tracking-wide mb-1">Prix indicatif HT</p>
+                  <p className="text-2xl font-bold text-green-400">{favori.prix_ht.toFixed(2)} €</p>
+                </div>
               )}
+
+              {/* Description si disponible */}
+              {favori.description && (
+                <div>
+                  <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Description</p>
+                  <p className="text-sm text-[var(--text-secondary)]">{favori.description}</p>
+                </div>
+              )}
+
+              {/* Informations techniques */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                  <p className="text-xs text-[var(--text-muted)]">Fournisseur</p>
+                  <p className="font-semibold">{favori.fournisseur || '-'}</p>
+                </div>
+                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                  <p className="text-xs text-[var(--text-muted)]">Marque compatible</p>
+                  <p className="font-semibold">{favori.marque_compatible || '-'}</p>
+                </div>
+              </div>
 
               {/* Dossier */}
               <div>
-                <label className="text-sm text-[var(--text-secondary)] mb-1 block">Dossier</label>
+                <label className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2 block">
+                  Dossier de classement
+                </label>
                 <Select
                   value={favori.dossier_id || ''}
                   onChange={e => onDeplacer(e.target.value || null)}
@@ -229,16 +375,18 @@ function DetailFavoriModal({
                 </Select>
               </div>
 
-              {/* Notes */}
+              {/* Notes personnelles */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm text-[var(--text-secondary)]">Notes personnelles</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-[var(--text-muted)] uppercase tracking-wide">
+                    Notes personnelles
+                  </label>
                   {!editNotes && (
                     <button
                       onClick={() => setEditNotes(true)}
-                      className="text-xs text-blue-400 hover:underline"
+                      className="text-xs text-blue-400 hover:underline flex items-center gap-1"
                     >
-                      <Edit2 className="w-3 h-3 inline mr-1" />
+                      <Edit2 className="w-3 h-3" />
                       Modifier
                     </button>
                   )}
@@ -248,7 +396,7 @@ function DetailFavoriModal({
                     <Textarea
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
-                      placeholder="Ajouter une note..."
+                      placeholder="Ajouter une note (délai, stock habituel, remarques...)"
                       rows={3}
                     />
                     <div className="flex gap-2">
@@ -261,22 +409,39 @@ function DetailFavoriModal({
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-amber-400 italic">
-                    {favori.favori_notes || 'Aucune note'}
-                  </p>
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <p className="text-sm text-amber-300 italic">
+                      {favori.favori_notes || 'Aucune note - Cliquez sur Modifier pour ajouter'}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="flex justify-between mt-6 pt-4 border-t border-[var(--border-primary)]">
+          {/* Actions */}
+          <div className="flex flex-wrap justify-between gap-3 mt-6 pt-4 border-t border-[var(--border-primary)]">
             <Button variant="danger" onClick={onSupprimer}>
               <Trash2 className="w-4 h-4" />
               Retirer des favoris
             </Button>
-            <Button variant="primary" onClick={onClose}>
-              Fermer
-            </Button>
+            <div className="flex gap-2">
+              {urlFournisseur && (
+                <a
+                  href={urlFournisseur}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="secondary">
+                    <ExternalLink className="w-4 h-4" />
+                    Ouvrir sur {favori.fournisseur}
+                  </Button>
+                </a>
+              )}
+              <Button variant="primary" onClick={onClose}>
+                Fermer
+              </Button>
+            </div>
           </div>
         </CardBody>
       </Card>
@@ -752,12 +917,26 @@ export function MonCatalogue() {
 
                         {/* Actions au survol */}
                         <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {/* Lien vers le site fournisseur */}
+                          {favori.fournisseur && (
+                            <a
+                              href={getUrlPieceFournisseur(favori.fournisseur, favori.reference) || '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="w-8 h-8 bg-black/70 rounded-lg flex items-center justify-center hover:bg-green-500 transition-colors"
+                              title={`Voir sur ${favori.fournisseur}`}
+                            >
+                              <ExternalLink className="w-4 h-4 text-white" />
+                            </a>
+                          )}
                           <button
                             onClick={e => {
                               e.stopPropagation();
                               setFavoriDetail(favori);
                             }}
-                            className="w-8 h-8 bg-black/70 rounded-lg flex items-center justify-center hover:bg-blue-500"
+                            className="w-8 h-8 bg-black/70 rounded-lg flex items-center justify-center hover:bg-blue-500 transition-colors"
+                            title="Détails"
                           >
                             <FolderInput className="w-4 h-4 text-white" />
                           </button>
@@ -819,6 +998,19 @@ export function MonCatalogue() {
                         )}
                         {favori.favori_notes && (
                           <span className="text-amber-400 text-xs truncate max-w-[100px]">{favori.favori_notes}</span>
+                        )}
+                        {/* Lien vers le site fournisseur */}
+                        {favori.fournisseur && (
+                          <a
+                            href={getUrlPieceFournisseur(favori.fournisseur, favori.reference) || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors"
+                            title={`Voir sur ${favori.fournisseur}`}
+                          >
+                            <ExternalLink className="w-4 h-4 text-blue-400" />
+                          </a>
                         )}
                         <button
                           onClick={e => {
