@@ -7,12 +7,13 @@ import {
   CheckCircle, XCircle, Settings, Eye, FileText, BarChart3, Play,
   Pause, RotateCcw, Database, Cloud, CloudOff, Loader2, History,
   Server, Wifi, WifiOff, Download, Upload, X, Route, FileDown,
-  Navigation, Compass, Brain, Globe
+  Navigation, Compass, Globe, MessageSquare, Send, Plus,
+  FolderOpen, File, Image, FileSpreadsheet, Trash2
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
 import { generateRapportMensuel, generateRapportAscenseur } from '@/services/pdfService';
-import { PredictiveAnalysisDashboard } from '@/components/PredictiveAnalysis';
+import { getDocumentsByCodeAscenseur, uploadDocumentForAscenseur } from '@/services/api';
 import { 
   optimizeRoute, 
   generateGoogleMapsUrl, 
@@ -1288,8 +1289,92 @@ function AscenseurRow({ ascenseur, onClick }: { ascenseur: any; onClick: () => v
 
 // Modal Détail Ascenseur
 function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse' | 'notes' | 'documents'>('info');
   const [selectedIntervention, setSelectedIntervention] = useState<any>(null);
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+  
+  // Récupérer les notes publiques liées à cet ascenseur
+  const { data: notesAscenseur, refetch: refetchNotes } = useQuery({
+    queryKey: ['notes-ascenseur', ascenseur.code_appareil],
+    queryFn: async () => {
+      try {
+        // D'abord chercher par code_ascenseur exact
+        const { data: notesByCode, error: error1 } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('partage', true)
+          .eq('code_ascenseur', ascenseur.code_appareil)
+          .order('created_at', { ascending: false });
+        
+        // Ensuite chercher dans le contenu/titre
+        const { data: notesByContent, error: error2 } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('partage', true)
+          .or(`titre.ilike.%${ascenseur.code_appareil}%,contenu.ilike.%${ascenseur.code_appareil}%`)
+          .order('created_at', { ascending: false });
+        
+        // Fusionner et dédupliquer
+        const allNotes = [...(notesByCode || []), ...(notesByContent || [])];
+        const uniqueNotes = allNotes.filter((note, index, self) => 
+          index === self.findIndex(n => n.id === note.id)
+        );
+        
+        // Trier par date décroissante
+        uniqueNotes.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        
+        return uniqueNotes;
+      } catch (error) {
+        console.warn('Erreur récupération notes:', error);
+        return [];
+      }
+    }
+  });
+  
+  // Récupérer les documents liés à cet ascenseur
+  const { data: documentsAscenseur, refetch: refetchDocs } = useQuery({
+    queryKey: ['documents-ascenseur', ascenseur.code_appareil],
+    queryFn: async () => {
+      try {
+        return await getDocumentsByCodeAscenseur(ascenseur.code_appareil);
+      } catch (error) {
+        console.warn('Erreur récupération documents:', error);
+        return [];
+      }
+    }
+  });
+  
+  // Fonction d'upload de document
+  const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsUploadingDoc(true);
+    try {
+      // Déterminer le type de document
+      let typeDoc = 'autre';
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) typeDoc = 'photo';
+      else if (['pdf'].includes(ext || '')) typeDoc = 'rapport';
+      else if (['xls', 'xlsx', 'csv'].includes(ext || '')) typeDoc = 'facture';
+      
+      await uploadDocumentForAscenseur(file, ascenseur.code_appareil, typeDoc);
+      toast.success('Document ajouté');
+      refetchDocs();
+    } catch (error) {
+      console.error('Erreur upload:', error);
+      toast.error('Erreur lors de l\'upload');
+    } finally {
+      setIsUploadingDoc(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
   
   const { data: allPannes } = useQuery({
     queryKey: ['pannes-ascenseur', ascenseur.id_wsoucont],
@@ -1757,7 +1842,9 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 { id: 'analyse', label: 'Analyse', icon: TrendingUp, count: null },
                 { id: 'visites', label: 'Visites', icon: Calendar, count: visites.length },
                 { id: 'controles', label: 'Contrôles', icon: Eye, count: controles.length },
-                { id: 'pannes', label: 'Pannes', icon: AlertTriangle, count: pannes.length }
+                { id: 'pannes', label: 'Pannes', icon: AlertTriangle, count: pannes.length },
+                { id: 'notes', label: 'Notes', icon: MessageSquare, count: notesAscenseur?.length || 0 },
+                { id: 'documents', label: 'Documents', icon: FolderOpen, count: documentsAscenseur?.length || 0 }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -2353,6 +2440,245 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 })()}
               </div>
             )}
+            
+            {/* Onglet Notes */}
+            {activeTab === 'notes' && (
+              <div className="space-y-4">
+                {/* Formulaire d'ajout de note */}
+                <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                  <h4 className="font-semibold flex items-center gap-2 mb-3">
+                    <Plus className="w-4 h-4 text-indigo-400" />
+                    Ajouter une note publique
+                  </h4>
+                  <textarea
+                    value={newNoteContent}
+                    onChange={(e) => setNewNoteContent(e.target.value)}
+                    placeholder="Écrire une note sur cet ascenseur..."
+                    className="w-full p-3 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-sm resize-none"
+                    rows={3}
+                  />
+                  <div className="flex justify-end mt-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={!newNoteContent.trim() || isAddingNote}
+                      onClick={async () => {
+                        if (!newNoteContent.trim()) return;
+                        setIsAddingNote(true);
+                        try {
+                          const { error } = await supabase
+                            .from('notes')
+                            .insert({
+                              titre: `Note - ${ascenseur.code_appareil}`,
+                              contenu: newNoteContent.trim(),
+                              code_ascenseur: ascenseur.code_appareil,
+                              partage: true,
+                              couleur: '#f97316' // Orange pour les notes ascenseur
+                            });
+                          
+                          if (error) throw error;
+                          
+                          toast.success('Note ajoutée');
+                          setNewNoteContent('');
+                          refetchNotes();
+                        } catch (e) {
+                          console.error('Erreur ajout note:', e);
+                          toast.error('Erreur lors de l\'ajout');
+                        } finally {
+                          setIsAddingNote(false);
+                        }
+                      }}
+                    >
+                      {isAddingNote ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 mr-1" />
+                      )}
+                      Publier
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Liste des notes */}
+                {notesAscenseur && notesAscenseur.length > 0 ? (
+                  <div className="space-y-3">
+                    {notesAscenseur.map((note: any) => (
+                      <div 
+                        key={note.id} 
+                        className="p-4 rounded-xl border-l-4"
+                        style={{ 
+                          backgroundColor: 'var(--bg-tertiary)',
+                          borderLeftColor: note.couleur || '#f97316'
+                        }}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <p className="font-semibold">{note.titre}</p>
+                            <p className="text-xs text-[var(--text-muted)]">
+                              {note.created_at ? format(parseISO(note.created_at), 'dd/MM/yyyy HH:mm', { locale: fr }) : '-'}
+                            </p>
+                          </div>
+                          {note.epingle && (
+                            <Badge variant="yellow" className="text-[10px]">
+                              📌 Épinglé
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-[var(--text-secondary)] whitespace-pre-line">
+                          {note.contenu}
+                        </p>
+                        {note.tags && note.tags.length > 0 && (
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {note.tags.map((tag: string, i: number) => (
+                              <span key={i} className="text-[10px] px-2 py-0.5 bg-[var(--bg-secondary)] rounded-full">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-[var(--text-muted)]">
+                    <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>Aucune note publique pour cet ascenseur</p>
+                    <p className="text-xs mt-1">Ajoutez une note ci-dessus pour la partager avec l'équipe</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Onglet Documents */}
+            {activeTab === 'documents' && (
+              <div className="space-y-4">
+                {/* Zone d'upload */}
+                <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                  <h4 className="font-semibold flex items-center gap-2 mb-3">
+                    <Upload className="w-4 h-4 text-blue-400" />
+                    Ajouter un document
+                  </h4>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleUploadDocument}
+                    className="hidden"
+                    accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingDoc}
+                    className="w-full p-6 border-2 border-dashed border-[var(--border-primary)] rounded-xl hover:border-blue-500 hover:bg-blue-500/5 transition-colors flex flex-col items-center gap-2"
+                  >
+                    {isUploadingDoc ? (
+                      <>
+                        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                        <span className="text-sm text-[var(--text-muted)]">Upload en cours...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-8 h-8 text-[var(--text-muted)]" />
+                        <span className="text-sm text-[var(--text-muted)]">Cliquez pour ajouter un fichier</span>
+                        <span className="text-xs text-[var(--text-muted)]">PDF, Images, Word, Excel...</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                
+                {/* Liste des documents */}
+                {documentsAscenseur && documentsAscenseur.length > 0 ? (
+                  <div className="space-y-3">
+                    {documentsAscenseur.map((doc: any) => {
+                      // Déterminer l'icône selon le type
+                      const ext = doc.nom?.split('.').pop()?.toLowerCase() || '';
+                      let DocIcon = File;
+                      let iconColor = 'text-gray-400';
+                      
+                      if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+                        DocIcon = Image;
+                        iconColor = 'text-orange-400';
+                      } else if (['pdf'].includes(ext)) {
+                        DocIcon = FileText;
+                        iconColor = 'text-red-400';
+                      } else if (['xls', 'xlsx', 'csv'].includes(ext)) {
+                        DocIcon = FileSpreadsheet;
+                        iconColor = 'text-green-400';
+                      } else if (['doc', 'docx', 'txt'].includes(ext)) {
+                        DocIcon = FileText;
+                        iconColor = 'text-blue-400';
+                      }
+                      
+                      return (
+                        <div 
+                          key={doc.id} 
+                          className="p-4 bg-[var(--bg-tertiary)] rounded-xl flex items-center gap-4"
+                        >
+                          <div className={`w-12 h-12 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center ${iconColor}`}>
+                            <DocIcon className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{doc.nom}</p>
+                            <p className="text-xs text-[var(--text-muted)]">
+                              {doc.created_at ? format(parseISO(doc.created_at), 'dd/MM/yyyy HH:mm', { locale: fr }) : '-'}
+                              {doc.fichier_taille && ` • ${(doc.fichier_taille / 1024).toFixed(1)} Ko`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {doc.fichier_url && (
+                              <>
+                                <a
+                                  href={doc.fichier_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg"
+                                  title="Voir"
+                                >
+                                  <Eye className="w-4 h-4 text-blue-400" />
+                                </a>
+                                <a
+                                  href={doc.fichier_url}
+                                  download={doc.nom}
+                                  className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg"
+                                  title="Télécharger"
+                                >
+                                  <Download className="w-4 h-4 text-green-400" />
+                                </a>
+                              </>
+                            )}
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Supprimer ce document ?')) return;
+                                try {
+                                  const { error } = await supabase
+                                    .from('documents')
+                                    .delete()
+                                    .eq('id', doc.id);
+                                  if (error) throw error;
+                                  toast.success('Document supprimé');
+                                  refetchDocs();
+                                } catch (e) {
+                                  toast.error('Erreur lors de la suppression');
+                                }
+                              }}
+                              className="p-2 hover:bg-red-500/10 rounded-lg"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-[var(--text-muted)]">
+                    <FolderOpen className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>Aucun document pour cet ascenseur</p>
+                    <p className="text-xs mt-1">Ajoutez des photos, rapports, certificats...</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>
@@ -2364,7 +2690,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
 // PAGE PRINCIPALE
 // =============================================
 export function ParcAscenseursPage() {
-  const [mainTab, setMainTab] = useState<'parc' | 'arrets' | 'pannes' | 'tournees' | 'stats' | 'carte' | 'ia'>('parc');
+  const [mainTab, setMainTab] = useState<'parc' | 'arrets' | 'pannes' | 'tournees' | 'stats' | 'carte'>('parc');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [secteurFilter, setSecteurFilter] = useState<string>('');
@@ -2983,16 +3309,6 @@ export function ParcAscenseursPage() {
             >
               <Map className="w-4 h-4 inline mr-1" />
               Carte
-            </button>
-            <button
-              onClick={() => setMainTab('ia')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                mainTab === 'ia' ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <Brain className="w-4 h-4 inline mr-1" />
-              IA
-              <span className="ml-1 px-1.5 py-0.5 bg-purple-500/30 rounded text-[10px]">NEW</span>
             </button>
           </div>
         </div>
@@ -4346,35 +4662,6 @@ export function ParcAscenseursPage() {
                 </>
               );
             })()}
-          </div>
-        )}
-
-        {/* Onglet IA - Analyse Prédictive */}
-        {mainTab === 'ia' && (
-          <div className="space-y-6">
-            {/* Header avec bouton diagnostic */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
-                  <Brain className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">Intelligence Artificielle</h2>
-                  <p className="text-sm text-[var(--text-muted)]">
-                    Analyse prédictive des pannes
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Dashboard Analyse Prédictive */}
-            <PredictiveAnalysisDashboard 
-              secteurs={userSecteurs?.map(s => s.secteur)}
-              onSelectAscenseur={(code) => {
-                const asc = ascenseurs?.find((a: any) => a.code_appareil === code);
-                if (asc) setSelectedAscenseur(asc);
-              }}
-            />
           </div>
         )}
       </div>

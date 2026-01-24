@@ -28,6 +28,7 @@ import {
   User,
   Settings,
   Shield,
+  Wrench,
 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { NotificationCenter } from '@/components/notifications';
@@ -51,6 +52,7 @@ const modules = [
   { id: 'miseservice', name: 'Mise en service', icon: FileCheck, color: '#f97316' },
   { id: 'ascenseurs', name: 'Parc Ascenseurs', icon: Building2, color: '#06b6d4' },
   { id: 'stock', name: 'Stock', icon: Package, color: '#ef4444' },
+  { id: 'pieces', name: 'Pièces détachées', icon: Wrench, color: '#8b5cf6' },
   { id: 'commandes', name: 'Commandes', icon: ShoppingCart, color: '#06b6d4' },
   { id: 'vehicules', name: 'Véhicules', icon: Car, color: '#22c55e' },
   { id: 'demandes', name: 'Demandes', icon: HelpCircle, color: '#ec4899' },

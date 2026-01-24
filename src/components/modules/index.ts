@@ -14,3 +14,4 @@ export { ArchivesPage, ArchiveModal } from './ArchivesPage';
 export { CommandesPage } from './CommandesPage';
 export { NFCPage } from './NFCPage';
 export { AdminPage } from './AdminPage';
+export { PiecesPage } from './PiecesPage';

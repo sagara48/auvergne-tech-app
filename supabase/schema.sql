@@ -316,9 +316,12 @@ CREATE TABLE IF NOT EXISTS documents (
   dossier TEXT DEFAULT 'general',
   client_id UUID REFERENCES clients(id),
   ascenseur_id UUID REFERENCES ascenseurs(id),
+  code_ascenseur TEXT, -- Code appareil pour liaison avec parc_ascenseurs
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_documents_code_ascenseur ON documents(code_ascenseur);
 
 CREATE TABLE IF NOT EXISTS planning_events (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -627,6 +630,7 @@ CREATE TABLE IF NOT EXISTS notes (
   rappel_date TIMESTAMPTZ,
   -- Contexte métier (optionnel - pour notes contextuelles)
   ascenseur_id UUID REFERENCES ascenseurs(id) ON DELETE CASCADE,
+  code_ascenseur TEXT, -- Code appareil pour liaison avec parc_ascenseurs
   travaux_id UUID REFERENCES travaux(id) ON DELETE CASCADE,
   client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
   mise_service_id UUID REFERENCES mise_en_service(id) ON DELETE CASCADE,

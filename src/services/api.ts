@@ -2658,6 +2658,73 @@ export async function getDocumentsByAscenseur(ascenseurId: string): Promise<any[
   return data || [];
 }
 
+export async function getDocumentsByCodeAscenseur(codeAscenseur: string): Promise<any[]> {
+  // Chercher par code_ascenseur exact ou dans le nom du document
+  const { data: byCode, error: error1 } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('code_ascenseur', codeAscenseur)
+    .order('created_at', { ascending: false });
+  
+  const { data: byName, error: error2 } = await supabase
+    .from('documents')
+    .select('*')
+    .ilike('nom', `%${codeAscenseur}%`)
+    .order('created_at', { ascending: false });
+  
+  // Fusionner et dédupliquer
+  const allDocs = [...(byCode || []), ...(byName || [])];
+  const uniqueDocs = allDocs.filter((doc, index, self) => 
+    index === self.findIndex(d => d.id === doc.id)
+  );
+  
+  // Trier par date décroissante
+  uniqueDocs.sort((a, b) => 
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  
+  return uniqueDocs;
+}
+
+export async function uploadDocumentForAscenseur(
+  file: File, 
+  codeAscenseur: string,
+  typeDocument: string = 'autre'
+): Promise<any> {
+  // Upload le fichier vers Supabase Storage
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${codeAscenseur}_${Date.now()}.${fileExt}`;
+  const filePath = `ascenseurs/${codeAscenseur}/${fileName}`;
+  
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from('documents')
+    .upload(filePath, file);
+  
+  if (uploadError) throw uploadError;
+  
+  // Obtenir l'URL publique
+  const { data: urlData } = supabase.storage
+    .from('documents')
+    .getPublicUrl(filePath);
+  
+  // Créer l'entrée dans la table documents
+  const { data, error } = await supabase
+    .from('documents')
+    .insert({
+      nom: file.name,
+      type_document: typeDocument,
+      fichier_url: urlData.publicUrl,
+      fichier_taille: file.size,
+      code_ascenseur: codeAscenseur,
+      dossier: 'ascenseurs'
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
 export async function getTravauxByAscenseur(ascenseurId: string): Promise<any[]> {
   const { data: ascenseur } = await supabase
     .from('ascenseurs')
@@ -2976,11 +3043,16 @@ export async function uploadDocument(file: File, metadata: {
   dossier?: string;
   ascenseur_id?: string;
   client_id?: string;
+  code_ascenseur?: string;
 }): Promise<Document> {
   // 1. Upload du fichier vers Supabase Storage
   const fileExt = file.name.split('.').pop();
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-  const filePath = `documents/${fileName}`;
+  
+  // Organiser dans un sous-dossier si c'est un document d'ascenseur
+  const filePath = metadata.code_ascenseur 
+    ? `ascenseurs/${metadata.code_ascenseur}/${fileName}`
+    : `documents/${fileName}`;
 
   const { error: uploadError } = await supabase.storage
     .from('documents')
@@ -3002,10 +3074,11 @@ export async function uploadDocument(file: File, metadata: {
     .insert({
       nom: metadata.nom || file.name,
       type_document: metadata.type_document,
-      dossier: metadata.dossier,
+      dossier: metadata.code_ascenseur ? 'ascenseurs' : metadata.dossier,
       dossier_id: metadata.dossier_id,
       ascenseur_id: metadata.ascenseur_id,
       client_id: metadata.client_id,
+      code_ascenseur: metadata.code_ascenseur,
       fichier_nom: file.name,
       fichier_type: file.type,
       fichier_taille: file.size,

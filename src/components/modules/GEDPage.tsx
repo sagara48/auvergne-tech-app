@@ -4,11 +4,12 @@ import {
   FolderOpen, File, FileText, Image, FileSpreadsheet, Search, Upload, Grid, List, 
   Plus, Edit2, Trash2, X, FolderPlus, ChevronRight, Download, Eye, MoreVertical,
   Folder, Check, Tag, Filter, Calendar, SlidersHorizontal, Sparkles, Scan, Loader2,
-  FileSearch, Copy, CheckCircle
+  FileSearch, Copy, CheckCircle, Building2, ChevronDown
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { getDocuments, getGedDossiers, createGedDossier, updateGedDossier, deleteGedDossier, uploadDocument, deleteDocument, updateDocument } from '@/services/api';
 import type { GedDossier } from '@/services/api';
+import { supabase } from '@/services/supabase';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { TypeDocument, Document } from '@/types';
@@ -114,10 +115,14 @@ function DossierModal({
 // Modal Import
 function ImportModal({ 
   dossiers,
+  ascenseurs,
+  defaultAscenseur,
   onClose, 
   onUpload 
 }: { 
   dossiers: GedDossier[];
+  ascenseurs: any[];
+  defaultAscenseur?: string | null;
   onClose: () => void; 
   onUpload: (file: File, metadata: any) => void;
 }) {
@@ -125,6 +130,7 @@ function ImportModal({
   const [nom, setNom] = useState('');
   const [typeDocument, setTypeDocument] = useState<TypeDocument>('autre');
   const [dossierId, setDossierId] = useState('');
+  const [codeAscenseur, setCodeAscenseur] = useState(defaultAscenseur || '');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -159,7 +165,8 @@ function ImportModal({
       nom, 
       type_document: typeDocument, 
       dossier_id: dossierId || undefined,
-      dossier: dossiers.find(d => d.id === dossierId)?.nom
+      dossier: dossiers.find(d => d.id === dossierId)?.nom,
+      code_ascenseur: codeAscenseur || undefined
     });
   };
 
@@ -246,6 +253,21 @@ function ImportModal({
                   ))}
                 </Select>
               </div>
+            </div>
+            
+            {/* Liaison ascenseur */}
+            <div>
+              <label className="text-sm text-[var(--text-secondary)] mb-1 block">
+                Lier à un ascenseur (optionnel)
+              </label>
+              <Select value={codeAscenseur} onChange={e => setCodeAscenseur(e.target.value)}>
+                <option value="">Aucun ascenseur</option>
+                {ascenseurs.map((asc: any) => (
+                  <option key={asc.code_appareil} value={asc.code_appareil}>
+                    {asc.code_appareil} - {asc.ville}
+                  </option>
+                ))}
+              </Select>
             </div>
             
             <div className="flex gap-3 pt-4">
@@ -524,6 +546,9 @@ export function GEDPage() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [selectedDossier, setSelectedDossier] = useState<string | null>(null);
+  const [selectedAscenseur, setSelectedAscenseur] = useState<string | null>(null);
+  const [showAscenseurs, setShowAscenseurs] = useState(false);
+  const [ascenseurSearch, setAscenseurSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showDossierModal, setShowDossierModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -543,6 +568,34 @@ export function GEDPage() {
 
   const { data: documents } = useQuery({ queryKey: ['documents'], queryFn: getDocuments });
   const { data: dossiers } = useQuery({ queryKey: ['ged-dossiers'], queryFn: getGedDossiers });
+  
+  // Récupérer TOUS les ascenseurs du parc (pour créer les dossiers virtuels)
+  const { data: tousLesAscenseurs } = useQuery({
+    queryKey: ['tous-ascenseurs-parc'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('parc_ascenseurs')
+        .select('code_appareil, adresse, ville')
+        .order('code_appareil');
+      return data || [];
+    }
+  });
+  
+  // Compter les documents par ascenseur
+  const docsParAscenseur = useMemo(() => {
+    const counts: Record<string, number> = {};
+    (documents || []).forEach((doc: any) => {
+      if (doc.code_ascenseur) {
+        counts[doc.code_ascenseur] = (counts[doc.code_ascenseur] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [documents]);
+  
+  // Nombre total de documents liés à des ascenseurs
+  const totalDocsAscenseurs = useMemo(() => {
+    return (documents || []).filter((d: any) => d.code_ascenseur).length;
+  }, [documents]);
 
   // Mutations dossiers
   const createDossierMutation = useMutation({
@@ -625,10 +678,18 @@ export function GEDPage() {
       result = result.filter(d => d.type_document === filterType);
     }
     
-    // Filtre par dossier
-    if (selectedDossier !== null) {
+    // Filtre par ascenseur spécifique
+    if (selectedAscenseur) {
+      result = result.filter(d => (d as any).code_ascenseur === selectedAscenseur);
+    }
+    // Filtre par dossier "ascenseurs" (tous les docs avec un code_ascenseur)
+    else if (selectedDossier === 'ascenseurs') {
+      result = result.filter(d => (d as any).code_ascenseur);
+    }
+    // Filtre par dossier classique
+    else if (selectedDossier !== null) {
       if (selectedDossier === 'sans-dossier') {
-        result = result.filter(d => !(d as any).dossier_id);
+        result = result.filter(d => !(d as any).dossier_id && !(d as any).code_ascenseur);
       } else {
         result = result.filter(d => (d as any).dossier_id === selectedDossier);
       }
@@ -671,7 +732,7 @@ export function GEDPage() {
     });
     
     return result;
-  }, [documents, search, filterType, selectedDossier, dateFrom, dateTo, selectedTags, sortBy, sortOrder]);
+  }, [documents, search, filterType, selectedDossier, selectedAscenseur, dateFrom, dateTo, selectedTags, sortBy, sortOrder]);
 
   // Extraire tous les tags uniques
   const allTags = useMemo(() => {
@@ -779,6 +840,104 @@ export function GEDPage() {
             {(!dossiers || dossiers.length === 0) && (
               <div className="text-center py-4 text-xs text-[var(--text-muted)]">
                 Aucun dossier
+              </div>
+            )}
+            
+            {/* Section Ascenseurs - Dossiers virtuels par code_appareil */}
+            <div className="border-t border-[var(--border-primary)] my-2" />
+            
+            <button
+              onClick={() => {
+                setShowAscenseurs(!showAscenseurs);
+                if (!showAscenseurs) {
+                  // Quand on ouvre la section, on affiche tous les docs ascenseurs
+                  setSelectedAscenseur(null);
+                  setSelectedDossier('ascenseurs');
+                }
+              }}
+              className={`w-full flex items-center gap-3 p-2 rounded-lg mb-1 transition-colors ${
+                selectedDossier === 'ascenseurs' && !selectedAscenseur
+                  ? 'bg-orange-500/20 text-orange-300'
+                  : 'hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+              }`}
+            >
+              <Building2 className="w-4 h-4 text-orange-400" />
+              <span className="text-sm flex-1 text-left font-medium">Ascenseurs</span>
+              <Badge variant="orange" className="text-xs mr-1">
+                {totalDocsAscenseurs}
+              </Badge>
+              <ChevronDown className={`w-4 h-4 transition-transform ${showAscenseurs ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {showAscenseurs && (
+              <div className="ml-2 pl-2 border-l border-[var(--border-primary)]">
+                {/* Recherche ascenseur */}
+                <div className="mb-2">
+                  <Input
+                    placeholder="Rechercher un code..."
+                    value={ascenseurSearch}
+                    onChange={e => setAscenseurSearch(e.target.value)}
+                    className="text-xs h-8"
+                  />
+                </div>
+                
+                {/* Liste filtrée des ascenseurs */}
+                <div className="max-h-64 overflow-y-auto">
+                  {tousLesAscenseurs
+                    ?.filter((asc: any) => {
+                      if (!ascenseurSearch) return true;
+                      const searchLower = ascenseurSearch.toLowerCase();
+                      return asc.code_appareil.toLowerCase().includes(searchLower) ||
+                             asc.ville?.toLowerCase().includes(searchLower) ||
+                             asc.adresse?.toLowerCase().includes(searchLower);
+                    })
+                    .slice(0, 50) // Limiter à 50 pour la performance
+                    .map((asc: any) => {
+                      const nbDocs = docsParAscenseur[asc.code_appareil] || 0;
+                      return (
+                        <button
+                          key={asc.code_appareil}
+                          onClick={() => {
+                            setSelectedAscenseur(asc.code_appareil);
+                            setSelectedDossier('ascenseurs');
+                          }}
+                          className={`w-full flex items-center gap-2 p-2 rounded-lg mb-1 text-sm transition-colors ${
+                            selectedAscenseur === asc.code_appareil 
+                              ? 'bg-orange-500/20 text-orange-300' 
+                              : 'hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <Folder className={`w-3 h-3 ${nbDocs > 0 ? 'text-orange-400' : 'text-[var(--text-muted)]'}`} />
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="font-medium truncate">{asc.code_appareil}</p>
+                            <p className="text-[10px] text-[var(--text-muted)] truncate">
+                              {asc.ville}
+                            </p>
+                          </div>
+                          <span className={`text-xs ${nbDocs > 0 ? 'text-orange-400' : 'text-[var(--text-muted)]'}`}>
+                            {nbDocs}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  
+                  {tousLesAscenseurs && tousLesAscenseurs.filter((asc: any) => {
+                    if (!ascenseurSearch) return true;
+                    const searchLower = ascenseurSearch.toLowerCase();
+                    return asc.code_appareil.toLowerCase().includes(searchLower) ||
+                           asc.ville?.toLowerCase().includes(searchLower);
+                  }).length > 50 && (
+                    <div className="text-center py-2 text-xs text-[var(--text-muted)]">
+                      Affinez la recherche pour voir plus de résultats
+                    </div>
+                  )}
+                </div>
+                
+                {(!tousLesAscenseurs || tousLesAscenseurs.length === 0) && (
+                  <div className="text-center py-2 text-xs text-[var(--text-muted)]">
+                    Aucun ascenseur dans le parc
+                  </div>
+                )}
               </div>
             )}
           </CardBody>
@@ -980,9 +1139,32 @@ export function GEDPage() {
         {selectedDossier && selectedDossier !== 'sans-dossier' && (
           <div className="flex items-center gap-2 mb-4">
             <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-            <span className="text-lg font-semibold text-[var(--text-primary)]">
-              {dossiers?.find(d => d.id === selectedDossier)?.nom}
-            </span>
+            {selectedDossier === 'ascenseurs' ? (
+              <>
+                <Building2 className="w-5 h-5 text-orange-400" />
+                <span className="text-lg font-semibold text-[var(--text-primary)]">
+                  Ascenseurs
+                </span>
+                {selectedAscenseur && (
+                  <>
+                    <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
+                    <Folder className="w-5 h-5 text-orange-400" />
+                    <span className="text-lg font-semibold text-orange-400">
+                      {selectedAscenseur}
+                    </span>
+                    {tousLesAscenseurs?.find((a: any) => a.code_appareil === selectedAscenseur)?.ville && (
+                      <span className="text-sm text-[var(--text-muted)]">
+                        ({tousLesAscenseurs.find((a: any) => a.code_appareil === selectedAscenseur)?.ville})
+                      </span>
+                    )}
+                  </>
+                )}
+              </>
+            ) : (
+              <span className="text-lg font-semibold text-[var(--text-primary)]">
+                {dossiers?.find(d => d.id === selectedDossier)?.nom}
+              </span>
+            )}
           </div>
         )}
 
@@ -1155,6 +1337,8 @@ export function GEDPage() {
       {showImportModal && (
         <ImportModal
           dossiers={dossiers || []}
+          ascenseurs={tousLesAscenseurs || []}
+          defaultAscenseur={selectedAscenseur}
           onClose={() => setShowImportModal(false)}
           onUpload={(file, metadata) => uploadMutation.mutate({ file, metadata })}
         />
