@@ -47,6 +47,236 @@ const CATEGORY_ICONS: Record<string, any> = {
   'DIVERS': Package,
 };
 
+// Fonction pour générer l'URL vers le site fournisseur
+function getUrlPieceFournisseur(fournisseur: string | undefined, reference: string): string | null {
+  if (!fournisseur || !reference) return null;
+  
+  const ref = encodeURIComponent(reference);
+  
+  switch (fournisseur.toUpperCase()) {
+    case 'SODIMAS':
+      return `https://my.sodimas.com/fr/recherche?search=${ref}`;
+    case 'HAUER':
+      return `https://www.hfrepartition.com/catalogsearch/result/?q=${ref}`;
+    case 'MGTI':
+      return `https://www.mgti.fr/?s=${ref}&post_type=product`;
+    default:
+      return `https://www.google.com/search?q=${ref}+${encodeURIComponent(fournisseur)}+ascenseur`;
+  }
+}
+
+// Modal détail pièce catalogue
+function DetailPieceModal({
+  piece,
+  onClose,
+}: {
+  piece: PieceCatalogue;
+  onClose: () => void;
+}) {
+  const urlFournisseur = getUrlPieceFournisseur(piece.fournisseur_code, piece.reference);
+
+  // Couleur badge fournisseur
+  const getFournisseurColor = (f: string | undefined) => {
+    switch (f?.toUpperCase()) {
+      case 'HAUER': return 'purple';
+      case 'SODIMAS': return 'blue';
+      case 'MGTI': return 'green';
+      default: return 'gray';
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto" onClick={onClose}>
+      <Card className="w-full max-w-3xl my-4" onClick={e => e.stopPropagation()}>
+        <CardBody>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <Package className="w-6 h-6 text-purple-400" />
+              Détail de la pièce
+            </h2>
+            <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Colonne gauche - Image */}
+            <div className="space-y-4">
+              <div className="aspect-square bg-[var(--bg-tertiary)] rounded-xl flex items-center justify-center overflow-hidden relative">
+                {piece.photo_url ? (
+                  <img
+                    src={piece.photo_url}
+                    alt={piece.designation}
+                    className="max-w-[90%] max-h-[90%] object-contain"
+                    onError={e => (e.currentTarget.style.display = 'none')}
+                  />
+                ) : (
+                  <div className="text-center">
+                    <Package className="w-16 h-16 text-[var(--text-muted)] mx-auto" />
+                    <p className="text-sm text-[var(--text-muted)] mt-2">Pas d'image</p>
+                  </div>
+                )}
+                
+                {/* Badge source */}
+                <div className="absolute top-2 right-2">
+                  <Badge variant="blue" className="text-xs">
+                    📚 Catalogue
+                  </Badge>
+                </div>
+              </div>
+              
+              {/* Bouton principal accès site fournisseur */}
+              {urlFournisseur && (
+                <a
+                  href={urlFournisseur}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full p-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-semibold rounded-xl hover:opacity-90 transition-opacity"
+                >
+                  <ExternalLink className="w-5 h-5" />
+                  Voir sur {piece.fournisseur_code}
+                </a>
+              )}
+              
+              {/* Liens rapides vers autres fournisseurs */}
+              <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <Search className="w-3 h-3" />
+                  Rechercher ailleurs
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {['SODIMAS', 'HAUER', 'MGTI'].map(f => {
+                    const url = getUrlPieceFournisseur(f, piece.reference);
+                    const isActive = f === piece.fournisseur_code?.toUpperCase();
+                    return (
+                      <a
+                        key={f}
+                        href={url || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
+                          isActive 
+                            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
+                            : 'bg-[var(--bg-elevated)] hover:bg-[var(--bg-card)] text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        {f}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Colonne droite - Infos */}
+            <div className="space-y-4">
+              {/* Référence et désignation */}
+              <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Référence</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-mono text-2xl font-bold text-purple-400 flex-1">{piece.reference}</p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(piece.reference);
+                      toast.success('Référence copiée !');
+                    }}
+                    className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors"
+                    title="Copier la référence"
+                  >
+                    <Copy className="w-5 h-5 text-purple-400" />
+                  </button>
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Désignation</p>
+                <p className="text-lg text-[var(--text-primary)]">{piece.designation}</p>
+              </div>
+
+              {/* Description si disponible */}
+              {piece.description && (
+                <div>
+                  <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Description</p>
+                  <p className="text-sm text-[var(--text-secondary)]">{piece.description}</p>
+                </div>
+              )}
+
+              {/* Badges */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={getFournisseurColor(piece.fournisseur_code) as any}>
+                  {piece.fournisseur_code || 'Non spécifié'}
+                </Badge>
+                {piece.marque_compatible && (
+                  <Badge variant="cyan">{piece.marque_compatible}</Badge>
+                )}
+                {piece.categorie_code && (
+                  <Badge variant="amber">{piece.categorie_code.replace(/_/g, ' ')}</Badge>
+                )}
+              </div>
+
+              {/* Prix */}
+              {piece.prix_ht && (
+                <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
+                  <p className="text-xs text-green-400 uppercase tracking-wide mb-1">Prix indicatif HT</p>
+                  <p className="text-2xl font-bold text-green-400">{piece.prix_ht.toFixed(2)} €</p>
+                </div>
+              )}
+
+              {/* Informations techniques */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                  <p className="text-xs text-[var(--text-muted)]">Fournisseur</p>
+                  <p className="font-semibold">{piece.fournisseur_code || '-'}</p>
+                </div>
+                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                  <p className="text-xs text-[var(--text-muted)]">Marque compatible</p>
+                  <p className="font-semibold">{piece.marque_compatible || '-'}</p>
+                </div>
+              </div>
+
+              {/* Caractéristiques techniques si disponibles */}
+              {piece.caracteristiques && Object.keys(piece.caracteristiques).length > 0 && (
+                <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
+                  <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2">Caractéristiques</p>
+                  <div className="space-y-1">
+                    {Object.entries(piece.caracteristiques).map(([key, value]) => (
+                      <div key={key} className="flex justify-between text-sm">
+                        <span className="text-[var(--text-secondary)]">{key}</span>
+                        <span className="font-medium">{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--border-primary)]">
+            {urlFournisseur && (
+              <a
+                href={urlFournisseur}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="secondary">
+                  <ExternalLink className="w-4 h-4" />
+                  Ouvrir sur {piece.fournisseur_code}
+                </Button>
+              </a>
+            )}
+            <Button variant="primary" onClick={onClose}>
+              Fermer
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
 // Modal d'analyse photo
 function AnalysePhotoModal({
   onClose,
@@ -535,6 +765,7 @@ export function PiecesPage() {
   const [pieceAEditer, setPieceAEditer] = useState<Partial<PiecePersonnelle> | null>(null);
   const [filterFournisseur, setFilterFournisseur] = useState('');
   const [filterMarque, setFilterMarque] = useState('');
+  const [pieceDetail, setPieceDetail] = useState<PieceCatalogue | null>(null);
 
   // Queries
   const { data: fournisseurs } = useQuery({ queryKey: ['fournisseurs'], queryFn: getFournisseurs });
@@ -736,29 +967,64 @@ export function PiecesPage() {
 
             {search.length >= 2 && resultatsRecherche && resultatsRecherche.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {resultatsRecherche.map(piece => (
-                  <Card key={piece.id} className="hover:border-purple-500/50 transition-colors">
-                    <CardBody>
-                      <div className="flex gap-3">
-                        {piece.photo_url ? (
-                          <img src={piece.photo_url} alt={piece.designation} className="w-20 h-20 object-cover rounded-lg bg-[var(--bg-tertiary)]" />
-                        ) : (
-                          <div className="w-20 h-20 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-                            <Package className="w-8 h-8 text-[var(--text-muted)]" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-mono text-sm text-purple-400">{piece.reference}</p>
-                          <p className="font-medium truncate">{piece.designation}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            {piece.marque_compatible && <Badge variant="blue">{piece.marque_compatible}</Badge>}
-                            {piece.fournisseur_code && <Badge variant="gray">{piece.fournisseur_code}</Badge>}
+                {resultatsRecherche.map(piece => {
+                  const urlFournisseur = getUrlPieceFournisseur(piece.fournisseur_code, piece.reference);
+                  return (
+                    <Card 
+                      key={piece.id} 
+                      className="hover:border-purple-500/50 transition-colors cursor-pointer group"
+                      onClick={() => setPieceDetail(piece)}
+                    >
+                      <CardBody>
+                        <div className="flex gap-3">
+                          {piece.photo_url ? (
+                            <img src={piece.photo_url} alt={piece.designation} className="w-20 h-20 object-cover rounded-lg bg-[var(--bg-tertiary)]" />
+                          ) : (
+                            <div className="w-20 h-20 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                              <Package className="w-8 h-8 text-[var(--text-muted)]" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-mono text-sm text-purple-400">{piece.reference}</p>
+                            <p className="font-medium truncate">{piece.designation}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              {piece.marque_compatible && <Badge variant="blue">{piece.marque_compatible}</Badge>}
+                              {piece.fournisseur_code && <Badge variant="gray">{piece.fournisseur_code}</Badge>}
+                            </div>
+                            {piece.prix_ht && (
+                              <p className="text-sm text-green-400 font-semibold mt-1">{piece.prix_ht.toFixed(2)} € HT</p>
+                            )}
                           </div>
                         </div>
-                      </div>
-                    </CardBody>
-                  </Card>
-                ))}
+                        {/* Actions */}
+                        <div className="flex gap-2 mt-3 pt-3 border-t border-[var(--border-primary)]">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPieceDetail(piece);
+                            }}
+                            className="flex-1 py-2 px-3 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Eye className="w-3 h-3" />
+                            Détails
+                          </button>
+                          {urlFournisseur && (
+                            <a
+                              href={urlFournisseur}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="flex-1 py-2 px-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              {piece.fournisseur_code}
+                            </a>
+                          )}
+                        </div>
+                      </CardBody>
+                    </Card>
+                  );
+                })}
               </div>
             )}
 
@@ -889,6 +1155,13 @@ export function PiecesPage() {
           onClose={() => { setShowAjoutModal(false); setPieceAEditer(null); }}
           onSave={data => ajouterPieceMutation.mutate(data)}
           initialData={pieceAEditer || undefined}
+        />
+      )}
+
+      {pieceDetail && (
+        <DetailPieceModal
+          piece={pieceDetail}
+          onClose={() => setPieceDetail(null)}
         />
       )}
     </div>

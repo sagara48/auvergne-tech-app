@@ -955,6 +955,17 @@ export function MonCatalogue() {
                             </span>
                           )}
                         </div>
+                        {/* Bouton détails explicite */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFavoriDetail(favori);
+                          }}
+                          className="w-full mt-3 py-2 px-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Voir détails & lien fournisseur
+                        </button>
                       </CardBody>
                     </Card>
                   );
@@ -999,6 +1010,17 @@ export function MonCatalogue() {
                         {favori.favori_notes && (
                           <span className="text-amber-400 text-xs truncate max-w-[100px]">{favori.favori_notes}</span>
                         )}
+                        {/* Bouton voir détails */}
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            setFavoriDetail(favori);
+                          }}
+                          className="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <Package className="w-3 h-3" />
+                          Détails
+                        </button>
                         {/* Lien vers le site fournisseur */}
                         {favori.fournisseur && (
                           <a
