@@ -1,12 +1,13 @@
-import { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Search, Camera, Upload, ExternalLink, Package, Cpu, DoorOpen, 
   Cog, Shield, Cable, Box, CircleDot, History, Plus, X, Loader2,
   Sparkles, Eye, Bookmark, BookmarkCheck, ChevronRight, Image,
   Building2, Filter, RefreshCw, Trash2, Download, Copy, Check,
-  AlertCircle, Info, Tag, Clock, Wrench, FileText
+  AlertCircle, Info, Tag, Clock, Wrench, FileText, Heart
 } from 'lucide-react';
+import { MonCatalogue } from './MonCatalogue';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
 import {
@@ -647,11 +648,11 @@ export function PiecesPage() {
           onClick={() => setActiveTab('catalogue')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === 'catalogue' 
-              ? 'bg-green-500/20 text-green-300' 
+              ? 'bg-pink-500/20 text-pink-300' 
               : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
           }`}
         >
-          <BookmarkCheck className="w-4 h-4 inline mr-2" />
+          <Heart className="w-4 h-4 inline mr-2" />
           Mon catalogue
           {piecesPerso && piecesPerso.length > 0 && (
             <Badge variant="green" className="ml-2">{piecesPerso.length}</Badge>
@@ -795,76 +796,9 @@ export function PiecesPage() {
           </div>
         )}
 
-        {/* Onglet Catalogue personnel */}
+        {/* Onglet Catalogue personnel - Mon Catalogue */}
         {activeTab === 'catalogue' && (
-          <div className="space-y-4">
-            {piecesPerso && piecesPerso.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {piecesPerso.map(piece => (
-                  <Card key={piece.id} className="group">
-                    <CardBody>
-                      <div className="flex gap-3">
-                        {piece.photo_url ? (
-                          <img src={piece.photo_url} alt={piece.designation} className="w-20 h-20 object-cover rounded-lg bg-[var(--bg-tertiary)]" />
-                        ) : (
-                          <div className="w-20 h-20 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-                            <Package className="w-8 h-8 text-[var(--text-muted)]" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-mono text-sm text-green-400">{piece.reference}</p>
-                          <p className="font-medium truncate">{piece.designation}</p>
-                          {piece.fournisseur_prefere && (
-                            <Badge variant="gray" className="mt-1">{piece.fournisseur_prefere}</Badge>
-                          )}
-                          {piece.prix_achat && (
-                            <p className="text-sm text-[var(--text-muted)] mt-1">{piece.prix_achat} € HT</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (confirm('Supprimer cette pièce ?')) {
-                              supprimerPieceMutation.mutate(piece.id);
-                            }
-                          }}
-                          className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
-                      {piece.tags && piece.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {piece.tags.map((tag, i) => (
-                            <span key={i} className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs text-[var(--text-muted)]">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </CardBody>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Card>
-                <CardBody className="text-center py-12">
-                  <BookmarkCheck className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-3" />
-                  <p className="text-[var(--text-secondary)]">Votre catalogue personnel est vide</p>
-                  <p className="text-sm text-[var(--text-muted)] mt-1">
-                    Ajoutez des pièces pour les retrouver facilement
-                  </p>
-                  <Button
-                    variant="secondary"
-                    className="mt-4"
-                    onClick={() => { setPieceAEditer(null); setShowAjoutModal(true); }}
-                  >
-                    <Plus className="w-4 h-4" />
-                    Ajouter une pièce
-                  </Button>
-                </CardBody>
-              </Card>
-            )}
-          </div>
+          <MonCatalogue />
         )}
 
         {/* Onglet Historique */}

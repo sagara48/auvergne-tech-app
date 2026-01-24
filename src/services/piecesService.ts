@@ -525,3 +525,285 @@ export const TYPES_PIECES = [
   { code: 'AMORTISSEUR', label: 'Amortisseur', categorie: 'CABINE' },
   { code: 'AUTRE', label: 'Autre', categorie: 'DIVERS' },
 ];
+
+// ============================================
+// MODULE "MON CATALOGUE" - DOSSIERS & FAVORIS
+// ============================================
+
+export interface Dossier {
+  id: string;
+  nom: string;
+  description?: string;
+  couleur: string;
+  icone: string;
+  parent_id?: string;
+  ordre: number;
+  created_at: string;
+  // Calculé
+  count?: number;
+}
+
+export interface Favori {
+  favori_id: string;
+  piece_id: string;
+  reference: string;
+  designation: string;
+  description?: string;
+  photo_url?: string;
+  fournisseur?: string;
+  dossier_id?: string;
+  dossier_nom?: string;
+  dossier_couleur?: string;
+  dossier_icone?: string;
+  favori_notes?: string;
+  quantite_habituelle?: number;
+  favori_tags?: string[];
+  source: 'catalogue' | 'personnelle';
+  prix_ht?: number;
+  marque_compatible?: string;
+  categorie_code?: string;
+}
+
+export interface StatsFavoris {
+  total_favoris: number;
+  total_dossiers: number;
+  par_fournisseur: Record<string, number>;
+  par_dossier: Record<string, number>;
+}
+
+// DOSSIERS
+
+export async function getDossiers(): Promise<Dossier[]> {
+  const { data, error } = await supabase
+    .from('pieces_dossiers')
+    .select('*')
+    .order('ordre');
+  
+  if (error) throw error;
+  return data || [];
+}
+
+export async function creerDossier(dossier: Partial<Dossier>): Promise<Dossier> {
+  const { data, error } = await supabase
+    .from('pieces_dossiers')
+    .insert({
+      nom: dossier.nom,
+      description: dossier.description,
+      couleur: dossier.couleur || '#3b82f6',
+      icone: dossier.icone || 'Folder',
+      parent_id: dossier.parent_id,
+      ordre: dossier.ordre || 0,
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function modifierDossier(id: string, updates: Partial<Dossier>): Promise<Dossier> {
+  const { data, error } = await supabase
+    .from('pieces_dossiers')
+    .update({
+      nom: updates.nom,
+      description: updates.description,
+      couleur: updates.couleur,
+      icone: updates.icone,
+      parent_id: updates.parent_id,
+      ordre: updates.ordre,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function supprimerDossier(id: string): Promise<void> {
+  // Les favoris dans ce dossier seront déplacés vers "Non classé" (dossier_id = null) grâce au ON DELETE SET NULL
+  const { error } = await supabase
+    .from('pieces_dossiers')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
+}
+
+// FAVORIS
+
+export async function getFavoris(options?: {
+  dossierId?: string;
+  fournisseur?: string;
+  recherche?: string;
+}): Promise<Favori[]> {
+  let query = supabase
+    .from('v_pieces_favoris')
+    .select('*');
+  
+  if (options?.dossierId) {
+    query = query.eq('dossier_id', options.dossierId);
+  }
+  if (options?.fournisseur) {
+    query = query.eq('fournisseur', options.fournisseur);
+  }
+  if (options?.recherche) {
+    const terme = options.recherche.toLowerCase();
+    query = query.or(`reference.ilike.%${terme}%,designation.ilike.%${terme}%,favori_notes.ilike.%${terme}%`);
+  }
+  
+  query = query.order('reference');
+  
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function ajouterFavori(
+  pieceCatalogueId?: string,
+  piecePersonnelleId?: string,
+  dossierId?: string,
+  notes?: string
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('pieces_favoris')
+    .insert({
+      piece_catalogue_id: pieceCatalogueId,
+      piece_personnelle_id: piecePersonnelleId,
+      dossier_id: dossierId,
+      notes,
+    })
+    .select('id')
+    .single();
+  
+  if (error) throw error;
+  return data.id;
+}
+
+export async function retirerFavori(favoriId: string): Promise<void> {
+  const { error } = await supabase
+    .from('pieces_favoris')
+    .delete()
+    .eq('id', favoriId);
+  
+  if (error) throw error;
+}
+
+export async function retirerFavoriByPiece(pieceCatalogueId?: string, piecePersonnelleId?: string): Promise<void> {
+  let query = supabase.from('pieces_favoris').delete();
+  
+  if (pieceCatalogueId) {
+    query = query.eq('piece_catalogue_id', pieceCatalogueId);
+  } else if (piecePersonnelleId) {
+    query = query.eq('piece_personnelle_id', piecePersonnelleId);
+  }
+  
+  const { error } = await query;
+  if (error) throw error;
+}
+
+export async function deplacerFavori(favoriId: string, nouveauDossierId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('pieces_favoris')
+    .update({ dossier_id: nouveauDossierId, updated_at: new Date().toISOString() })
+    .eq('id', favoriId);
+  
+  if (error) throw error;
+}
+
+export async function modifierNotesFavori(favoriId: string, notes: string): Promise<void> {
+  const { error } = await supabase
+    .from('pieces_favoris')
+    .update({ notes, updated_at: new Date().toISOString() })
+    .eq('id', favoriId);
+  
+  if (error) throw error;
+}
+
+export async function estFavori(pieceCatalogueId?: string, piecePersonnelleId?: string): Promise<boolean> {
+  let query = supabase.from('pieces_favoris').select('id').limit(1);
+  
+  if (pieceCatalogueId) {
+    query = query.eq('piece_catalogue_id', pieceCatalogueId);
+  } else if (piecePersonnelleId) {
+    query = query.eq('piece_personnelle_id', piecePersonnelleId);
+  }
+  
+  const { data } = await query;
+  return (data?.length || 0) > 0;
+}
+
+// STATISTIQUES
+
+export async function getStatsFavoris(): Promise<StatsFavoris> {
+  // Total favoris
+  const { count: totalFavoris } = await supabase
+    .from('pieces_favoris')
+    .select('*', { count: 'exact', head: true });
+  
+  // Total dossiers
+  const { count: totalDossiers } = await supabase
+    .from('pieces_dossiers')
+    .select('*', { count: 'exact', head: true });
+  
+  // Par fournisseur
+  const { data: favoris } = await supabase
+    .from('v_pieces_favoris')
+    .select('fournisseur');
+  
+  const parFournisseur: Record<string, number> = {};
+  favoris?.forEach(f => {
+    if (f.fournisseur) {
+      parFournisseur[f.fournisseur] = (parFournisseur[f.fournisseur] || 0) + 1;
+    }
+  });
+  
+  // Par dossier
+  const { data: favorisDossiers } = await supabase
+    .from('v_pieces_favoris')
+    .select('dossier_nom');
+  
+  const parDossier: Record<string, number> = {};
+  favorisDossiers?.forEach(f => {
+    const nom = f.dossier_nom || 'Non classé';
+    parDossier[nom] = (parDossier[nom] || 0) + 1;
+  });
+  
+  return {
+    total_favoris: totalFavoris || 0,
+    total_dossiers: totalDossiers || 0,
+    par_fournisseur: parFournisseur,
+    par_dossier: parDossier,
+  };
+}
+
+// ICÔNES ET COULEURS DISPONIBLES
+
+export const COULEURS_DOSSIERS = [
+  '#3b82f6', // blue
+  '#22c55e', // green
+  '#ef4444', // red
+  '#f59e0b', // amber
+  '#a855f7', // purple
+  '#ec4899', // pink
+  '#06b6d4', // cyan
+  '#84cc16', // lime
+];
+
+export const ICONES_DOSSIERS = [
+  'Folder',
+  'Star',
+  'Zap',
+  'Truck',
+  'Building2',
+  'ShoppingCart',
+  'Bookmark',
+  'Tag',
+  'Box',
+  'Wrench',
+  'Heart',
+  'AlertCircle',
+  'Clock',
+  'Settings',
+];
