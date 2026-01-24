@@ -168,6 +168,9 @@ function getUrlPieceFournisseur(fournisseur: string | undefined, reference: stri
     case 'MGTI':
       // MGTI: recherche par référence
       return `https://www.mgti.fr/?s=${ref}&post_type=product`;
+    case 'MP':
+      // MP Servicenter: recherche par référence
+      return `https://www.mp-servicenter.com/portal/repuestos-ascensores-mp?search=${ref}`;
     default:
       // Recherche Google générique
       return `https://www.google.com/search?q=${ref}+${encodeURIComponent(fournisseur)}+ascenseur`;
@@ -201,7 +204,8 @@ function DetailFavoriModal({
     switch (f?.toUpperCase()) {
       case 'HAUER': return 'purple';
       case 'SODIMAS': return 'blue';
-      case 'MGTI': return 'orange';
+      case 'MGTI': return 'green';
+      case 'MP': return 'orange';
       default: return 'gray';
     }
   };
@@ -266,7 +270,7 @@ function DetailFavoriModal({
                   Rechercher ailleurs
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {['SODIMAS', 'HAUER', 'MGTI'].map(f => {
+                  {['SODIMAS', 'HAUER', 'MGTI', 'MP'].map(f => {
                     const url = getUrlPieceFournisseur(f, favori.reference);
                     const isActive = f === favori.fournisseur?.toUpperCase();
                     return (

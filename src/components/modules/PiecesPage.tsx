@@ -60,6 +60,8 @@ function getUrlPieceFournisseur(fournisseur: string | undefined, reference: stri
       return `https://www.hfrepartition.com/catalogsearch/result/?q=${ref}`;
     case 'MGTI':
       return `https://www.mgti.fr/?s=${ref}&post_type=product`;
+    case 'MP':
+      return `https://www.mp-servicenter.com/portal/repuestos-ascensores-mp?search=${ref}`;
     default:
       return `https://www.google.com/search?q=${ref}+${encodeURIComponent(fournisseur)}+ascenseur`;
   }
@@ -81,6 +83,7 @@ function DetailPieceModal({
       case 'HAUER': return 'purple';
       case 'SODIMAS': return 'blue';
       case 'MGTI': return 'green';
+      case 'MP': return 'orange';
       default: return 'gray';
     }
   };
@@ -146,7 +149,7 @@ function DetailPieceModal({
                   Rechercher ailleurs
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {['SODIMAS', 'HAUER', 'MGTI'].map(f => {
+                  {['SODIMAS', 'HAUER', 'MGTI', 'MP'].map(f => {
                     const url = getUrlPieceFournisseur(f, piece.reference);
                     const isActive = f === piece.fournisseur_code?.toUpperCase();
                     return (
@@ -719,6 +722,7 @@ function AjoutPieceModal({
                   <option value="SODIMAS">Sodimas</option>
                   <option value="HAUER">Hauer</option>
                   <option value="MGTI">MGTI</option>
+                  <option value="MP">MP Servicenter</option>
                   <option value="AUTRE">Autre</option>
                 </Select>
               </div>
@@ -940,9 +944,9 @@ export function PiecesPage() {
             </Card>
 
             {/* Liens rapides fournisseurs */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <span className="text-sm text-[var(--text-muted)]">Rechercher sur :</span>
-              {['SODIMAS', 'HAUER', 'MGTI'].map(code => (
+              {['SODIMAS', 'HAUER', 'MGTI', 'MP'].map(code => (
                 <Button
                   key={code}
                   variant="secondary"

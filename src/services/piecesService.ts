@@ -106,9 +106,10 @@ export async function getUrlRechercheFournisseur(fournisseurCode: string, query:
   
   // URLs par défaut
   const defaultUrls: Record<string, string> = {
-    'SODIMAS': `https://www.sodimas.com/fr/recherche?search=${encodeURIComponent(query)}`,
-    'HAUER': `https://www.hfrench.com/fr/recherche?q=${encodeURIComponent(query)}`,
-    'MGTI': `https://www.mgti.fr/recherche?s=${encodeURIComponent(query)}`,
+    'SODIMAS': `https://my.sodimas.com/fr/recherche?search=${encodeURIComponent(query)}`,
+    'HAUER': `https://www.hfrepartition.com/catalogsearch/result/?q=${encodeURIComponent(query)}`,
+    'MGTI': `https://www.mgti.fr/?s=${encodeURIComponent(query)}&post_type=product`,
+    'MP': `https://www.mp-servicenter.com/portal/repuestos-ascensores-mp?search=${encodeURIComponent(query)}`,
   };
   
   return defaultUrls[fournisseurCode] || `https://www.google.com/search?q=${encodeURIComponent(query)}+ascenseur+pièce`;
