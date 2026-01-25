@@ -26,16 +26,48 @@ interface TourneeParc {
   villes: string[];
 }
 
-// Récupérer les tournées du parc (secteur + ordre2)
+// Récupérer les secteurs autorisés pour l'utilisateur connecté
+async function getUserSecteurs(): Promise<number[]> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    
+    const { data, error } = await supabase
+      .from('user_secteurs')
+      .select('secteur')
+      .eq('user_id', user.id);
+    
+    if (error || !data || data.length === 0) {
+      // Si pas de secteurs assignés = tous les secteurs (admin)
+      return [];
+    }
+    
+    return data.map(d => d.secteur);
+  } catch {
+    return [];
+  }
+}
+
+// Récupérer les tournées du parc (secteur + ordre2) filtrées par droits utilisateur
 async function getTourneesParc(): Promise<TourneeParc[]> {
   try {
+    // D'abord récupérer les secteurs autorisés de l'utilisateur
+    const userSecteurs = await getUserSecteurs();
+    
     // Récupérer les ascenseurs avec ordre2 défini (= dans une tournée)
-    const { data: ascenseurs, error } = await supabase
+    let query = supabase
       .from('parc_ascenseurs')
       .select('secteur, ordre2, en_arret, ville, type_planning')
       .not('ordre2', 'is', null)
       .gt('ordre2', 0)
       .not('type_planning', 'is', null); // Seulement sous contrat
+    
+    // Filtrer par secteurs de l'utilisateur si définis
+    if (userSecteurs.length > 0) {
+      query = query.in('secteur', userSecteurs);
+    }
+    
+    const { data: ascenseurs, error } = await query;
     
     if (error) {
       console.warn('Table parc_ascenseurs non disponible:', error.message);
