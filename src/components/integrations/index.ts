@@ -52,3 +52,8 @@ export {
   ActionDemanderTravaux 
 } from './ActionsRapidesNFC';
 
+// Pièces remplacées - Vue globale et par ascenseur
+export { 
+  PiecesRemplaceesParc, 
+  PiecesRemplaceesByAscenseur 
+} from './PiecesRemplacees';

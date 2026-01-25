@@ -133,6 +133,12 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
   const [ascenseurSearch, setAscenseurSearch] = useState('');
   const [newPiece, setNewPiece] = useState({ designation: '', reference: '', quantite: 1, source: 'stock' as 'stock' | 'commande' });
 
+  // États pour l'autocomplete ascenseur
+  const [selectedAscenseur, setSelectedAscenseur] = useState<any>(null);
+  const [showAscenseurResults, setShowAscenseurResults] = useState(false);
+  const [isSearchingAscenseurs, setIsSearchingAscenseurs] = useState(false);
+  const [ascenseurResults, setAscenseurResults] = useState<any[]>([]);
+
   // Sections dépliables
   const [showTaches, setShowTaches] = useState(true);
   const [showPieces, setShowPieces] = useState(true);
@@ -146,21 +152,67 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
     },
   });
 
-  // Utiliser parc_ascenseurs au lieu de la table ascenseurs
-  const { data: parcAscenseurs } = useQuery({
-    queryKey: ['parc-ascenseurs-travaux'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('parc_ascenseurs')
-        .select('id_wsoucont, code_appareil, adresse, ville, secteur, ordre2, type_planning')
-        .order('code_appareil');
-      if (error) {
-        console.warn('Erreur parc_ascenseurs:', error.message);
-        return [];
+  // Recherche ascenseur côté serveur (debounced)
+  useEffect(() => {
+    if (ascenseurSearch.length < 2) {
+      setAscenseurResults([]);
+      return;
+    }
+
+    setIsSearchingAscenseurs(true);
+    
+    const timeoutId = setTimeout(async () => {
+      try {
+        const searchTerm = ascenseurSearch.toLowerCase();
+        const { data, error } = await supabase
+          .from('parc_ascenseurs')
+          .select('id_wsoucont, code_appareil, adresse, ville, secteur, ordre2, type_planning')
+          .or(`code_appareil.ilike.%${searchTerm}%,adresse.ilike.%${searchTerm}%,ville.ilike.%${searchTerm}%`)
+          .order('code_appareil')
+          .limit(20);
+        
+        if (error) {
+          console.warn('Erreur recherche ascenseur:', error.message);
+          setAscenseurResults([]);
+        } else {
+          setAscenseurResults(data || []);
+        }
+      } catch (err) {
+        console.error('Exception recherche ascenseur:', err);
+        setAscenseurResults([]);
+      } finally {
+        setIsSearchingAscenseurs(false);
       }
-      return data || [];
-    },
-  });
+    }, 300); // Debounce 300ms
+
+    return () => clearTimeout(timeoutId);
+  }, [ascenseurSearch]);
+
+  // Charger l'ascenseur initial si on édite un travail existant
+  useEffect(() => {
+    if (travaux?.ascenseur_id && !selectedAscenseur) {
+      // Chercher l'ascenseur par son code
+      const loadInitialAscenseur = async () => {
+        const { data } = await supabase
+          .from('parc_ascenseurs')
+          .select('id_wsoucont, code_appareil, adresse, ville, secteur, ordre2, type_planning')
+          .eq('code_appareil', travaux.ascenseur_id)
+          .maybeSingle();
+        
+        if (data) {
+          setSelectedAscenseur(data);
+        }
+      };
+      loadInitialAscenseur();
+    }
+  }, [travaux?.ascenseur_id]);
+
+  // Fermer le dropdown quand on clique ailleurs
+  useEffect(() => {
+    const handleClickOutside = () => setShowAscenseurResults(false);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const { data: techniciens } = useQuery({
     queryKey: ['techniciens'],
@@ -181,27 +233,18 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
   });
 
   const techs = techniciens?.filter(t => t.role?.code === 'technicien' || t.role?.code === 'chef_equipe') || [];
-  
-  // Filtrer les ascenseurs du parc (optionnel: par secteur ou autre critère)
-  const filteredAscenseurs = parcAscenseurs || [];
 
   // Effet: auto-sélection de la tournée quand un ascenseur est sélectionné
   useEffect(() => {
-    if (form.ascenseur_id && parcAscenseurs && tournees) {
-      // Trouver l'ascenseur sélectionné
-      const ascenseur = parcAscenseurs.find((a: any) => 
-        a.id_wsoucont?.toString() === form.ascenseur_id || a.code_appareil === form.ascenseur_id
-      );
-      
-      if (ascenseur && ascenseur.secteur && ascenseur.ordre2) {
+    if (form.ascenseur_id && selectedAscenseur && tournees) {
+      if (selectedAscenseur.secteur && selectedAscenseur.ordre2) {
         // Chercher une tournée qui correspond au secteur
-        // Le code tournée peut être formaté comme "S{secteur}-T{ordre2}" ou similaire
         const tourneeMatch = tournees.find((t: any) => {
           // Correspondance par secteur
-          if (t.secteur === ascenseur.secteur) return true;
+          if (t.secteur === selectedAscenseur.secteur) return true;
           // Ou par code contenant le secteur
           const codeMatch = t.code?.match(/S(\d+)/);
-          if (codeMatch && parseInt(codeMatch[1]) === ascenseur.secteur) return true;
+          if (codeMatch && parseInt(codeMatch[1]) === selectedAscenseur.secteur) return true;
           return false;
         });
         
@@ -210,7 +253,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
         }
       }
     }
-  }, [form.ascenseur_id, parcAscenseurs, tournees]);
+  }, [form.ascenseur_id, selectedAscenseur, tournees]);
 
   // Filtrer les articles pour la recherche
   const filteredArticles = stockArticles?.filter(a => 
@@ -508,63 +551,106 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Ascenseur (Parc)</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                  <input
-                    type="text"
-                    placeholder="Rechercher par code ou adresse..."
-                    value={ascenseurSearch}
-                    onChange={e => setAscenseurSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] text-sm focus:outline-none focus:border-purple-500 mb-2"
-                  />
-                </div>
-                <Select 
-                  value={form.ascenseur_id} 
-                  onChange={e => {
-                    const value = e.target.value;
-                    setForm({ ...form, ascenseur_id: value });
-                    // Reset tournée pour permettre l'auto-sélection
-                    if (value) {
-                      setForm(prev => ({ ...prev, ascenseur_id: value, tournee_id: '' }));
-                    }
-                  }}
-                >
-                  <option value="">Sélectionner un ascenseur...</option>
-                  {filteredAscenseurs
-                    .filter((a: any) => {
-                      if (!ascenseurSearch) return true;
-                      const search = ascenseurSearch.toLowerCase();
-                      return (
-                        a.code_appareil?.toLowerCase().includes(search) ||
-                        a.adresse?.toLowerCase().includes(search) ||
-                        a.ville?.toLowerCase().includes(search)
-                      );
-                    })
-                    .slice(0, 50)
-                    .map((a: any) => (
-                      <option key={a.id_wsoucont} value={a.code_appareil}>
-                        {a.code_appareil} - {a.adresse}, {a.ville} {a.ordre2 ? `(T${a.ordre2})` : ''}
-                      </option>
-                    ))
-                  }
-                </Select>
-                {ascenseurSearch && filteredAscenseurs.filter((a: any) => {
-                  const search = ascenseurSearch.toLowerCase();
-                  return (
-                    a.code_appareil?.toLowerCase().includes(search) ||
-                    a.adresse?.toLowerCase().includes(search) ||
-                    a.ville?.toLowerCase().includes(search)
-                  );
-                }).length > 50 && (
+                
+                {/* Ascenseur sélectionné */}
+                {form.ascenseur_id && selectedAscenseur && (
+                  <div className="flex items-center justify-between p-2 mb-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                    <div>
+                      <p className="text-sm font-mono font-bold text-purple-400">{selectedAscenseur.code_appareil}</p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        {selectedAscenseur.adresse}, {selectedAscenseur.ville}
+                        {selectedAscenseur.ordre2 && (
+                          <span className="ml-2 text-lime-400">S{selectedAscenseur.secteur} T{selectedAscenseur.ordre2}</span>
+                        )}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm(prev => ({ ...prev, ascenseur_id: '', tournee_id: '' }));
+                        setSelectedAscenseur(null);
+                      }}
+                      className="p-1 hover:bg-[var(--bg-tertiary)] rounded"
+                    >
+                      <X className="w-4 h-4 text-[var(--text-muted)]" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Champ de recherche */}
+                {!form.ascenseur_id && (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                    <input
+                      type="text"
+                      placeholder="Tapez au moins 2 caractères pour rechercher..."
+                      value={ascenseurSearch}
+                      onChange={e => {
+                        setAscenseurSearch(e.target.value);
+                        setShowAscenseurResults(true);
+                      }}
+                      onFocus={() => setShowAscenseurResults(true)}
+                      className="w-full pl-9 pr-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] text-sm focus:outline-none focus:border-purple-500"
+                    />
+                    
+                    {/* Dropdown résultats */}
+                    {showAscenseurResults && ascenseurSearch.length >= 2 && (
+                      <div className="absolute z-50 w-full mt-1 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded-xl shadow-xl max-h-64 overflow-auto">
+                        {isSearchingAscenseurs ? (
+                          <div className="p-4 text-center text-[var(--text-muted)]">
+                            <div className="animate-spin w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-2" />
+                            Recherche...
+                          </div>
+                        ) : ascenseurResults.length === 0 ? (
+                          <div className="p-4 text-center text-[var(--text-muted)]">
+                            Aucun résultat pour "{ascenseurSearch}"
+                          </div>
+                        ) : (
+                          <>
+                            {ascenseurResults.map((a: any) => (
+                              <button
+                                key={a.id_wsoucont || a.code_appareil}
+                                type="button"
+                                onClick={() => {
+                                  setForm(prev => ({ ...prev, ascenseur_id: a.code_appareil, tournee_id: '' }));
+                                  setSelectedAscenseur(a);
+                                  setAscenseurSearch('');
+                                  setShowAscenseurResults(false);
+                                }}
+                                className="w-full px-3 py-2 text-left hover:bg-[var(--bg-secondary)] border-b border-[var(--border-primary)] last:border-b-0"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm font-mono font-semibold text-[var(--text-primary)]">
+                                      {a.code_appareil}
+                                    </p>
+                                    <p className="text-xs text-[var(--text-muted)]">
+                                      {a.adresse}, {a.ville}
+                                    </p>
+                                  </div>
+                                  {a.ordre2 && (
+                                    <span className="text-[10px] bg-lime-500/20 text-lime-400 px-1.5 py-0.5 rounded">
+                                      S{a.secteur} T{a.ordre2}
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                            {ascenseurResults.length >= 20 && (
+                              <div className="px-3 py-2 text-xs text-center text-[var(--text-muted)] bg-[var(--bg-secondary)]">
+                                Affinez votre recherche pour voir plus de résultats
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {ascenseurSearch.length > 0 && ascenseurSearch.length < 2 && !form.ascenseur_id && (
                   <p className="text-xs text-[var(--text-muted)] mt-1">
-                    +{filteredAscenseurs.filter((a: any) => {
-                      const search = ascenseurSearch.toLowerCase();
-                      return (
-                        a.code_appareil?.toLowerCase().includes(search) ||
-                        a.adresse?.toLowerCase().includes(search) ||
-                        a.ville?.toLowerCase().includes(search)
-                      );
-                    }).length - 50} résultats - affinez votre recherche
+                    Tapez au moins 2 caractères...
                   </p>
                 )}
               </div>
@@ -582,17 +668,11 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
                 <label className="text-sm text-[var(--text-tertiary)] mb-1 block flex items-center gap-2">
                   <Route className="w-4 h-4 text-green-400" />
                   Tournée d'entretien
-                  {form.ascenseur_id && (() => {
-                    const asc = parcAscenseurs?.find((a: any) => a.code_appareil === form.ascenseur_id);
-                    if (asc?.ordre2) {
-                      return (
-                        <span className="text-[10px] bg-lime-500/20 text-lime-400 px-1.5 py-0.5 rounded">
-                          S{asc.secteur} T{asc.ordre2}
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
+                  {selectedAscenseur?.ordre2 && (
+                    <span className="text-[10px] bg-lime-500/20 text-lime-400 px-1.5 py-0.5 rounded">
+                      S{selectedAscenseur.secteur} T{selectedAscenseur.ordre2}
+                    </span>
+                  )}
                 </label>
                 <Select value={form.tournee_id} onChange={e => setForm({ ...form, tournee_id: e.target.value })}>
                   <option value="">Aucune tournée</option>

@@ -24,6 +24,7 @@ import {
   type OptimizedRoute
 } from '@/services/routeOptimizer';
 import { geocodeAndUpdateAll } from '@/services/geocodingService';
+import { PiecesRemplaceesParc, PiecesRemplaceesByAscenseur } from '@/components/integrations/PiecesRemplacees';
 import { format, formatDistanceToNow, parseISO, differenceInHours, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -1972,7 +1973,7 @@ function SignalerPiecesModal({
 
 // Modal Détail Ascenseur
 function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse' | 'notes' | 'documents'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse' | 'notes' | 'documents' | 'pieces'>('info');
   const [selectedIntervention, setSelectedIntervention] = useState<any>(null);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [isAddingNote, setIsAddingNote] = useState(false);
@@ -2534,6 +2535,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 { id: 'visites', label: 'Visites', icon: Calendar, count: visites.length },
                 { id: 'controles', label: 'Contrôles', icon: Eye, count: controles.length },
                 { id: 'pannes', label: 'Pannes', icon: AlertTriangle, count: pannes.length },
+                { id: 'pieces', label: 'Pièces', icon: Package, count: null },
                 { id: 'notes', label: 'Notes', icon: MessageSquare, count: notesAscenseur?.length || 0 },
                 { id: 'documents', label: 'Documents', icon: FolderOpen, count: documentsAscenseur?.length || 0 }
               ].map(tab => (
@@ -3370,6 +3372,13 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 )}
               </div>
             )}
+
+            {/* Onglet Pièces remplacées */}
+            {activeTab === 'pieces' && (
+              <div className="space-y-4">
+                <PiecesRemplaceesByAscenseur codeAppareil={ascenseur.code_appareil} />
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>
@@ -3389,7 +3398,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
 // PAGE PRINCIPALE
 // =============================================
 export function ParcAscenseursPage() {
-  const [mainTab, setMainTab] = useState<'parc' | 'arrets' | 'pannes' | 'tournees' | 'stats' | 'carte'>('parc');
+  const [mainTab, setMainTab] = useState<'parc' | 'arrets' | 'pannes' | 'tournees' | 'stats' | 'carte' | 'pieces'>('parc');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [secteurFilter, setSecteurFilter] = useState<string>('');
@@ -4008,6 +4017,15 @@ export function ParcAscenseursPage() {
             >
               <Map className="w-4 h-4 inline mr-1" />
               Carte
+            </button>
+            <button
+              onClick={() => setMainTab('pieces')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                mainTab === 'pieces' ? 'bg-purple-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Package className="w-4 h-4 inline mr-1" />
+              Pièces
             </button>
           </div>
         </div>
@@ -5903,6 +5921,24 @@ export function ParcAscenseursPage() {
               })()}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB: Pièces remplacées */}
+      {mainTab === 'pieces' && (
+        <div className="space-y-4">
+          <Card>
+            <CardBody className="p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <Package className="w-6 h-6 text-purple-400" />
+                <div>
+                  <h2 className="text-lg font-bold text-[var(--text-primary)]">Pièces remplacées</h2>
+                  <p className="text-sm text-[var(--text-muted)]">Historique des remplacements sur tous les appareils</p>
+                </div>
+              </div>
+              <PiecesRemplaceesParc secteurs={[1, 2, 3, 4, 5, 6, 7, 8]} />
+            </CardBody>
+          </Card>
         </div>
       )}
       
