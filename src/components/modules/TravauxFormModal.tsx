@@ -468,10 +468,16 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
       queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
     }
 
+    // Préparer les données à sauvegarder
+    // Ne pas envoyer ascenseur_id car il contient maintenant le code_appareil
+    const { ascenseur_id, ...formWithoutAscenseurId } = form;
+
     onSave({
-      ...form,
-      // Stocker le code_appareil (form.ascenseur_id contient maintenant le code_appareil)
-      code_appareil: form.ascenseur_id,
+      ...formWithoutAscenseurId,
+      // Stocker le code_appareil
+      code_appareil: ascenseur_id || null,
+      // ascenseur_id doit être null ou un UUID valide
+      ascenseur_id: null,
       devis_montant: form.devis_montant ? parseFloat(form.devis_montant as string) : undefined,
       date_butoir: form.date_butoir || null,
       taches: taches.map(t => ({

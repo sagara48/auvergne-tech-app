@@ -63,7 +63,7 @@ export async function getTravaux(includeArchived = false): Promise<Travaux[]> {
   try {
     const { data, error } = await supabase
       .from('travaux')
-      .select('*, client:clients(*), technicien:techniciens!travaux_technicien_id_fkey(*), ascenseur:ascenseurs(*)')
+      .select('*, code_appareil, client:clients(*), technicien:techniciens!travaux_technicien_id_fkey(*), ascenseur:ascenseurs(*)')
       .order('created_at', { ascending: false });
     
     if (error) {

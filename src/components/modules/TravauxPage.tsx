@@ -189,10 +189,15 @@ function TravauxDetailModal({
                 <div><span className="text-[var(--text-tertiary)] text-sm">Client:</span> <span className="text-[var(--text-primary)]">{travaux.client.raison_sociale}</span></div>
               </div>
             )}
-            {travaux.ascenseur && (
+            {(travaux.ascenseur || (travaux as any).code_appareil) && (
               <div className="flex items-center gap-3">
                 <Building2 className="w-4 h-4 text-[var(--text-muted)]" />
-                <div><span className="text-[var(--text-tertiary)] text-sm">Ascenseur:</span> <span className="text-[var(--text-primary)]">{travaux.ascenseur.code}</span></div>
+                <div>
+                  <span className="text-[var(--text-tertiary)] text-sm">Ascenseur:</span>{' '}
+                  <span className="text-[var(--text-primary)] font-mono">
+                    {travaux.ascenseur?.code || (travaux as any).code_appareil}
+                  </span>
+                </div>
               </div>
             )}
             {travaux.technicien && (
@@ -406,6 +411,10 @@ export function TravauxPage() {
       toast.success('Travaux créé');
       setShowForm(false);
     },
+    onError: (error: any) => {
+      console.error('Erreur création travaux:', error);
+      toast.error(`Erreur: ${error.message || 'Impossible de créer le travail'}`);
+    },
   });
 
   const updateMutation = useMutation({
@@ -520,6 +529,12 @@ export function TravauxPage() {
                     <h3 className="text-base font-semibold text-[var(--text-primary)] mb-2">{t.titre}</h3>
                     <div className="flex items-center gap-4 text-xs text-[var(--text-tertiary)]">
                       {t.client && <span className="flex items-center gap-1"><Building2 className="w-3 h-3" /> {t.client.raison_sociale}</span>}
+                      {((t as any).code_appareil || t.ascenseur) && (
+                        <span className="flex items-center gap-1 font-mono">
+                          <Building2 className="w-3 h-3" /> 
+                          {(t as any).code_appareil || t.ascenseur?.code}
+                        </span>
+                      )}
                       {t.technicien && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {t.technicien.prenom} {t.technicien.nom}</span>}
                     </div>
                   </div>
