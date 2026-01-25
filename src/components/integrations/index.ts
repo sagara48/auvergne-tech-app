@@ -16,3 +16,15 @@ export { StockMouvements, StockMouvementsWidget } from './StockMouvements';
 // Sélecteur de pièces détachées
 export { PiecesPicker, AddToPanierButton } from './PiecesPicker';
 
+// Historique complet ascenseur (timeline pannes, visites, travaux, docs)
+export { HistoriqueAscenseur } from './HistoriqueAscenseur';
+
+// Réapprovisionnement automatique véhicule (stock sous seuil)
+export { ReapprovisionnementAuto, VehiculeStockAlertBadge } from './ReapprovisionnementAuto';
+
+// Fiche ascenseur complète après scan NFC
+export { FicheAscenseurNFC } from './FicheAscenseurNFC';
+
+// Créer travaux depuis arrêt/panne du parc
+export { CreerTravauxDepuisArret, BoutonCreerTravaux } from './CreerTravauxDepuisArret';
+
