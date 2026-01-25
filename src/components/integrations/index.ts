@@ -13,3 +13,6 @@ export { TravauxPieces, TravauxEtapes } from './TravauxPiecesEtapes';
 // Mouvements de stock - Historique entrées/sorties
 export { StockMouvements, StockMouvementsWidget } from './StockMouvements';
 
+// Sélecteur de pièces détachées
+export { PiecesPicker, AddToPanierButton } from './PiecesPicker';
+

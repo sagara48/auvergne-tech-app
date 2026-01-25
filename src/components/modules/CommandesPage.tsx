@@ -3,9 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ShoppingCart, Plus, Search, Package, Truck, Check, X, Eye, Edit, 
   Archive, Calendar, User, Clock, AlertTriangle, Minus, MoreVertical,
-  ChevronRight, FileText, Trash2, ChevronDown, ChevronUp, ArrowRight
+  ChevronRight, FileText, Trash2, ChevronDown, ChevronUp, ArrowRight, Wrench
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
+import { PiecesPicker } from '@/components/integrations/PiecesPicker';
+import {
 import { 
   getCommandes, createCommande, updateCommande, archiveCommande,
   addCommandeLigne, deleteCommandeLigne, updateCommandeLigne, getStockArticles, getAscenseurs,
@@ -179,7 +181,8 @@ function CommandeFormModal({
   // Lignes de commande
   const [lignes, setLignes] = useState<LigneForm[]>([]);
   const [showAddLigne, setShowAddLigne] = useState(false);
-  const [ligneType, setLigneType] = useState<'stock' | 'manuel'>('stock');
+  const [ligneType, setLigneType] = useState<'stock' | 'manuel' | 'catalogue'>('stock');
+  const [showPiecesPicker, setShowPiecesPicker] = useState(false);
   const [articleSearch, setArticleSearch] = useState('');
   const [newLigne, setNewLigne] = useState({
     designation: '',
@@ -236,6 +239,22 @@ function CommandeFormModal({
     }]);
     setNewLigne({ designation: '', reference: '', quantite: 1, ascenseur_id: '', detail: '' });
     setShowAddLigne(false);
+  };
+
+  // Ajouter des pièces depuis le catalogue
+  const addLignesFromCatalogue = (pieces: Array<{ reference: string; designation: string; quantite: number; fournisseur?: string }>) => {
+    const nouvelleLignes = pieces.map((piece, index) => ({
+      id: `ligne-cat-${Date.now()}-${index}`,
+      type: 'manuel' as const,
+      designation: piece.designation,
+      reference: piece.reference,
+      quantite: piece.quantite,
+      ascenseur_id: '',
+      detail: piece.fournisseur ? `Fournisseur: ${piece.fournisseur}` : '',
+    }));
+    setLignes([...lignes, ...nouvelleLignes]);
+    setShowPiecesPicker(false);
+    toast.success(`${pieces.length} pièce(s) ajoutée(s)`);
   };
 
   const removeLigne = (id: string) => {
@@ -337,7 +356,7 @@ function CommandeFormModal({
               {/* Formulaire ajout pièce */}
               {showAddLigne && (
                 <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl mb-4 space-y-3">
-                  {/* Tabs Stock / Manuel */}
+                  {/* Tabs Stock / Manuel / Catalogue */}
                   <div className="flex gap-2">
                     <button
                       onClick={() => setLigneType('stock')}
@@ -347,7 +366,7 @@ function CommandeFormModal({
                           : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                       }`}
                     >
-                      <Package className="w-4 h-4 inline mr-2" />Depuis le stock
+                      <Package className="w-4 h-4 inline mr-2" />Stock
                     </button>
                     <button
                       onClick={() => setLigneType('manuel')}
@@ -357,11 +376,35 @@ function CommandeFormModal({
                           : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                       }`}
                     >
-                      <Edit className="w-4 h-4 inline mr-2" />Saisie manuelle
+                      <Edit className="w-4 h-4 inline mr-2" />Manuel
+                    </button>
+                    <button
+                      onClick={() => setLigneType('catalogue')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        ligneType === 'catalogue'
+                          ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                      }`}
+                    >
+                      <Wrench className="w-4 h-4 inline mr-2" />Pièces détachées
                     </button>
                   </div>
 
-                  {ligneType === 'stock' ? (
+                  {ligneType === 'catalogue' ? (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-[var(--text-muted)] mb-3">
+                        Recherchez et ajoutez des pièces depuis le catalogue
+                      </p>
+                      <Button 
+                        variant="primary" 
+                        onClick={() => setShowPiecesPicker(true)}
+                        className="bg-gradient-to-r from-purple-500 to-indigo-500"
+                      >
+                        <Search className="w-4 h-4" />
+                        Ouvrir le catalogue
+                      </Button>
+                    </div>
+                  ) : ligneType === 'stock' ? (
                     <div>
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
@@ -546,6 +589,16 @@ function CommandeFormModal({
           </div>
         </CardBody>
       </Card>
+
+      {/* Modal sélecteur de pièces */}
+      {showPiecesPicker && (
+        <PiecesPicker
+          onClose={() => setShowPiecesPicker(false)}
+          onSelect={addLignesFromCatalogue}
+          mode="selection"
+          title="Ajouter des pièces depuis le catalogue"
+        />
+      )}
     </div>
   );
 }

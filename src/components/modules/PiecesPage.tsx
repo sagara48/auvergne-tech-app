@@ -5,11 +5,12 @@ import {
   Cog, Shield, Cable, Box, CircleDot, History, Plus, X, Loader2,
   Sparkles, Eye, Bookmark, BookmarkCheck, ChevronRight, Image,
   Building2, Filter, RefreshCw, Trash2, Download, Copy, Check,
-  AlertCircle, Info, Tag, Clock, Wrench, FileText, Heart
+  AlertCircle, Info, Tag, Clock, Wrench, FileText, Heart, ShoppingCart
 } from 'lucide-react';
 import { MonCatalogue } from './MonCatalogue';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
+import { usePanierStore } from '@/stores/panierStore';
 import {
   getFournisseurs,
   getCategoriesPieces,
@@ -258,6 +259,22 @@ function DetailPieceModal({
 
           {/* Footer */}
           <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--border-primary)]">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                usePanierStore.getState().addItem({
+                  reference: piece.reference,
+                  designation: piece.designation,
+                  quantite: 1,
+                  fournisseur: piece.fournisseur_code,
+                });
+                toast.success(`${piece.reference} ajouté au panier`);
+              }}
+              className="bg-green-500/10 hover:bg-green-500/20 text-green-400 border-green-500/30"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              Ajouter au panier
+            </Button>
             {urlFournisseur && (
               <a
                 href={urlFournisseur}
@@ -1012,16 +1029,31 @@ export function PiecesPage() {
                             <Eye className="w-3 h-3" />
                             Détails
                           </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              usePanierStore.getState().addItem({
+                                reference: piece.reference,
+                                designation: piece.designation,
+                                quantite: 1,
+                                fournisseur: piece.fournisseur_code,
+                              });
+                              toast.success(`${piece.reference} ajouté au panier`);
+                            }}
+                            className="flex-1 py-2 px-3 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                          >
+                            <ShoppingCart className="w-3 h-3" />
+                            Panier
+                          </button>
                           {urlFournisseur && (
                             <a
                               href={urlFournisseur}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={e => e.stopPropagation()}
-                              className="flex-1 py-2 px-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                              className="py-2 px-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
                             >
                               <ExternalLink className="w-3 h-3" />
-                              {piece.fournisseur_code}
                             </a>
                           )}
                         </div>
