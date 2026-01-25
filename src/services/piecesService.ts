@@ -201,7 +201,7 @@ export async function getPieceByReference(reference: string, fournisseur?: strin
 // ============================================
 
 /**
- * Analyse une photo de pièce avec Claude Vision
+ * Analyse une photo de pièce avec Claude Vision via Edge Function Supabase
  * Retourne l'identification de la pièce et des suggestions
  */
 export async function analyserPhotoPiece(
@@ -212,102 +212,39 @@ export async function analyserPhotoPiece(
     codeAscenseur?: string;
   }
 ): Promise<AnalysePhotoResult> {
-  // Construire le prompt pour Claude Vision
-  const systemPrompt = `Tu es un expert en maintenance d'ascenseurs. Tu analyses des photos de pièces détachées pour les identifier.
-
-Ton objectif est d'identifier :
-1. Le TYPE de pièce (contacteur, bouton, carte électronique, galet, patin, câble, etc.)
-2. La MARQUE si visible (Schindler, Otis, Kone, ThyssenKrupp, etc.)
-3. Les RÉFÉRENCES visibles sur la pièce (numéros gravés, étiquettes, codes)
-4. L'ÉTAT de la pièce (neuf, usé, défectueux)
-5. Des SUGGESTIONS de recherche pour trouver cette pièce chez Sodimas, Hauer ou MGTI
-
-Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
-{
-  "type_piece": "string - type de pièce identifié",
-  "description": "string - description détaillée de la pièce",
-  "marque_detectee": "string ou null - marque si identifiable",
-  "references_lues": ["array de strings - toutes les références visibles"],
-  "caracteristiques": ["array de strings - caractéristiques techniques observées"],
-  "etat": "string - neuf/usé/défectueux/indéterminé",
-  "suggestions_recherche": ["array de strings - termes à rechercher chez les fournisseurs"],
-  "confiance": 0.0-1.0,
-  "conseil_technique": "string ou null - conseil pour le technicien"
-}`;
-
-  let userPrompt = "Analyse cette photo de pièce d'ascenseur et identifie-la :";
-  
-  if (contexte?.marqueAscenseur) {
-    userPrompt += `\n- Marque de l'ascenseur : ${contexte.marqueAscenseur}`;
-  }
-  if (contexte?.typeAscenseur) {
-    userPrompt += `\n- Type d'ascenseur : ${contexte.typeAscenseur}`;
-  }
-  if (contexte?.codeAscenseur) {
-    userPrompt += `\n- Code appareil : ${contexte.codeAscenseur}`;
-  }
-
   try {
-    // Appel à l'API Claude Vision via l'endpoint Anthropic
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY || '',
-        'anthropic-version': '2023-06-01',
+    // Appel à l'Edge Function Supabase
+    const { data, error } = await supabase.functions.invoke('analyze-piece-photo', {
+      body: {
+        imageBase64,
+        contexte,
       },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: 'image/jpeg',
-                  data: imageBase64.replace(/^data:image\/\w+;base64,/, ''),
-                },
-              },
-              {
-                type: 'text',
-                text: userPrompt,
-              },
-            ],
-          },
-        ],
-      }),
     });
 
-    if (!response.ok) {
-      throw new Error(`Erreur API Claude: ${response.status}`);
+    if (error) {
+      console.error('Erreur Edge Function:', error);
+      throw new Error(error.message || 'Erreur lors de l\'analyse');
     }
 
-    const data = await response.json();
-    const textContent = data.content.find((c: any) => c.type === 'text')?.text || '';
-    
-    // Parser la réponse JSON
-    const jsonMatch = textContent.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const result = JSON.parse(jsonMatch[0]) as AnalysePhotoResult;
-      return result;
+    if (data.error) {
+      throw new Error(data.error);
     }
-    
-    throw new Error('Réponse invalide de Claude Vision');
+
+    return data as AnalysePhotoResult;
   } catch (error) {
     console.error('Erreur analyse photo:', error);
     
     // Retourner un résultat par défaut en cas d'erreur
     return {
-      type_piece: 'Non identifié',
+      type_piece: 'Analyse impossible',
       description: 'Impossible d\'analyser la photo. Veuillez réessayer ou saisir les informations manuellement.',
+      marque_detectee: undefined,
       references_lues: [],
       caracteristiques: [],
+      etat: 'indéterminé',
       suggestions_recherche: [],
       confiance: 0,
+      conseil_technique: 'Vérifiez que l\'image est nette et bien éclairée.',
     };
   }
 }
