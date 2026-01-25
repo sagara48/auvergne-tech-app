@@ -12,6 +12,7 @@ import {
   Check, Edit2, Copy, Globe
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
+import { usePanierStore } from '@/stores/panierStore';
 import {
   getDossiers,
   creerDossier,
@@ -430,6 +431,22 @@ function DetailFavoriModal({
               Retirer des favoris
             </Button>
             <div className="flex gap-2">
+              <Button 
+                variant="secondary"
+                className="bg-green-500/10 hover:bg-green-500/20 text-green-400 border-green-500/30"
+                onClick={() => {
+                  usePanierStore.getState().addItem({
+                    reference: favori.reference,
+                    designation: favori.designation,
+                    quantite: 1,
+                    fournisseur: favori.fournisseur,
+                  });
+                  toast.success(`${favori.reference} ajouté au panier`);
+                }}
+              >
+                <ShoppingCart className="w-4 h-4" />
+                Ajouter au panier
+              </Button>
               {urlFournisseur && (
                 <a
                   href={urlFournisseur}
@@ -959,17 +976,35 @@ export function MonCatalogue() {
                             </span>
                           )}
                         </div>
-                        {/* Bouton détails explicite */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFavoriDetail(favori);
-                          }}
-                          className="w-full mt-3 py-2 px-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          Voir détails & lien fournisseur
-                        </button>
+                        {/* Boutons actions */}
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              usePanierStore.getState().addItem({
+                                reference: favori.reference,
+                                designation: favori.designation,
+                                quantite: 1,
+                                fournisseur: favori.fournisseur,
+                              });
+                              toast.success(`${favori.reference} ajouté au panier`);
+                            }}
+                            className="flex-1 py-2 px-3 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                          >
+                            <ShoppingCart className="w-3 h-3" />
+                            Panier
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFavoriDetail(favori);
+                            }}
+                            className="flex-1 py-2 px-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Détails
+                          </button>
+                        </div>
                       </CardBody>
                     </Card>
                   );
@@ -1014,6 +1049,23 @@ export function MonCatalogue() {
                         {favori.favori_notes && (
                           <span className="text-amber-400 text-xs truncate max-w-[100px]">{favori.favori_notes}</span>
                         )}
+                        {/* Bouton panier */}
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            usePanierStore.getState().addItem({
+                              reference: favori.reference,
+                              designation: favori.designation,
+                              quantite: 1,
+                              fournisseur: favori.fournisseur,
+                            });
+                            toast.success(`${favori.reference} ajouté au panier`);
+                          }}
+                          className="px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <ShoppingCart className="w-3 h-3" />
+                          Panier
+                        </button>
                         {/* Bouton voir détails */}
                         <button
                           onClick={e => {

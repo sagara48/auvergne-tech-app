@@ -60,6 +60,7 @@ interface LigneForm {
   quantite: number;
   ascenseur_id?: string;
   detail?: string;
+  fournisseur?: string;
 }
 
 // Helper pour obtenir l'action suivante logique
@@ -189,6 +190,7 @@ function CommandeFormModal({
     quantite: 1,
     ascenseur_id: '',
     detail: '',
+    fournisseur: '',
   });
 
   // Queries
@@ -235,8 +237,9 @@ function CommandeFormModal({
       quantite: newLigne.quantite || 1,
       ascenseur_id: newLigne.ascenseur_id || '',
       detail: newLigne.detail || '',
+      fournisseur: newLigne.fournisseur || '',
     }]);
-    setNewLigne({ designation: '', reference: '', quantite: 1, ascenseur_id: '', detail: '' });
+    setNewLigne({ designation: '', reference: '', quantite: 1, ascenseur_id: '', detail: '', fournisseur: '' });
     setShowAddLigne(false);
   };
 
@@ -249,7 +252,8 @@ function CommandeFormModal({
       reference: piece.reference,
       quantite: piece.quantite,
       ascenseur_id: '',
-      detail: piece.fournisseur ? `Fournisseur: ${piece.fournisseur}` : '',
+      detail: '',
+      fournisseur: piece.fournisseur || '',
     }));
     setLignes([...lignes, ...nouvelleLignes]);
     setShowPiecesPicker(false);
@@ -454,7 +458,7 @@ function CommandeFormModal({
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-4 gap-3">
                         <div>
                           <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Quantité</label>
                           <Input
@@ -465,6 +469,19 @@ function CommandeFormModal({
                           />
                         </div>
                         <div>
+                          <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Fournisseur pièce</label>
+                          <Select
+                            value={newLigne.fournisseur}
+                            onChange={e => setNewLigne({ ...newLigne, fournisseur: e.target.value })}
+                          >
+                            <option value="">Non spécifié</option>
+                            <option value="HAUER">Hauer</option>
+                            <option value="SODIMAS">Sodimas</option>
+                            <option value="MGTI">MGTI</option>
+                            <option value="MP">MP Servicenter</option>
+                          </Select>
+                        </div>
+                        <div>
                           <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Ascenseur (opt.)</label>
                           <Select
                             value={newLigne.ascenseur_id}
@@ -472,7 +489,7 @@ function CommandeFormModal({
                           >
                             <option value="">Aucun</option>
                             {ascenseurs?.map(a => (
-                              <option key={a.id} value={a.id}>{a.code} - {a.adresse?.slice(0, 30)}</option>
+                              <option key={a.id} value={a.id}>{a.code}</option>
                             ))}
                           </Select>
                         </div>
@@ -503,10 +520,13 @@ function CommandeFormModal({
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <span className="text-sm font-medium text-[var(--text-primary)]">{ligne.designation}</span>
                             {ligne.type === 'stock' && <Badge variant="blue" className="text-xs">Stock</Badge>}
                             {ligne.type === 'manuel' && <Badge variant="amber" className="text-xs">Manuel</Badge>}
+                            {ligne.fournisseur && (
+                              <Badge variant="purple" className="text-xs">{ligne.fournisseur}</Badge>
+                            )}
                           </div>
                           {ligne.reference && (
                             <div className="text-xs text-[var(--text-muted)]">Réf: {ligne.reference}</div>
