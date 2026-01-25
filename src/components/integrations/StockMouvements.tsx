@@ -1,10 +1,10 @@
 // src/components/integrations/StockMouvements.tsx
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowUpCircle, ArrowDownCircle, RefreshCw, ArrowRightLeft,
   Search, Filter, Calendar, Package, Truck, User, FileText,
-  ChevronDown, ChevronUp, Clock
+  ChevronDown, ChevronUp, Clock, Zap
 } from 'lucide-react';
 import { Button, Card, CardBody, Badge, Input, Select } from '@/components/ui';
 import { supabase } from '@/services/supabase';
@@ -55,10 +55,59 @@ export function StockMouvements({
   compact = false,
   showFilters = true,
 }: StockMouvementsProps) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterPeriode, setFilterPeriode] = useState<string>('7');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [isRealtime, setIsRealtime] = useState(false);
+
+  // Subscription temps réel directe sur stock_mouvements
+  useEffect(() => {
+    const channel = supabase
+      .channel('rt-stock-mouvements-component')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'stock_mouvements',
+        },
+        (payload) => {
+          // Invalider toutes les queries liées aux mouvements
+          queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
+          setIsRealtime(true);
+          setTimeout(() => setIsRealtime(false), 1000);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'stock_vehicule',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'stock_articles',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Charger les mouvements
   const { data: mouvements, isLoading } = useQuery({
@@ -113,9 +162,19 @@ export function StockMouvements({
   if (compact) {
     return (
       <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-secondary)]">
-          <Clock className="w-4 h-4" />
-          Derniers mouvements
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-secondary)]">
+            <Clock className="w-4 h-4" />
+            Derniers mouvements
+          </div>
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium transition-all ${
+            isRealtime 
+              ? 'bg-green-500/30 text-green-300 animate-pulse' 
+              : 'bg-green-500/20 text-green-400'
+          } border border-green-500/30`}>
+            <Zap className="w-2 h-2" />
+            LIVE
+          </span>
         </div>
         <div className="space-y-1 max-h-48 overflow-y-auto">
           {isLoading ? (
@@ -150,11 +209,19 @@ export function StockMouvements({
       {/* Header avec stats */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
-            <ArrowRightLeft className="w-5 h-5 text-blue-400" />
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+            isRealtime ? 'bg-green-500/30 animate-pulse' : 'bg-blue-500/20'
+          }`}>
+            <ArrowRightLeft className={`w-5 h-5 ${isRealtime ? 'text-green-400' : 'text-blue-400'}`} />
           </div>
           <div>
-            <h3 className="font-semibold text-[var(--text-primary)]">Mouvements de stock</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-[var(--text-primary)]">Mouvements de stock</h3>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                <Zap className="w-2.5 h-2.5" />
+                LIVE
+              </span>
+            </div>
             <p className="text-xs text-[var(--text-muted)]">
               {filteredMouvements.length} mouvement(s) sur la période
             </p>
