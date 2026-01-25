@@ -76,6 +76,7 @@ interface VehiculeOption {
   immatriculation: string;
   marque?: string;
   modele?: string;
+  technicien_id?: string;
   technicien_nom?: string;
 }
 
@@ -159,7 +160,7 @@ async function getStockVehiculeTechnicien(): Promise<{
     const isAdmin = profile?.role === 'admin' || profile?.role === 'superadmin';
 
     if (isAdmin) {
-      // Charger tous les véhicules pour l'admin
+      // Charger tous les véhicules pour l'admin avec technicien_id
       const { data: allVehicules } = await supabase
         .from('vehicules')
         .select(`
@@ -167,6 +168,7 @@ async function getStockVehiculeTechnicien(): Promise<{
           immatriculation, 
           marque, 
           modele,
+          technicien_id,
           technicien:technicien_id(prenom, nom)
         `)
         .eq('actif', true)
@@ -177,6 +179,7 @@ async function getStockVehiculeTechnicien(): Promise<{
         immatriculation: v.immatriculation,
         marque: v.marque,
         modele: v.modele,
+        technicien_id: v.technicien_id,
         technicien_nom: v.technicien ? `${v.technicien.prenom} ${v.technicien.nom}` : undefined,
       }));
 
@@ -911,31 +914,53 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
               </div>
 
               <div className="flex-1 overflow-auto p-4 space-y-4">
-                {/* Sélecteur de véhicule pour admin */}
+                {/* Sélecteur de véhicule par technicien pour admin */}
                 {stockVehicule?.isAdmin && (
                   <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
                     <label className="text-xs font-semibold text-purple-400 mb-2 block flex items-center gap-1">
                       <Settings className="w-3 h-3" />
-                      Mode administrateur - Choisir le véhicule
+                      Mode administrateur - Choisir le technicien
                     </label>
                     <Select
                       value={selectedVehiculeId}
                       onChange={e => setSelectedVehiculeId(e.target.value)}
                       className="w-full"
                     >
-                      <option value="">-- Sélectionner un véhicule --</option>
-                      {stockVehicule.vehicules.map(v => (
-                        <option key={v.id} value={v.id}>
-                          {v.immatriculation} {v.marque && `(${v.marque} ${v.modele || ''})`} 
-                          {v.technicien_nom && ` - ${v.technicien_nom}`}
-                        </option>
-                      ))}
+                      <option value="">-- Sélectionner un technicien --</option>
+                      {/* Véhicules avec technicien, triés par nom */}
+                      {stockVehicule.vehicules
+                        .filter(v => v.technicien_nom)
+                        .sort((a, b) => (a.technicien_nom || '').localeCompare(b.technicien_nom || ''))
+                        .map(v => (
+                          <option key={v.id} value={v.id}>
+                            👤 {v.technicien_nom} — {v.immatriculation} {v.marque && `(${v.marque})`}
+                          </option>
+                        ))}
+                      {/* Séparateur si véhicules non assignés */}
+                      {stockVehicule.vehicules.filter(v => !v.technicien_nom).length > 0 && (
+                        <option disabled>── Véhicules non assignés ──</option>
+                      )}
+                      {/* Véhicules sans technicien */}
+                      {stockVehicule.vehicules
+                        .filter(v => !v.technicien_nom)
+                        .map(v => (
+                          <option key={v.id} value={v.id}>
+                            🚐 {v.immatriculation} {v.marque && `(${v.marque} ${v.modele || ''})`} — Non assigné
+                          </option>
+                        ))}
                     </Select>
-                    {selectedVehiculeId && (
-                      <p className="text-xs text-[var(--text-muted)] mt-2">
-                        Stock de : <strong>{stockVehicule.vehicules.find(v => v.id === selectedVehiculeId)?.immatriculation}</strong>
-                      </p>
-                    )}
+                    {selectedVehiculeId && (() => {
+                      const vehiculeSelectionne = stockVehicule.vehicules.find(v => v.id === selectedVehiculeId);
+                      return vehiculeSelectionne && (
+                        <p className="text-xs text-[var(--text-muted)] mt-2">
+                          {vehiculeSelectionne.technicien_nom ? (
+                            <>Stock véhicule de <strong>{vehiculeSelectionne.technicien_nom}</strong> ({vehiculeSelectionne.immatriculation})</>
+                          ) : (
+                            <>Stock véhicule <strong>{vehiculeSelectionne.immatriculation}</strong> (non assigné)</>
+                          )}
+                        </p>
+                      );
+                    })()}
                   </div>
                 )}
 

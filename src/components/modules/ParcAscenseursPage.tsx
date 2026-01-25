@@ -1305,12 +1305,14 @@ interface PieceRemplacee {
   disponible: number;
 }
 
-interface VehiculeOption {
+interface TechnicienAvecVehicule {
   id: string;
-  immatriculation: string;
-  marque?: string;
-  modele?: string;
-  technicien_nom?: string;
+  prenom: string;
+  nom: string;
+  vehicule_id?: string;
+  vehicule_immatriculation?: string;
+  vehicule_marque?: string;
+  vehicule_modele?: string;
 }
 
 function SignalerPiecesModal({ 
@@ -1329,10 +1331,10 @@ function SignalerPiecesModal({
   const [stockVehicule, setStockVehicule] = useState<ArticleStockVehicule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [vehicules, setVehicules] = useState<VehiculeOption[]>([]);
-  const [selectedVehiculeId, setSelectedVehiculeId] = useState<string>('');
+  const [techniciens, setTechniciens] = useState<TechnicienAvecVehicule[]>([]);
+  const [selectedTechnicienId, setSelectedTechnicienId] = useState<string>('');
 
-  // Charger les infos utilisateur et véhicules
+  // Charger les infos utilisateur et techniciens
   useEffect(() => {
     async function loadInitialData() {
       try {
@@ -1353,28 +1355,34 @@ function SignalerPiecesModal({
         setIsAdmin(userIsAdmin);
 
         if (userIsAdmin) {
-          // Charger tous les véhicules pour l'admin
-          const { data: allVehicules } = await supabase
-            .from('vehicules')
-            .select(`
-              id, 
-              immatriculation, 
-              marque, 
-              modele,
-              technicien:technicien_id(prenom, nom)
-            `)
+          // Charger tous les techniciens avec leur véhicule
+          const { data: allTechniciens } = await supabase
+            .from('techniciens')
+            .select('id, prenom, nom')
             .eq('actif', true)
-            .order('immatriculation');
+            .order('nom');
 
-          const vehiculesList: VehiculeOption[] = (allVehicules || []).map((v: any) => ({
-            id: v.id,
-            immatriculation: v.immatriculation,
-            marque: v.marque,
-            modele: v.modele,
-            technicien_nom: v.technicien ? `${v.technicien.prenom} ${v.technicien.nom}` : undefined,
-          }));
+          // Récupérer les véhicules associés
+          const { data: vehicules } = await supabase
+            .from('vehicules')
+            .select('id, immatriculation, marque, modele, technicien_id')
+            .eq('actif', true);
 
-          setVehicules(vehiculesList);
+          const techniciensList: TechnicienAvecVehicule[] = (allTechniciens || []).map((t: any) => {
+            const vehicule = vehicules?.find((v: any) => v.technicien_id === t.id);
+            return {
+              id: t.id,
+              prenom: t.prenom,
+              nom: t.nom,
+              vehicule_id: vehicule?.id,
+              vehicule_immatriculation: vehicule?.immatriculation,
+              vehicule_marque: vehicule?.marque,
+              vehicule_modele: vehicule?.modele,
+            };
+          });
+
+          // Filtrer pour ne garder que ceux avec un véhicule
+          setTechniciens(techniciensList.filter(t => t.vehicule_id));
           setIsLoading(false);
         } else {
           // Non-admin : charger uniquement son véhicule
@@ -1386,7 +1394,7 @@ function SignalerPiecesModal({
 
           if (vehicule) {
             setVehiculeId(vehicule.id);
-            setSelectedVehiculeId(vehicule.id);
+            setSelectedTechnicienId(user.id);
             await loadStockVehicule(vehicule.id);
           }
           setIsLoading(false);
@@ -1434,11 +1442,14 @@ function SignalerPiecesModal({
     }
   };
 
-  // Quand l'admin sélectionne un véhicule
-  const handleVehiculeChange = async (vehId: string) => {
-    setSelectedVehiculeId(vehId);
-    if (vehId) {
-      await loadStockVehicule(vehId);
+  // Quand l'admin sélectionne un technicien
+  const handleTechnicienChange = async (techId: string) => {
+    setSelectedTechnicienId(techId);
+    if (techId) {
+      const technicien = techniciens.find(t => t.id === techId);
+      if (technicien?.vehicule_id) {
+        await loadStockVehicule(technicien.vehicule_id);
+      }
     } else {
       setStockVehicule([]);
       setVehiculeId(null);
@@ -1523,7 +1534,7 @@ function SignalerPiecesModal({
           motif: `Remplacement sur ${ascenseur.code_appareil}`,
           reference_doc: ascenseur.code_appareil,
           vehicule_id: vehiculeId,
-          technicien_id: user?.id,
+          technicien_id: selectedTechnicienId || user?.id,
           created_at: now,
         });
       }
@@ -1536,7 +1547,7 @@ function SignalerPiecesModal({
 
       // Créer une intervention rapide (si table existe)
       const piecesListe = piecesRemplacees.map(p => `${p.quantite}x ${p.designation}`).join(', ');
-      const vehiculeInfo = vehicules.find(v => v.id === vehiculeId);
+      const technicienInfo = techniciens.find(t => t.id === selectedTechnicienId);
       await supabase.from('interventions_rapides').insert({
         code_appareil: ascenseur.code_appareil,
         id_wsoucont: ascenseur.id_wsoucont,
@@ -1548,8 +1559,8 @@ function SignalerPiecesModal({
         description: notePieces || 'Remplacement de pièces',
         pieces_utilisees: piecesListe,
         pieces_detail: piecesRemplacees,
-        technicien_id: user?.id,
-        vehicule_info: vehiculeInfo ? `${vehiculeInfo.immatriculation} - ${vehiculeInfo.technicien_nom || 'Non assigné'}` : null,
+        technicien_id: selectedTechnicienId || user?.id,
+        technicien_info: technicienInfo ? `${technicienInfo.prenom} ${technicienInfo.nom}` : null,
       }).catch(() => {});
 
       toast.success(`${piecesRemplacees.length} pièce(s) enregistrée(s)`);
@@ -1563,8 +1574,8 @@ function SignalerPiecesModal({
     }
   };
 
-  // Trouver le véhicule sélectionné pour afficher ses infos
-  const vehiculeSelectionne = vehicules.find(v => v.id === selectedVehiculeId);
+  // Trouver le technicien sélectionné pour afficher ses infos
+  const technicienSelectionne = techniciens.find(t => t.id === selectedTechnicienId);
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
@@ -1591,10 +1602,10 @@ function SignalerPiecesModal({
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
             </div>
-          ) : isAdmin && vehicules.length === 0 ? (
+          ) : isAdmin && techniciens.length === 0 ? (
             <div className="text-center py-8">
               <AlertTriangle className="w-10 h-10 text-orange-400 mx-auto mb-2" />
-              <p className="text-sm text-[var(--text-muted)]">Aucun véhicule disponible</p>
+              <p className="text-sm text-[var(--text-muted)]">Aucun technicien avec véhicule</p>
             </div>
           ) : !isAdmin && !vehiculeId ? (
             <div className="text-center py-8">
@@ -1604,30 +1615,28 @@ function SignalerPiecesModal({
             </div>
           ) : (
             <>
-              {/* Sélecteur de véhicule pour admin */}
+              {/* Sélecteur de véhicule par technicien pour admin */}
               {isAdmin && (
                 <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
                   <label className="text-xs font-semibold text-purple-400 mb-2 block flex items-center gap-1">
-                    <Settings className="w-3 h-3" />
-                    Mode administrateur - Choisir le véhicule
+                    <User className="w-3 h-3" />
+                    Technicien
                   </label>
                   <Select
-                    value={selectedVehiculeId}
-                    onChange={e => handleVehiculeChange(e.target.value)}
+                    value={selectedTechnicienId}
+                    onChange={e => handleTechnicienChange(e.target.value)}
                     className="w-full"
                   >
-                    <option value="">-- Sélectionner un véhicule --</option>
-                    {vehicules.map(v => (
-                      <option key={v.id} value={v.id}>
-                        {v.immatriculation} {v.marque && `(${v.marque} ${v.modele || ''})`} 
-                        {v.technicien_nom && ` - ${v.technicien_nom}`}
+                    <option value="">-- Sélectionner un technicien --</option>
+                    {techniciens.map(t => (
+                      <option key={t.id} value={t.id}>
+                        👤 {t.prenom} {t.nom} — {t.vehicule_immatriculation} {t.vehicule_marque && `(${t.vehicule_marque})`}
                       </option>
                     ))}
                   </Select>
-                  {vehiculeSelectionne && (
+                  {technicienSelectionne && (
                     <p className="text-xs text-[var(--text-muted)] mt-2">
-                      Stock de : <strong>{vehiculeSelectionne.immatriculation}</strong>
-                      {vehiculeSelectionne.technicien_nom && ` (${vehiculeSelectionne.technicien_nom})`}
+                      Stock véhicule de <strong>{technicienSelectionne.prenom} {technicienSelectionne.nom}</strong> ({technicienSelectionne.vehicule_immatriculation})
                     </p>
                   )}
                 </div>
@@ -1755,11 +1764,11 @@ function SignalerPiecesModal({
                 </>
               )}
 
-              {/* Message si admin n'a pas sélectionné de véhicule */}
+              {/* Message si admin n'a pas sélectionné de technicien */}
               {isAdmin && !vehiculeId && (
                 <div className="text-center py-8 text-[var(--text-muted)]">
-                  <Package className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Sélectionnez un véhicule pour voir son stock</p>
+                  <User className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Sélectionnez un technicien pour voir le stock de son véhicule</p>
                 </div>
               )}
             </>
