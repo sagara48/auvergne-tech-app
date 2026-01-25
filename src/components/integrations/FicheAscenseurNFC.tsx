@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   X, Phone, MapPin, Building2, Calendar, Clock, AlertTriangle,
   FileText, Camera, CheckCircle, Wrench, History, Download,
   Navigation, ExternalLink, User, Shield, ChevronRight, Zap,
-  Package, Plus, Minus, Search, Barcode, Trash2
+  Package, Plus, Minus, Search, Barcode, Trash2, Settings, Loader2
 } from 'lucide-react';
-import { Card, CardBody, Badge, Button, Textarea, Input } from '@/components/ui';
+import { Card, CardBody, Badge, Button, Textarea, Input, Select } from '@/components/ui';
 import { supabase } from '@/services/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -71,6 +71,14 @@ interface PieceRemplacee {
   disponible: number;
 }
 
+interface VehiculeOption {
+  id: string;
+  immatriculation: string;
+  marque?: string;
+  modele?: string;
+  technicien_nom?: string;
+}
+
 // Récupérer l'ascenseur par code
 async function getAscenseurByCode(codeAppareil: string): Promise<AscenseurComplet | null> {
   const { data, error } = await supabase
@@ -130,20 +138,59 @@ async function getDocumentsLies(codeAppareil: string): Promise<DocumentLie[]> {
 }
 
 // Récupérer le stock du véhicule du technicien connecté
-async function getStockVehiculeTechnicien(): Promise<{ vehiculeId: string | null; articles: ArticleStock[] }> {
+async function getStockVehiculeTechnicien(): Promise<{ 
+  vehiculeId: string | null; 
+  articles: ArticleStock[];
+  isAdmin: boolean;
+  vehicules: VehiculeOption[];
+}> {
   try {
     // Récupérer l'utilisateur connecté
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { vehiculeId: null, articles: [] };
+    if (!user) return { vehiculeId: null, articles: [], isAdmin: false, vehicules: [] };
 
-    // Trouver le véhicule assigné au technicien
+    // Vérifier si admin
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const isAdmin = profile?.role === 'admin' || profile?.role === 'superadmin';
+
+    if (isAdmin) {
+      // Charger tous les véhicules pour l'admin
+      const { data: allVehicules } = await supabase
+        .from('vehicules')
+        .select(`
+          id, 
+          immatriculation, 
+          marque, 
+          modele,
+          technicien:technicien_id(prenom, nom)
+        `)
+        .eq('actif', true)
+        .order('immatriculation');
+
+      const vehiculesList: VehiculeOption[] = (allVehicules || []).map((v: any) => ({
+        id: v.id,
+        immatriculation: v.immatriculation,
+        marque: v.marque,
+        modele: v.modele,
+        technicien_nom: v.technicien ? `${v.technicien.prenom} ${v.technicien.nom}` : undefined,
+      }));
+
+      return { vehiculeId: null, articles: [], isAdmin: true, vehicules: vehiculesList };
+    }
+
+    // Non-admin : trouver le véhicule assigné au technicien
     const { data: vehicule } = await supabase
       .from('vehicules')
       .select('id')
       .eq('technicien_id', user.id)
       .maybeSingle();
 
-    if (!vehicule) return { vehiculeId: null, articles: [] };
+    if (!vehicule) return { vehiculeId: null, articles: [], isAdmin: false, vehicules: [] };
 
     // Récupérer le stock du véhicule
     const { data: stock } = await supabase
@@ -167,10 +214,39 @@ async function getStockVehiculeTechnicien(): Promise<{ vehiculeId: string | null
       categorie: s.article?.categorie?.nom,
     }));
 
-    return { vehiculeId: vehicule.id, articles };
+    return { vehiculeId: vehicule.id, articles, isAdmin: false, vehicules: [] };
   } catch (error) {
     console.error('Erreur récupération stock véhicule:', error);
-    return { vehiculeId: null, articles: [] };
+    return { vehiculeId: null, articles: [], isAdmin: false, vehicules: [] };
+  }
+}
+
+// Récupérer le stock d'un véhicule spécifique
+async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]> {
+  try {
+    const { data: stock } = await supabase
+      .from('stock_vehicules')
+      .select(`
+        id,
+        article_id,
+        quantite,
+        article:article_id(id, designation, reference, categorie:categorie_id(nom))
+      `)
+      .eq('vehicule_id', vehiculeId)
+      .gt('quantite', 0)
+      .order('article(designation)');
+
+    return (stock || []).map((s: any) => ({
+      id: s.id,
+      article_id: s.article_id,
+      designation: s.article?.designation || 'Article inconnu',
+      reference: s.article?.reference,
+      quantite: s.quantite,
+      categorie: s.article?.categorie?.nom,
+    }));
+  } catch (error) {
+    console.error('Erreur récupération stock véhicule:', error);
+    return [];
   }
 }
 
@@ -300,6 +376,11 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
   const [piecesRemplacees, setPiecesRemplacees] = useState<PieceRemplacee[]>([]);
   const [searchPiece, setSearchPiece] = useState('');
   const [notePieces, setNotePieces] = useState('');
+  
+  // États pour le mode admin
+  const [selectedVehiculeId, setSelectedVehiculeId] = useState<string>('');
+  const [articlesAdmin, setArticlesAdmin] = useState<ArticleStock[]>([]);
+  const [loadingAdminStock, setLoadingAdminStock] = useState(false);
 
   // Récupérer l'ascenseur
   const { data: ascenseur, isLoading: loadingAsc } = useQuery({
@@ -320,18 +401,36 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
     queryFn: () => getDocumentsLies(codeAppareil),
   });
 
-  // Récupérer le stock du véhicule
+  // Récupérer le stock du véhicule et les infos admin
   const { data: stockVehicule } = useQuery({
     queryKey: ['stock-vehicule-technicien'],
     queryFn: getStockVehiculeTechnicien,
   });
 
+  // Charger le stock quand l'admin sélectionne un véhicule
+  useEffect(() => {
+    async function loadAdminStock() {
+      if (stockVehicule?.isAdmin && selectedVehiculeId) {
+        setLoadingAdminStock(true);
+        const articles = await getStockVehiculeById(selectedVehiculeId);
+        setArticlesAdmin(articles);
+        setPiecesRemplacees([]); // Reset les pièces sélectionnées
+        setLoadingAdminStock(false);
+      }
+    }
+    loadAdminStock();
+  }, [selectedVehiculeId, stockVehicule?.isAdmin]);
+
+  // Déterminer le vehiculeId et les articles à utiliser
+  const effectiveVehiculeId = stockVehicule?.isAdmin ? selectedVehiculeId : stockVehicule?.vehiculeId;
+  const effectiveArticles = stockVehicule?.isAdmin ? articlesAdmin : (stockVehicule?.articles || []);
+
   // Filtrer les articles par recherche
-  const articlesFiltres = stockVehicule?.articles.filter(a => 
+  const articlesFiltres = effectiveArticles.filter(a => 
     !searchPiece || 
     a.designation.toLowerCase().includes(searchPiece.toLowerCase()) ||
     a.reference?.toLowerCase().includes(searchPiece.toLowerCase())
-  ) || [];
+  );
 
   // Mutation signaler problème
   const signalerMutation = useMutation({
@@ -369,13 +468,13 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
   const piecesMutation = useMutation({
     mutationFn: async () => {
       if (!ascenseur) throw new Error('Ascenseur non trouvé');
-      if (!stockVehicule?.vehiculeId) throw new Error('Véhicule non trouvé');
+      if (!effectiveVehiculeId) throw new Error('Véhicule non trouvé');
       if (piecesRemplacees.length === 0) throw new Error('Aucune pièce sélectionnée');
       
       const { data: { user } } = await supabase.auth.getUser();
       await enregistrerPiecesRemplacees(
         ascenseur, 
-        stockVehicule.vehiculeId, 
+        effectiveVehiculeId, 
         piecesRemplacees, 
         notePieces,
         user?.id || ''
@@ -807,11 +906,39 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
                   </button>
                 </div>
                 <p className="text-xs text-[var(--text-muted)] mt-1">
-                  Sélectionnez les pièces depuis votre stock véhicule
+                  Sélectionnez les pièces depuis {stockVehicule?.isAdmin ? 'un' : 'votre'} stock véhicule
                 </p>
               </div>
 
               <div className="flex-1 overflow-auto p-4 space-y-4">
+                {/* Sélecteur de véhicule pour admin */}
+                {stockVehicule?.isAdmin && (
+                  <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                    <label className="text-xs font-semibold text-purple-400 mb-2 block flex items-center gap-1">
+                      <Settings className="w-3 h-3" />
+                      Mode administrateur - Choisir le véhicule
+                    </label>
+                    <Select
+                      value={selectedVehiculeId}
+                      onChange={e => setSelectedVehiculeId(e.target.value)}
+                      className="w-full"
+                    >
+                      <option value="">-- Sélectionner un véhicule --</option>
+                      {stockVehicule.vehicules.map(v => (
+                        <option key={v.id} value={v.id}>
+                          {v.immatriculation} {v.marque && `(${v.marque} ${v.modele || ''})`} 
+                          {v.technicien_nom && ` - ${v.technicien_nom}`}
+                        </option>
+                      ))}
+                    </Select>
+                    {selectedVehiculeId && (
+                      <p className="text-xs text-[var(--text-muted)] mt-2">
+                        Stock de : <strong>{stockVehicule.vehicules.find(v => v.id === selectedVehiculeId)?.immatriculation}</strong>
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Pièces sélectionnées */}
                 {piecesRemplacees.length > 0 && (
                   <div className="space-y-2">
@@ -853,87 +980,104 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
                   </div>
                 )}
 
-                {/* Recherche */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                  <Input
-                    value={searchPiece}
-                    onChange={e => setSearchPiece(e.target.value)}
-                    placeholder="Rechercher une pièce..."
-                    className="pl-9"
-                  />
-                </div>
-
-                {/* Liste du stock véhicule */}
-                {!stockVehicule?.vehiculeId ? (
+                {/* Contenu conditionnel selon le mode */}
+                {stockVehicule?.isAdmin && !selectedVehiculeId ? (
+                  // Admin sans véhicule sélectionné
+                  <div className="text-center py-8 text-[var(--text-muted)]">
+                    <Package className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Sélectionnez un véhicule pour voir son stock</p>
+                  </div>
+                ) : stockVehicule?.isAdmin && loadingAdminStock ? (
+                  // Chargement stock admin
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+                  </div>
+                ) : !effectiveVehiculeId ? (
+                  // Non-admin sans véhicule
                   <div className="text-center py-8">
                     <AlertTriangle className="w-10 h-10 text-orange-400 mx-auto mb-2" />
                     <p className="text-sm text-[var(--text-muted)]">Aucun véhicule assigné</p>
                     <p className="text-xs text-[var(--text-muted)] mt-1">Contactez votre responsable</p>
                   </div>
-                ) : articlesFiltres.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Package className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-2 opacity-50" />
-                    <p className="text-sm text-[var(--text-muted)]">
-                      {searchPiece ? 'Aucun résultat' : 'Stock véhicule vide'}
-                    </p>
-                  </div>
                 ) : (
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-semibold text-[var(--text-muted)]">
-                      Stock véhicule ({articlesFiltres.length})
-                    </h4>
-                    {articlesFiltres.slice(0, 20).map(article => {
-                      const dejaAjoute = piecesRemplacees.find(p => p.article_id === article.article_id);
-                      return (
-                        <button
-                          key={article.id}
-                          onClick={() => ajouterPiece(article)}
-                          disabled={dejaAjoute && dejaAjoute.quantite >= article.quantite}
-                          className={`w-full text-left p-2 rounded-lg border transition-colors ${
-                            dejaAjoute 
-                              ? 'bg-purple-500/5 border-purple-500/30' 
-                              : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-purple-500/50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm text-[var(--text-primary)] truncate">{article.designation}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                {article.reference && (
-                                  <span className="text-[10px] text-[var(--text-muted)]">{article.reference}</span>
-                                )}
-                                {article.categorie && (
-                                  <Badge variant="gray" className="text-[8px]">{article.categorie}</Badge>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={article.quantite > 2 ? 'green' : article.quantite > 0 ? 'orange' : 'red'} className="text-[10px]">
-                                {article.quantite} dispo
-                              </Badge>
-                              <Plus className={`w-4 h-4 ${dejaAjoute ? 'text-purple-400' : 'text-[var(--text-muted)]'}`} />
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                  <>
+                    {/* Recherche */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                      <Input
+                        value={searchPiece}
+                        onChange={e => setSearchPiece(e.target.value)}
+                        placeholder="Rechercher une pièce..."
+                        className="pl-9"
+                      />
+                    </div>
 
-                {/* Note */}
-                {piecesRemplacees.length > 0 && (
-                  <div>
-                    <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block">
-                      Note (optionnel)
-                    </label>
-                    <Textarea
-                      value={notePieces}
-                      onChange={e => setNotePieces(e.target.value)}
-                      placeholder="Ex: Remplacement suite usure normale..."
-                      rows={2}
-                    />
-                  </div>
+                    {/* Liste du stock véhicule */}
+                    {articlesFiltres.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Package className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-2 opacity-50" />
+                        <p className="text-sm text-[var(--text-muted)]">
+                          {searchPiece ? 'Aucun résultat' : 'Stock véhicule vide'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                        <h4 className="text-xs font-semibold text-[var(--text-muted)] sticky top-0 bg-[var(--bg-primary)] py-1">
+                          Stock véhicule ({articlesFiltres.length})
+                        </h4>
+                        {articlesFiltres.slice(0, 30).map(article => {
+                          const dejaAjoute = piecesRemplacees.find(p => p.article_id === article.article_id);
+                          return (
+                            <button
+                              key={article.id}
+                              onClick={() => ajouterPiece(article)}
+                              disabled={dejaAjoute && dejaAjoute.quantite >= article.quantite}
+                              className={`w-full text-left p-2 rounded-lg border transition-colors ${
+                                dejaAjoute 
+                                  ? 'bg-purple-500/5 border-purple-500/30' 
+                                  : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-purple-500/50'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm text-[var(--text-primary)] truncate">{article.designation}</p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    {article.reference && (
+                                      <span className="text-[10px] text-[var(--text-muted)]">{article.reference}</span>
+                                    )}
+                                    {article.categorie && (
+                                      <Badge variant="gray" className="text-[8px]">{article.categorie}</Badge>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant={article.quantite > 2 ? 'green' : article.quantite > 0 ? 'orange' : 'red'} className="text-[10px]">
+                                    {article.quantite} dispo
+                                  </Badge>
+                                  <Plus className={`w-4 h-4 ${dejaAjoute ? 'text-purple-400' : 'text-[var(--text-muted)]'}`} />
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Note */}
+                    {piecesRemplacees.length > 0 && (
+                      <div>
+                        <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block">
+                          Note (optionnel)
+                        </label>
+                        <Textarea
+                          value={notePieces}
+                          onChange={e => setNotePieces(e.target.value)}
+                          placeholder="Ex: Remplacement suite usure normale..."
+                          rows={2}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -944,6 +1088,8 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
                   setPiecesRemplacees([]);
                   setSearchPiece('');
                   setNotePieces('');
+                  setSelectedVehiculeId('');
+                  setArticlesAdmin([]);
                 }}>
                   Annuler
                 </Button>
@@ -951,10 +1097,10 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
                   variant="primary" 
                   className="flex-1"
                   onClick={() => piecesMutation.mutate()}
-                  disabled={piecesRemplacees.length === 0 || piecesMutation.isPending}
+                  disabled={piecesRemplacees.length === 0 || piecesMutation.isPending || !effectiveVehiculeId}
                 >
                   {piecesMutation.isPending ? (
-                    <span className="animate-spin mr-2">⏳</span>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <CheckCircle className="w-4 h-4 mr-2" />
                   )}

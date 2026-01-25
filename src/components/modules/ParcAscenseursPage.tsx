@@ -1305,6 +1305,14 @@ interface PieceRemplacee {
   disponible: number;
 }
 
+interface VehiculeOption {
+  id: string;
+  immatriculation: string;
+  marque?: string;
+  modele?: string;
+  technicien_nom?: string;
+}
+
 function SignalerPiecesModal({ 
   ascenseur, 
   onClose 
@@ -1320,10 +1328,13 @@ function SignalerPiecesModal({
   const [vehiculeId, setVehiculeId] = useState<string | null>(null);
   const [stockVehicule, setStockVehicule] = useState<ArticleStockVehicule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [vehicules, setVehicules] = useState<VehiculeOption[]>([]);
+  const [selectedVehiculeId, setSelectedVehiculeId] = useState<string>('');
 
-  // Charger le stock véhicule du technicien connecté
+  // Charger les infos utilisateur et véhicules
   useEffect(() => {
-    async function loadStockVehicule() {
+    async function loadInitialData() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
@@ -1331,52 +1342,108 @@ function SignalerPiecesModal({
           return;
         }
 
-        // Trouver le véhicule assigné au technicien
-        const { data: vehicule } = await supabase
-          .from('vehicules')
-          .select('id')
-          .eq('technicien_id', user.id)
+        // Vérifier si admin
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
           .maybeSingle();
 
-        if (!vehicule) {
+        const userIsAdmin = profile?.role === 'admin' || profile?.role === 'superadmin';
+        setIsAdmin(userIsAdmin);
+
+        if (userIsAdmin) {
+          // Charger tous les véhicules pour l'admin
+          const { data: allVehicules } = await supabase
+            .from('vehicules')
+            .select(`
+              id, 
+              immatriculation, 
+              marque, 
+              modele,
+              technicien:technicien_id(prenom, nom)
+            `)
+            .eq('actif', true)
+            .order('immatriculation');
+
+          const vehiculesList: VehiculeOption[] = (allVehicules || []).map((v: any) => ({
+            id: v.id,
+            immatriculation: v.immatriculation,
+            marque: v.marque,
+            modele: v.modele,
+            technicien_nom: v.technicien ? `${v.technicien.prenom} ${v.technicien.nom}` : undefined,
+          }));
+
+          setVehicules(vehiculesList);
           setIsLoading(false);
-          return;
+        } else {
+          // Non-admin : charger uniquement son véhicule
+          const { data: vehicule } = await supabase
+            .from('vehicules')
+            .select('id')
+            .eq('technicien_id', user.id)
+            .maybeSingle();
+
+          if (vehicule) {
+            setVehiculeId(vehicule.id);
+            setSelectedVehiculeId(vehicule.id);
+            await loadStockVehicule(vehicule.id);
+          }
+          setIsLoading(false);
         }
-
-        setVehiculeId(vehicule.id);
-
-        // Récupérer le stock du véhicule
-        const { data: stock } = await supabase
-          .from('stock_vehicules')
-          .select(`
-            id,
-            article_id,
-            quantite,
-            article:article_id(id, designation, reference, categorie:categorie_id(nom))
-          `)
-          .eq('vehicule_id', vehicule.id)
-          .gt('quantite', 0)
-          .order('article(designation)');
-
-        const articles: ArticleStockVehicule[] = (stock || []).map((s: any) => ({
-          id: s.id,
-          article_id: s.article_id,
-          designation: s.article?.designation || 'Article inconnu',
-          reference: s.article?.reference,
-          quantite: s.quantite,
-          categorie: s.article?.categorie?.nom,
-        }));
-
-        setStockVehicule(articles);
       } catch (error) {
-        console.error('Erreur chargement stock véhicule:', error);
-      } finally {
+        console.error('Erreur chargement initial:', error);
         setIsLoading(false);
       }
     }
 
-    loadStockVehicule();
+    loadInitialData();
   }, []);
+
+  // Charger le stock d'un véhicule spécifique
+  const loadStockVehicule = async (vehId: string) => {
+    try {
+      const { data: stock } = await supabase
+        .from('stock_vehicules')
+        .select(`
+          id,
+          article_id,
+          quantite,
+          article:article_id(id, designation, reference, categorie:categorie_id(nom))
+        `)
+        .eq('vehicule_id', vehId)
+        .gt('quantite', 0)
+        .order('article(designation)');
+
+      const articles: ArticleStockVehicule[] = (stock || []).map((s: any) => ({
+        id: s.id,
+        article_id: s.article_id,
+        designation: s.article?.designation || 'Article inconnu',
+        reference: s.article?.reference,
+        quantite: s.quantite,
+        categorie: s.article?.categorie?.nom,
+      }));
+
+      setStockVehicule(articles);
+      setVehiculeId(vehId);
+      // Reset les pièces sélectionnées quand on change de véhicule
+      setPiecesRemplacees([]);
+    } catch (error) {
+      console.error('Erreur chargement stock véhicule:', error);
+      setStockVehicule([]);
+    }
+  };
+
+  // Quand l'admin sélectionne un véhicule
+  const handleVehiculeChange = async (vehId: string) => {
+    setSelectedVehiculeId(vehId);
+    if (vehId) {
+      await loadStockVehicule(vehId);
+    } else {
+      setStockVehicule([]);
+      setVehiculeId(null);
+    }
+  };
 
   // Filtrer les articles par recherche
   const articlesFiltres = stockVehicule.filter(a => 
@@ -1469,6 +1536,7 @@ function SignalerPiecesModal({
 
       // Créer une intervention rapide (si table existe)
       const piecesListe = piecesRemplacees.map(p => `${p.quantite}x ${p.designation}`).join(', ');
+      const vehiculeInfo = vehicules.find(v => v.id === vehiculeId);
       await supabase.from('interventions_rapides').insert({
         code_appareil: ascenseur.code_appareil,
         id_wsoucont: ascenseur.id_wsoucont,
@@ -1481,6 +1549,7 @@ function SignalerPiecesModal({
         pieces_utilisees: piecesListe,
         pieces_detail: piecesRemplacees,
         technicien_id: user?.id,
+        vehicule_info: vehiculeInfo ? `${vehiculeInfo.immatriculation} - ${vehiculeInfo.technicien_nom || 'Non assigné'}` : null,
       }).catch(() => {});
 
       toast.success(`${piecesRemplacees.length} pièce(s) enregistrée(s)`);
@@ -1493,6 +1562,9 @@ function SignalerPiecesModal({
       setIsSubmitting(false);
     }
   };
+
+  // Trouver le véhicule sélectionné pour afficher ses infos
+  const vehiculeSelectionne = vehicules.find(v => v.id === selectedVehiculeId);
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
@@ -1519,7 +1591,12 @@ function SignalerPiecesModal({
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
             </div>
-          ) : !vehiculeId ? (
+          ) : isAdmin && vehicules.length === 0 ? (
+            <div className="text-center py-8">
+              <AlertTriangle className="w-10 h-10 text-orange-400 mx-auto mb-2" />
+              <p className="text-sm text-[var(--text-muted)]">Aucun véhicule disponible</p>
+            </div>
+          ) : !isAdmin && !vehiculeId ? (
             <div className="text-center py-8">
               <AlertTriangle className="w-10 h-10 text-orange-400 mx-auto mb-2" />
               <p className="text-sm text-[var(--text-muted)]">Aucun véhicule assigné</p>
@@ -1527,6 +1604,35 @@ function SignalerPiecesModal({
             </div>
           ) : (
             <>
+              {/* Sélecteur de véhicule pour admin */}
+              {isAdmin && (
+                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                  <label className="text-xs font-semibold text-purple-400 mb-2 block flex items-center gap-1">
+                    <Settings className="w-3 h-3" />
+                    Mode administrateur - Choisir le véhicule
+                  </label>
+                  <Select
+                    value={selectedVehiculeId}
+                    onChange={e => handleVehiculeChange(e.target.value)}
+                    className="w-full"
+                  >
+                    <option value="">-- Sélectionner un véhicule --</option>
+                    {vehicules.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.immatriculation} {v.marque && `(${v.marque} ${v.modele || ''})`} 
+                        {v.technicien_nom && ` - ${v.technicien_nom}`}
+                      </option>
+                    ))}
+                  </Select>
+                  {vehiculeSelectionne && (
+                    <p className="text-xs text-[var(--text-muted)] mt-2">
+                      Stock de : <strong>{vehiculeSelectionne.immatriculation}</strong>
+                      {vehiculeSelectionne.technicien_nom && ` (${vehiculeSelectionne.technicien_nom})`}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Pièces sélectionnées */}
               {piecesRemplacees.length > 0 && (
                 <div className="space-y-2">
@@ -1568,80 +1674,92 @@ function SignalerPiecesModal({
                 </div>
               )}
 
-              {/* Recherche */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                <Input
-                  value={searchPiece}
-                  onChange={e => setSearchPiece(e.target.value)}
-                  placeholder="Rechercher une pièce..."
-                  className="pl-9"
-                />
-              </div>
+              {/* Recherche - uniquement si véhicule sélectionné */}
+              {vehiculeId && (
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                    <Input
+                      value={searchPiece}
+                      onChange={e => setSearchPiece(e.target.value)}
+                      placeholder="Rechercher une pièce..."
+                      className="pl-9"
+                    />
+                  </div>
 
-              {/* Liste du stock véhicule */}
-              {articlesFiltres.length === 0 ? (
-                <div className="text-center py-8">
-                  <Package className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-2 opacity-50" />
-                  <p className="text-sm text-[var(--text-muted)]">
-                    {searchPiece ? 'Aucun résultat' : 'Stock véhicule vide'}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                  <h4 className="text-xs font-semibold text-[var(--text-muted)] sticky top-0 bg-[var(--bg-primary)] py-1">
-                    Stock véhicule ({articlesFiltres.length})
-                  </h4>
-                  {articlesFiltres.slice(0, 30).map(article => {
-                    const dejaAjoute = piecesRemplacees.find(p => p.article_id === article.article_id);
-                    return (
-                      <button
-                        key={article.id}
-                        onClick={() => ajouterPiece(article)}
-                        disabled={dejaAjoute && dejaAjoute.quantite >= article.quantite}
-                        className={`w-full text-left p-2 rounded-lg border transition-colors ${
-                          dejaAjoute 
-                            ? 'bg-purple-500/5 border-purple-500/30' 
-                            : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-purple-500/50'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm truncate">{article.designation}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              {article.reference && (
-                                <span className="text-[10px] text-[var(--text-muted)]">{article.reference}</span>
-                              )}
-                              {article.categorie && (
-                                <Badge variant="gray" className="text-[8px]">{article.categorie}</Badge>
-                              )}
+                  {/* Liste du stock véhicule */}
+                  {articlesFiltres.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Package className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-2 opacity-50" />
+                      <p className="text-sm text-[var(--text-muted)]">
+                        {searchPiece ? 'Aucun résultat' : 'Stock véhicule vide'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                      <h4 className="text-xs font-semibold text-[var(--text-muted)] sticky top-0 bg-[var(--bg-primary)] py-1">
+                        Stock véhicule ({articlesFiltres.length})
+                      </h4>
+                      {articlesFiltres.slice(0, 30).map(article => {
+                        const dejaAjoute = piecesRemplacees.find(p => p.article_id === article.article_id);
+                        return (
+                          <button
+                            key={article.id}
+                            onClick={() => ajouterPiece(article)}
+                            disabled={dejaAjoute && dejaAjoute.quantite >= article.quantite}
+                            className={`w-full text-left p-2 rounded-lg border transition-colors ${
+                              dejaAjoute 
+                                ? 'bg-purple-500/5 border-purple-500/30' 
+                                : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-purple-500/50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm truncate">{article.designation}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {article.reference && (
+                                    <span className="text-[10px] text-[var(--text-muted)]">{article.reference}</span>
+                                  )}
+                                  {article.categorie && (
+                                    <Badge variant="gray" className="text-[8px]">{article.categorie}</Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={article.quantite > 2 ? 'green' : article.quantite > 0 ? 'orange' : 'red'} className="text-[10px]">
+                                  {article.quantite} dispo
+                                </Badge>
+                                <Plus className={`w-4 h-4 ${dejaAjoute ? 'text-purple-400' : 'text-[var(--text-muted)]'}`} />
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={article.quantite > 2 ? 'green' : article.quantite > 0 ? 'orange' : 'red'} className="text-[10px]">
-                              {article.quantite} dispo
-                            </Badge>
-                            <Plus className={`w-4 h-4 ${dejaAjoute ? 'text-purple-400' : 'text-[var(--text-muted)]'}`} />
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Note */}
+                  {piecesRemplacees.length > 0 && (
+                    <div>
+                      <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block">
+                        Note (optionnel)
+                      </label>
+                      <Textarea
+                        value={notePieces}
+                        onChange={e => setNotePieces(e.target.value)}
+                        placeholder="Ex: Remplacement suite usure normale..."
+                        rows={2}
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
-              {/* Note */}
-              {piecesRemplacees.length > 0 && (
-                <div>
-                  <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block">
-                    Note (optionnel)
-                  </label>
-                  <Textarea
-                    value={notePieces}
-                    onChange={e => setNotePieces(e.target.value)}
-                    placeholder="Ex: Remplacement suite usure normale..."
-                    rows={2}
-                  />
+              {/* Message si admin n'a pas sélectionné de véhicule */}
+              {isAdmin && !vehiculeId && (
+                <div className="text-center py-8 text-[var(--text-muted)]">
+                  <Package className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Sélectionnez un véhicule pour voir son stock</p>
                 </div>
               )}
             </>
@@ -1657,7 +1775,7 @@ function SignalerPiecesModal({
             variant="primary" 
             className="flex-1"
             onClick={enregistrerPieces}
-            disabled={piecesRemplacees.length === 0 || isSubmitting}
+            disabled={piecesRemplacees.length === 0 || isSubmitting || !vehiculeId}
           >
             {isSubmitting ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
