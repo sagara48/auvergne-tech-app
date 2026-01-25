@@ -17,6 +17,70 @@ import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { supabase } from '@/services/supabase';
 
+// Types pour les secteurs du parc
+interface SecteurParc {
+  numero: number;
+  nom: string;
+  technicien_nom?: string;
+  nb_ascenseurs: number;
+  nb_en_arret: number;
+}
+
+// Récupérer les secteurs du parc avec stats
+async function getSecteursParc(): Promise<SecteurParc[]> {
+  try {
+    // Récupérer les secteurs
+    const { data: secteurs, error: secteursError } = await supabase
+      .from('parc_secteurs')
+      .select('*')
+      .order('numero');
+    
+    if (secteursError) {
+      console.warn('Table parc_secteurs non disponible:', secteursError.message);
+      return [];
+    }
+    
+    // Récupérer les stats des ascenseurs par secteur
+    const { data: ascenseurs, error: ascError } = await supabase
+      .from('parc_ascenseurs')
+      .select('secteur, en_arret, ordre2, type_planning');
+    
+    if (ascError) {
+      console.warn('Table parc_ascenseurs non disponible');
+      return secteurs?.map((s: any) => ({
+        numero: s.numero,
+        nom: s.nom || `Secteur ${s.numero}`,
+        technicien_nom: s.technicien_nom,
+        nb_ascenseurs: 0,
+        nb_en_arret: 0,
+      })) || [];
+    }
+    
+    // Compter les ascenseurs par secteur (uniquement ceux avec ordre2 = dans une tournée)
+    const statsBySecteur: Record<number, { total: number; arrets: number }> = {};
+    (ascenseurs || []).forEach((a: any) => {
+      if (a.secteur && a.ordre2 && a.type_planning) { // Seulement ceux dans une tournée
+        if (!statsBySecteur[a.secteur]) {
+          statsBySecteur[a.secteur] = { total: 0, arrets: 0 };
+        }
+        statsBySecteur[a.secteur].total++;
+        if (a.en_arret) statsBySecteur[a.secteur].arrets++;
+      }
+    });
+    
+    return (secteurs || []).map((s: any) => ({
+      numero: s.numero,
+      nom: s.nom || `Secteur ${s.numero}`,
+      technicien_nom: s.technicien_nom,
+      nb_ascenseurs: statsBySecteur[s.numero]?.total || 0,
+      nb_en_arret: statsBySecteur[s.numero]?.arrets || 0,
+    })).filter(s => s.nb_ascenseurs > 0); // Ne garder que les secteurs avec des ascenseurs
+  } catch (err) {
+    console.error('Erreur getSecteursParc:', err);
+    return [];
+  }
+}
+
 // Types locaux
 interface PlanningConge {
   id: string;
@@ -747,6 +811,7 @@ export function PlanningPage() {
   const { data: travauxNonPlanifies } = useQuery({ queryKey: ['travaux-non-planifies'], queryFn: getTravauxNonPlanifies });
   const { data: mesNonPlanifiees } = useQuery({ queryKey: ['mes-non-planifiees'], queryFn: getMESNonPlanifiees });
   const { data: tournees } = useQuery({ queryKey: ['tournees-actives'], queryFn: getTourneesActives });
+  const { data: secteursParc } = useQuery({ queryKey: ['secteurs-parc'], queryFn: getSecteursParc });
   const { data: conges } = useQuery({ queryKey: ['planning-conges'], queryFn: getPlanningConges });
   const { data: astreinteEnCours } = useQuery({ queryKey: ['astreinte-encours', dateDebut], queryFn: () => getAstreinteEnCours(format(new Date(), 'yyyy-MM-dd')) });
 
@@ -811,6 +876,19 @@ export function PlanningPage() {
     } else if (activeData.type === 'tournee') {
       const tr = activeData.data as Tournee;
       createMutation.mutate({ titre: `Tournée ${tr.code}`, technicien_id: techId, type_event: 'tournee', date_debut: setHours(targetDate, 8).toISOString(), date_fin: setHours(targetDate, 17).toISOString(), tournee_id: tr.id, couleur: TYPE_EVENT_COLORS.tournee });
+    } else if (activeData.type === 'secteur') {
+      // Secteur du parc d'ascenseurs
+      const s = activeData.data as SecteurParc;
+      createMutation.mutate({ 
+        titre: `Tournée S${s.numero} - ${s.nom}`, 
+        technicien_id: techId, 
+        type_event: 'tournee', 
+        date_debut: setHours(targetDate, 8).toISOString(), 
+        date_fin: setHours(targetDate, 17).toISOString(), 
+        couleur: TYPE_EVENT_COLORS.tournee,
+        description: `Secteur ${s.numero} - ${s.nb_ascenseurs} ascenseurs${s.nb_en_arret > 0 ? ` (${s.nb_en_arret} en arrêt)` : ''}`,
+      });
+      toast.success(`Tournée secteur ${s.numero} planifiée`);
     }
   };
 
@@ -847,7 +925,7 @@ export function PlanningPage() {
     setShowCreateEvent(true);
   };
 
-  const activeDragData = activeId ? (events?.find(e => `event-${e.id}` === activeId) || travauxNonPlanifies?.find(t => `travaux-${t.id}` === activeId) || mesNonPlanifiees?.find(m => `mes-${m.id}` === activeId) || tournees?.find(t => `tournee-${t.id}` === activeId)) : null;
+  const activeDragData = activeId ? (events?.find(e => `event-${e.id}` === activeId) || travauxNonPlanifies?.find(t => `travaux-${t.id}` === activeId) || mesNonPlanifiees?.find(m => `mes-${m.id}` === activeId) || tournees?.find(t => `tournee-${t.id}` === activeId) || secteursParc?.find(s => `secteur-${s.numero}` === activeId)) : null;
 
   return (
     <DndContext collisionDetection={pointerWithin} onDragStart={e => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
@@ -950,8 +1028,8 @@ export function PlanningPage() {
                   {mesNonPlanifiees && mesNonPlanifiees.length > 0 && (
                     <Badge variant="orange" className="text-xs">{mesNonPlanifiees.length} MES</Badge>
                   )}
-                  {tournees && tournees.length > 0 && (
-                    <Badge variant="blue" className="text-xs">{tournees.length} tournées</Badge>
+                  {secteursParc && secteursParc.length > 0 && (
+                    <Badge variant="blue" className="text-xs">{secteursParc.length} secteurs</Badge>
                   )}
                 </div>
               )}
@@ -1005,48 +1083,52 @@ export function PlanningPage() {
                 </CardBody>
               </Card>
 
-              {/* Tournées avec secteurs */}
+              {/* Tournées (Secteurs du parc) */}
               <Card className="overflow-hidden">
                 <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Route className="w-4 h-4 text-blue-400" />
                     <span className="text-sm font-medium text-[var(--text-primary)]">Tournées</span>
                   </div>
-                  {tournees && tournees.length > 0 && (
-                    <Badge variant="blue">{tournees.length}</Badge>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {secteursParc?.some(s => s.nb_en_arret > 0) && (
+                      <Badge variant="red" className="text-[10px]">{secteursParc.reduce((acc, s) => acc + s.nb_en_arret, 0)} arrêts</Badge>
+                    )}
+                    {secteursParc && secteursParc.length > 0 && (
+                      <Badge variant="blue">{secteursParc.length}</Badge>
+                    )}
+                  </div>
                 </div>
                 <CardBody className="p-2 max-h-[200px] overflow-y-auto">
                   <div className="space-y-1">
-                    {tournees?.map(t => (
-                      <DraggableItem key={t.id} id={`tournee-${t.id}`} type="tournee" data={t}>
-                        <div className="p-2 rounded-lg border bg-blue-500/10 border-blue-500/30 hover:border-blue-500/50 hover:scale-[1.02] transition-all">
+                    {secteursParc?.map(s => (
+                      <DraggableItem key={s.numero} id={`secteur-${s.numero}`} type="secteur" data={s}>
+                        <div className={`p-2 rounded-lg border ${s.nb_en_arret > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-blue-500/10 border-blue-500/30'} hover:border-blue-500/50 hover:scale-[1.02] transition-all`}>
                           <div className="flex items-start gap-2">
-                            <div className="p-1 rounded bg-blue-500/20">
-                              <Route className="w-3 h-3 text-blue-400" />
+                            <div className={`p-1 rounded ${s.nb_en_arret > 0 ? 'bg-red-500/20' : 'bg-blue-500/20'}`}>
+                              <Route className={`w-3 h-3 ${s.nb_en_arret > 0 ? 'text-red-400' : 'text-blue-400'}`} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{t.code}</span>
-                                {t.secteur && (
-                                  <Badge variant="purple" className="text-[8px] px-1">S{t.secteur}</Badge>
-                                )}
+                                <Badge variant="purple" className="text-[10px] px-1.5">S{s.numero}</Badge>
+                                <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{s.nom}</span>
                               </div>
-                              <div className="text-[10px] text-[var(--text-tertiary)] truncate">{t.nom}</div>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="text-[10px] text-blue-400">
                                   <Building2 className="w-2.5 h-2.5 inline mr-0.5" />
-                                  {t.nb_ascenseurs} asc.
+                                  {s.nb_ascenseurs} asc.
                                 </span>
-                                {t.technicien && (
+                                {s.nb_en_arret > 0 && (
+                                  <Badge variant="red" className="text-[8px] px-1">
+                                    {s.nb_en_arret} arrêt{s.nb_en_arret > 1 ? 's' : ''}
+                                  </Badge>
+                                )}
+                                {s.technicien_nom && (
                                   <span className="text-[10px] text-[var(--text-muted)]">
                                     <User className="w-2.5 h-2.5 inline mr-0.5" />
-                                    {t.technicien.prenom}
+                                    {s.technicien_nom}
                                   </span>
                                 )}
-                                <Badge variant={t.actif ? 'green' : 'gray'} className="text-[8px] px-1">
-                                  {t.actif ? 'Active' : 'Inactive'}
-                                </Badge>
                               </div>
                             </div>
                             <GripVertical className="w-3 h-3 text-[var(--text-muted)]" />
@@ -1054,7 +1136,7 @@ export function PlanningPage() {
                         </div>
                       </DraggableItem>
                     ))}
-                    {!tournees?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">Aucune tournée</div>}
+                    {!secteursParc?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">Aucune tournée</div>}
                   </div>
                 </CardBody>
               </Card>
@@ -1063,7 +1145,7 @@ export function PlanningPage() {
         </div>
       </div>
 
-      <DragOverlay>{activeId && activeDragData && <div className="p-3 bg-[var(--bg-elevated)] rounded-lg border-2 border-blue-500 shadow-xl opacity-90 max-w-[200px]"><div className="text-sm font-semibold truncate">{(activeDragData as any).code || (activeDragData as any).titre}</div></div>}</DragOverlay>
+      <DragOverlay>{activeId && activeDragData && <div className="p-3 bg-[var(--bg-elevated)] rounded-lg border-2 border-blue-500 shadow-xl opacity-90 max-w-[200px]"><div className="text-sm font-semibold truncate">{(activeDragData as any).code || (activeDragData as any).titre || (activeDragData as any).nom || `S${(activeDragData as any).numero}`}</div></div>}</DragOverlay>
 
       {showCreateEvent && <CreateEventModal onClose={() => { setShowCreateEvent(false); setCreateEventDate(undefined); setCreateEventTech(undefined); }} defaultDate={createEventDate} defaultTech={createEventTech} techniciens={techs} />}
       {showConges && <CongesModal onClose={() => setShowConges(false)} techniciens={techs} />}
