@@ -12,10 +12,107 @@ import {
 } from '@/services/api';
 import { TYPE_EVENT_COLORS } from '@/types';
 import type { PlanningEvent, Travaux, MiseEnService, Tournee } from '@/types';
-import { format, addDays, startOfWeek, parseISO, setHours, addWeeks, isWithinInterval } from 'date-fns';
+import { format, addDays, startOfWeek, parseISO, setHours, addWeeks, isWithinInterval, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { supabase } from '@/services/supabase';
+
+// Types pour les ascenseurs du parc
+interface AscenseurParc {
+  id: string;
+  code_appareil: string;
+  adresse: string;
+  ville: string;
+  secteur: number;
+  dernier_passage: string | null;
+  nb_visites_an: number;
+  type_planning: string;
+  en_arret: boolean;
+}
+
+interface VisiteAPlanifier {
+  id: string;
+  code: string;
+  adresse: string;
+  ville: string;
+  secteur: number;
+  derniere_visite: string | null;
+  jours_depuis_visite: number;
+  jours_entre_visites: number;
+  urgence: 'critique' | 'urgent' | 'normal' | 'ok';
+  en_arret: boolean;
+}
+
+// Récupérer les ascenseurs du parc à visiter
+async function getAscenseursAVisiter(): Promise<VisiteAPlanifier[]> {
+  try {
+    const { data, error } = await supabase
+      .from('parc_ascenseurs')
+      .select('id, code_appareil, adresse, ville, secteur, dernier_passage, nb_visites_an, type_planning, en_arret')
+      .order('dernier_passage', { ascending: true, nullsFirst: true });
+    
+    if (error) {
+      console.warn('Table parc_ascenseurs non disponible:', error.message);
+      return [];
+    }
+    
+    if (!data) return [];
+    
+    const today = new Date();
+    
+    return data.map((asc: AscenseurParc) => {
+      // Calculer jours entre visites (basé sur nb_visites_an, défaut 12 = mensuel)
+      const nbVisites = asc.nb_visites_an || 12;
+      const joursEntreVisites = Math.round(365 / nbVisites);
+      
+      // Calculer jours depuis dernière visite
+      let joursSince = 999;
+      if (asc.dernier_passage) {
+        const derniere = parseISO(asc.dernier_passage);
+        joursSince = differenceInDays(today, derniere);
+      }
+      
+      // Déterminer l'urgence
+      let urgence: 'critique' | 'urgent' | 'normal' | 'ok' = 'ok';
+      const ratio = joursSince / joursEntreVisites;
+      
+      if (ratio > 1.5 || joursSince === 999) {
+        urgence = 'critique'; // > 50% de retard ou jamais visité
+      } else if (ratio > 1.1) {
+        urgence = 'urgent'; // > 10% de retard
+      } else if (ratio > 0.8) {
+        urgence = 'normal'; // Bientôt à faire
+      }
+      
+      return {
+        id: asc.id,
+        code: asc.code_appareil,
+        adresse: asc.adresse,
+        ville: asc.ville,
+        secteur: asc.secteur,
+        derniere_visite: asc.dernier_passage,
+        jours_depuis_visite: joursSince,
+        jours_entre_visites: joursEntreVisites,
+        urgence,
+        en_arret: asc.en_arret || false,
+      };
+    })
+    // Filtrer pour ne garder que ceux qui ont besoin d'une visite (urgence != 'ok')
+    .filter(v => v.urgence !== 'ok')
+    // Trier par urgence puis par jours depuis visite
+    .sort((a, b) => {
+      const urgenceOrder = { critique: 0, urgent: 1, normal: 2, ok: 3 };
+      if (urgenceOrder[a.urgence] !== urgenceOrder[b.urgence]) {
+        return urgenceOrder[a.urgence] - urgenceOrder[b.urgence];
+      }
+      return b.jours_depuis_visite - a.jours_depuis_visite;
+    })
+    .slice(0, 50); // Limiter à 50 pour les performances
+  } catch (err) {
+    console.error('Erreur getAscenseursAVisiter:', err);
+    return [];
+  }
+}
 
 // Types locaux
 interface PlanningConge {
@@ -694,6 +791,52 @@ function AstreintesModal({ onClose, techniciens }: { onClose: () => void; techni
   );
 }
 
+// Carte visite à planifier
+function VisiteCard({ visite }: { visite: VisiteAPlanifier }) {
+  const urgenceColors = {
+    critique: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400', badge: 'red' as const },
+    urgent: { bg: 'bg-amber-500/20', border: 'border-amber-500/50', text: 'text-amber-400', badge: 'amber' as const },
+    normal: { bg: 'bg-blue-500/20', border: 'border-blue-500/50', text: 'text-blue-400', badge: 'blue' as const },
+    ok: { bg: 'bg-green-500/20', border: 'border-green-500/50', text: 'text-green-400', badge: 'green' as const },
+  };
+  
+  const colors = urgenceColors[visite.urgence];
+  
+  return (
+    <DraggableItem id={`visite-${visite.id}`} type="visite" data={visite}>
+      <div className={`p-2 rounded-lg border ${colors.bg} ${colors.border} hover:scale-[1.02] transition-transform`}>
+        <div className="flex items-start gap-2">
+          <div className={`p-1 rounded ${colors.bg}`}>
+            <Building2 className={`w-3 h-3 ${colors.text}`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{visite.code}</span>
+              {visite.en_arret && <Badge variant="red" className="text-[8px] px-1">Arrêt</Badge>}
+            </div>
+            <div className="text-[10px] text-[var(--text-tertiary)] truncate">{visite.adresse}</div>
+            <div className="text-[10px] text-[var(--text-muted)] truncate">{visite.ville} • S{visite.secteur}</div>
+            <div className="flex items-center gap-2 mt-1">
+              {visite.derniere_visite ? (
+                <span className={`text-[10px] ${colors.text}`}>
+                  <Clock className="w-2.5 h-2.5 inline mr-0.5" />
+                  {visite.jours_depuis_visite}j
+                </span>
+              ) : (
+                <span className="text-[10px] text-red-400">Jamais visité</span>
+              )}
+              <Badge variant={colors.badge} className="text-[8px] px-1">
+                {visite.urgence === 'critique' ? '⚠️ Critique' : visite.urgence === 'urgent' ? '🔔 Urgent' : '📅 À planifier'}
+              </Badge>
+            </div>
+          </div>
+          <GripVertical className="w-3 h-3 text-[var(--text-muted)]" />
+        </div>
+      </div>
+    </DraggableItem>
+  );
+}
+
 // Sidebar Card
 function SidebarCard({ item, type, icon: Icon, color, onShowDetail }: { item: any; type: string; icon: any; color: string; onShowDetail: () => void }) {
   const hasReplan = item.nb_replanifications > 0;
@@ -749,6 +892,7 @@ export function PlanningPage() {
   const { data: tournees } = useQuery({ queryKey: ['tournees-actives'], queryFn: getTourneesActives });
   const { data: conges } = useQuery({ queryKey: ['planning-conges'], queryFn: getPlanningConges });
   const { data: astreinteEnCours } = useQuery({ queryKey: ['astreinte-encours', dateDebut], queryFn: () => getAstreinteEnCours(format(new Date(), 'yyyy-MM-dd')) });
+  const { data: visitesAPlanifier } = useQuery({ queryKey: ['visites-a-planifier'], queryFn: getAscenseursAVisiter });
 
   // Mutations
   const createMutation = useMutation({
@@ -811,6 +955,20 @@ export function PlanningPage() {
     } else if (activeData.type === 'tournee') {
       const tr = activeData.data as Tournee;
       createMutation.mutate({ titre: `Tournée ${tr.code}`, technicien_id: techId, type_event: 'tournee', date_debut: setHours(targetDate, 8).toISOString(), date_fin: setHours(targetDate, 17).toISOString(), tournee_id: tr.id, couleur: TYPE_EVENT_COLORS.tournee });
+    } else if (activeData.type === 'visite') {
+      // Visite d'ascenseur du parc
+      const v = activeData.data as VisiteAPlanifier;
+      createMutation.mutate({ 
+        titre: `Visite ${v.code}`, 
+        technicien_id: techId, 
+        type_event: 'tournee', 
+        date_debut: setHours(targetDate, 8).toISOString(), 
+        date_fin: setHours(targetDate, 12).toISOString(), // Demi-journée par défaut
+        couleur: TYPE_EVENT_COLORS.tournee,
+        description: `${v.adresse}, ${v.ville} - Secteur ${v.secteur}${v.derniere_visite ? `\nDernière visite: ${format(parseISO(v.derniere_visite), 'd MMM yyyy', { locale: fr })}` : '\nJamais visité'}`,
+        lieu: `${v.adresse}, ${v.ville}`,
+      });
+      toast.success(`Visite ${v.code} planifiée`);
     }
   };
 
@@ -847,7 +1005,7 @@ export function PlanningPage() {
     setShowCreateEvent(true);
   };
 
-  const activeDragData = activeId ? (events?.find(e => `event-${e.id}` === activeId) || travauxNonPlanifies?.find(t => `travaux-${t.id}` === activeId) || mesNonPlanifiees?.find(m => `mes-${m.id}` === activeId) || tournees?.find(t => `tournee-${t.id}` === activeId)) : null;
+  const activeDragData = activeId ? (events?.find(e => `event-${e.id}` === activeId) || travauxNonPlanifies?.find(t => `travaux-${t.id}` === activeId) || mesNonPlanifiees?.find(m => `mes-${m.id}` === activeId) || visitesAPlanifier?.find(v => `visite-${v.id}` === activeId) || tournees?.find(t => `tournee-${t.id}` === activeId)) : null;
 
   return (
     <DndContext collisionDetection={pointerWithin} onDragStart={e => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
@@ -950,8 +1108,8 @@ export function PlanningPage() {
                   {mesNonPlanifiees && mesNonPlanifiees.length > 0 && (
                     <Badge variant="orange" className="text-xs">{mesNonPlanifiees.length} MES</Badge>
                   )}
-                  {tournees && tournees.length > 0 && (
-                    <Badge variant="blue" className="text-xs">{tournees.length} tournées</Badge>
+                  {visitesAPlanifier && visitesAPlanifier.length > 0 && (
+                    <Badge variant="blue" className="text-xs">{visitesAPlanifier.length} visites</Badge>
                   )}
                 </div>
               )}
@@ -1005,21 +1163,29 @@ export function PlanningPage() {
                 </CardBody>
               </Card>
 
-              {/* Tournées */}
+              {/* Tournées - Visites à planifier */}
               <Card className="overflow-hidden">
                 <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Route className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm font-medium text-[var(--text-primary)]">Tournées</span>
+                    <span className="text-sm font-medium text-[var(--text-primary)]">Visites à planifier</span>
                   </div>
-                  {tournees && tournees.length > 0 && (
-                    <Badge variant="blue">{tournees.length}</Badge>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {visitesAPlanifier?.filter(v => v.urgence === 'critique').length ? (
+                      <Badge variant="red" className="text-[10px]">{visitesAPlanifier.filter(v => v.urgence === 'critique').length} ⚠️</Badge>
+                    ) : null}
+                    {visitesAPlanifier?.filter(v => v.urgence === 'urgent').length ? (
+                      <Badge variant="amber" className="text-[10px]">{visitesAPlanifier.filter(v => v.urgence === 'urgent').length} 🔔</Badge>
+                    ) : null}
+                    {visitesAPlanifier && visitesAPlanifier.length > 0 && (
+                      <Badge variant="blue">{visitesAPlanifier.length}</Badge>
+                    )}
+                  </div>
                 </div>
-                <CardBody className="p-2 max-h-[150px] overflow-y-auto">
-                  <div className="space-y-2">
-                    {tournees?.map(t => <SidebarCard key={t.id} item={t} type="tournee" icon={Route} color={TYPE_EVENT_COLORS.tournee} onShowDetail={() => {}} />)}
-                    {!tournees?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">Aucune tournée</div>}
+                <CardBody className="p-2 max-h-[200px] overflow-y-auto">
+                  <div className="space-y-1">
+                    {visitesAPlanifier?.map(v => <VisiteCard key={v.id} visite={v} />)}
+                    {!visitesAPlanifier?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">✓ Toutes les visites à jour</div>}
                   </div>
                 </CardBody>
               </Card>
