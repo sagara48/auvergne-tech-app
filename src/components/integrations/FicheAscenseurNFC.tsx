@@ -160,28 +160,50 @@ async function getStockVehiculeTechnicien(): Promise<{
     const isAdmin = profile?.role === 'admin' || profile?.role === 'superadmin';
 
     if (isAdmin) {
-      // Charger tous les véhicules pour l'admin avec technicien_id
-      const { data: allVehicules } = await supabase
+      // Charger tous les véhicules actifs avec technicien_id
+      const { data: vehiculesData } = await supabase
         .from('vehicules')
         .select(`
           id, 
           immatriculation, 
           marque, 
           modele,
-          technicien_id,
-          technicien:technicien_id(prenom, nom)
+          technicien_id
         `)
         .eq('actif', true)
         .order('immatriculation');
 
-      const vehiculesList: VehiculeOption[] = (allVehicules || []).map((v: any) => ({
-        id: v.id,
-        immatriculation: v.immatriculation,
-        marque: v.marque,
-        modele: v.modele,
-        technicien_id: v.technicien_id,
-        technicien_nom: v.technicien ? `${v.technicien.prenom} ${v.technicien.nom}` : undefined,
-      }));
+      // Récupérer les profils des techniciens
+      const technicienIds = (vehiculesData || [])
+        .map((v: any) => v.technicien_id)
+        .filter(Boolean);
+
+      let profilesMap: Record<string, { prenom: string; nom: string }> = {};
+      
+      if (technicienIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, prenom, nom')
+          .in('id', technicienIds);
+
+        profilesMap = (profiles || []).reduce((acc: any, p: any) => {
+          acc[p.id] = { prenom: p.prenom || '', nom: p.nom || '' };
+          return acc;
+        }, {});
+      }
+
+      // Construire la liste des véhicules avec nom technicien
+      const vehiculesList: VehiculeOption[] = (vehiculesData || []).map((v: any) => {
+        const techProfile = v.technicien_id ? profilesMap[v.technicien_id] : null;
+        return {
+          id: v.id,
+          immatriculation: v.immatriculation,
+          marque: v.marque,
+          modele: v.modele,
+          technicien_id: v.technicien_id,
+          technicien_nom: techProfile ? `${techProfile.prenom} ${techProfile.nom}`.trim() : undefined,
+        };
+      });
 
       return { vehiculeId: null, articles: [], isAdmin: true, vehicules: vehiculesList };
     }

@@ -181,38 +181,14 @@ export function Layout({ children }: LayoutProps) {
           "border-t border-[var(--border-secondary)]",
           sidebarCollapsed ? "p-2" : "p-3"
         )}>
-          {/* Theme Toggle */}
-          <button
-            onClick={toggleTheme}
-            className={cn(
-              "w-full flex items-center rounded-xl transition-all mb-2",
-              "bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]",
-              "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
-              sidebarCollapsed ? "justify-center p-3" : "justify-center gap-2 px-4 py-2.5"
-            )}
-            title={sidebarCollapsed ? (theme === 'dark' ? 'Mode clair' : 'Mode sombre') : undefined}
-          >
-            {theme === 'dark' ? (
-              <>
-                <Sun className="w-4 h-4 text-amber-400" />
-                {!sidebarCollapsed && <span className="text-sm">Mode clair</span>}
-              </>
-            ) : (
-              <>
-                <Moon className="w-4 h-4 text-indigo-500" />
-                {!sidebarCollapsed && <span className="text-sm">Mode sombre</span>}
-              </>
-            )}
-          </button>
-
-          {/* Toggle Sidebar Button */}
+          {/* Toggle Sidebar Button - Discret */}
           <button
             onClick={toggleSidebar}
             className={cn(
-              "w-full flex items-center rounded-xl transition-all",
-              "bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]",
-              "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
-              sidebarCollapsed ? "justify-center p-3" : "justify-center gap-2 px-4 py-2.5"
+              "w-full flex items-center rounded-lg transition-all",
+              "hover:bg-[var(--bg-tertiary)]",
+              "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
+              sidebarCollapsed ? "justify-center p-2" : "justify-center gap-2 px-3 py-1.5"
             )}
             title={sidebarCollapsed ? 'Ouvrir le menu' : 'Réduire le menu'}
           >
@@ -220,8 +196,8 @@ export function Layout({ children }: LayoutProps) {
               <PanelLeft className="w-4 h-4" />
             ) : (
               <>
-                <PanelLeftClose className="w-4 h-4" />
-                <span className="text-sm">Réduire</span>
+                <PanelLeftClose className="w-3.5 h-3.5" />
+                <span className="text-xs">Réduire</span>
               </>
             )}
           </button>

@@ -1355,34 +1355,68 @@ function SignalerPiecesModal({
         setIsAdmin(userIsAdmin);
 
         if (userIsAdmin) {
-          // Charger tous les techniciens avec leur véhicule
-          const { data: allTechniciens } = await supabase
-            .from('techniciens')
-            .select('id, prenom, nom')
-            .eq('actif', true)
-            .order('nom');
-
-          // Récupérer les véhicules associés
-          const { data: vehicules } = await supabase
+          // Charger tous les véhicules actifs avec leur technicien
+          const { data: vehiculesData } = await supabase
             .from('vehicules')
-            .select('id, immatriculation, marque, modele, technicien_id')
-            .eq('actif', true);
+            .select(`
+              id, 
+              immatriculation, 
+              marque, 
+              modele, 
+              technicien_id
+            `)
+            .eq('actif', true)
+            .order('immatriculation');
 
-          const techniciensList: TechnicienAvecVehicule[] = (allTechniciens || []).map((t: any) => {
-            const vehicule = vehicules?.find((v: any) => v.technicien_id === t.id);
-            return {
-              id: t.id,
-              prenom: t.prenom,
-              nom: t.nom,
-              vehicule_id: vehicule?.id,
-              vehicule_immatriculation: vehicule?.immatriculation,
-              vehicule_marque: vehicule?.marque,
-              vehicule_modele: vehicule?.modele,
-            };
-          });
+          // Récupérer les profils des techniciens
+          const technicienIds = (vehiculesData || [])
+            .map((v: any) => v.technicien_id)
+            .filter(Boolean);
 
-          // Filtrer pour ne garder que ceux avec un véhicule
-          setTechniciens(techniciensList.filter(t => t.vehicule_id));
+          let profilesMap: Record<string, { prenom: string; nom: string }> = {};
+          
+          if (technicienIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('id, prenom, nom')
+              .in('id', technicienIds);
+
+            profilesMap = (profiles || []).reduce((acc: any, p: any) => {
+              acc[p.id] = { prenom: p.prenom || '', nom: p.nom || '' };
+              return acc;
+            }, {});
+          }
+
+          // Construire la liste des techniciens avec véhicule + véhicules non assignés
+          const techniciensList: TechnicienAvecVehicule[] = (vehiculesData || [])
+            .filter((v: any) => v.technicien_id) // Véhicules avec technicien
+            .map((v: any) => {
+              const techProfile = profilesMap[v.technicien_id];
+              return {
+                id: v.technicien_id,
+                prenom: techProfile?.prenom || 'Technicien',
+                nom: techProfile?.nom || v.technicien_id.slice(0, 8),
+                vehicule_id: v.id,
+                vehicule_immatriculation: v.immatriculation,
+                vehicule_marque: v.marque,
+                vehicule_modele: v.modele,
+              };
+            });
+
+          // Ajouter les véhicules non assignés comme entrées spéciales
+          const vehiculesNonAssignes = (vehiculesData || [])
+            .filter((v: any) => !v.technicien_id)
+            .map((v: any) => ({
+              id: `vehicule_${v.id}`, // Préfixe pour distinguer
+              prenom: '🚐',
+              nom: `${v.immatriculation} (non assigné)`,
+              vehicule_id: v.id,
+              vehicule_immatriculation: v.immatriculation,
+              vehicule_marque: v.marque,
+              vehicule_modele: v.modele,
+            }));
+
+          setTechniciens([...techniciensList, ...vehiculesNonAssignes]);
           setIsLoading(false);
         } else {
           // Non-admin : charger uniquement son véhicule
@@ -1527,6 +1561,11 @@ function SignalerPiecesModal({
         }
 
         // Créer le mouvement de stock
+        // Pour les véhicules non assignés, utiliser l'id de l'admin
+        const effectiveTechnicienId = selectedTechnicienId?.startsWith('vehicule_') 
+          ? user?.id 
+          : (selectedTechnicienId || user?.id);
+          
         await supabase.from('stock_mouvements').insert({
           article_id: piece.article_id,
           type_mouvement: 'sortie',
@@ -1534,7 +1573,7 @@ function SignalerPiecesModal({
           motif: `Remplacement sur ${ascenseur.code_appareil}`,
           reference_doc: ascenseur.code_appareil,
           vehicule_id: vehiculeId,
-          technicien_id: selectedTechnicienId || user?.id,
+          technicien_id: effectiveTechnicienId,
           created_at: now,
         });
       }
@@ -1548,6 +1587,10 @@ function SignalerPiecesModal({
       // Créer une intervention rapide (si table existe)
       const piecesListe = piecesRemplacees.map(p => `${p.quantite}x ${p.designation}`).join(', ');
       const technicienInfo = techniciens.find(t => t.id === selectedTechnicienId);
+      const effectiveTechnicienIdFinal = selectedTechnicienId?.startsWith('vehicule_') 
+        ? user?.id 
+        : (selectedTechnicienId || user?.id);
+        
       await supabase.from('interventions_rapides').insert({
         code_appareil: ascenseur.code_appareil,
         id_wsoucont: ascenseur.id_wsoucont,
@@ -1559,7 +1602,7 @@ function SignalerPiecesModal({
         description: notePieces || 'Remplacement de pièces',
         pieces_utilisees: piecesListe,
         pieces_detail: piecesRemplacees,
-        technicien_id: selectedTechnicienId || user?.id,
+        technicien_id: effectiveTechnicienIdFinal,
         technicien_info: technicienInfo ? `${technicienInfo.prenom} ${technicienInfo.nom}` : null,
       }).catch(() => {});
 
@@ -1605,7 +1648,8 @@ function SignalerPiecesModal({
           ) : isAdmin && techniciens.length === 0 ? (
             <div className="text-center py-8">
               <AlertTriangle className="w-10 h-10 text-orange-400 mx-auto mb-2" />
-              <p className="text-sm text-[var(--text-muted)]">Aucun technicien avec véhicule</p>
+              <p className="text-sm text-[var(--text-muted)]">Aucun véhicule actif trouvé</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">Vérifiez que des véhicules sont configurés</p>
             </div>
           ) : !isAdmin && !vehiculeId ? (
             <div className="text-center py-8">
@@ -1620,23 +1664,46 @@ function SignalerPiecesModal({
                 <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
                   <label className="text-xs font-semibold text-purple-400 mb-2 block flex items-center gap-1">
                     <User className="w-3 h-3" />
-                    Technicien
+                    Technicien / Véhicule
                   </label>
                   <Select
                     value={selectedTechnicienId}
                     onChange={e => handleTechnicienChange(e.target.value)}
                     className="w-full"
                   >
-                    <option value="">-- Sélectionner un technicien --</option>
-                    {techniciens.map(t => (
-                      <option key={t.id} value={t.id}>
-                        👤 {t.prenom} {t.nom} — {t.vehicule_immatriculation} {t.vehicule_marque && `(${t.vehicule_marque})`}
-                      </option>
-                    ))}
+                    <option value="">-- Sélectionner --</option>
+                    {/* Techniciens avec véhicule */}
+                    {techniciens.filter(t => !t.id.startsWith('vehicule_')).length > 0 && (
+                      <optgroup label="👤 Techniciens">
+                        {techniciens
+                          .filter(t => !t.id.startsWith('vehicule_'))
+                          .map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.prenom} {t.nom} — {t.vehicule_immatriculation}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    {/* Véhicules non assignés */}
+                    {techniciens.filter(t => t.id.startsWith('vehicule_')).length > 0 && (
+                      <optgroup label="🚐 Véhicules non assignés">
+                        {techniciens
+                          .filter(t => t.id.startsWith('vehicule_'))
+                          .map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.vehicule_immatriculation} {t.vehicule_marque && `(${t.vehicule_marque})`}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
                   </Select>
                   {technicienSelectionne && (
                     <p className="text-xs text-[var(--text-muted)] mt-2">
-                      Stock véhicule de <strong>{technicienSelectionne.prenom} {technicienSelectionne.nom}</strong> ({technicienSelectionne.vehicule_immatriculation})
+                      {technicienSelectionne.id.startsWith('vehicule_') ? (
+                        <>Stock véhicule <strong>{technicienSelectionne.vehicule_immatriculation}</strong> (non assigné)</>
+                      ) : (
+                        <>Stock véhicule de <strong>{technicienSelectionne.prenom} {technicienSelectionne.nom}</strong> ({technicienSelectionne.vehicule_immatriculation})</>
+                      )}
                     </p>
                   )}
                 </div>
