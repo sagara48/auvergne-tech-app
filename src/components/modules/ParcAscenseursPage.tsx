@@ -1973,7 +1973,7 @@ function SignalerPiecesModal({
 
 // Modal Détail Ascenseur
 function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse' | 'notes' | 'documents' | 'pieces'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse' | 'notes' | 'documents' | 'pieces' | 'travaux'>('info');
   const [selectedIntervention, setSelectedIntervention] = useState<any>(null);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [isAddingNote, setIsAddingNote] = useState(false);
@@ -1981,6 +1981,29 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
   const [showPiecesModal, setShowPiecesModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+
+  // Récupérer les travaux liés à cet ascenseur
+  const { data: travauxAscenseur } = useQuery({
+    queryKey: ['travaux-ascenseur', ascenseur.code_appareil],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from('travaux')
+          .select('*, technicien:techniciens!travaux_technicien_id_fkey(prenom, nom)')
+          .eq('code_appareil', ascenseur.code_appareil)
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.warn('Erreur récupération travaux:', error.message);
+          return [];
+        }
+        return data || [];
+      } catch (error) {
+        console.warn('Exception travaux:', error);
+        return [];
+      }
+    },
+  });
   
   // Récupérer les notes publiques liées à cet ascenseur
   const { data: notesAscenseur, refetch: refetchNotes } = useQuery({
@@ -2535,6 +2558,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 { id: 'visites', label: 'Visites', icon: Calendar, count: visites.length },
                 { id: 'controles', label: 'Contrôles', icon: Eye, count: controles.length },
                 { id: 'pannes', label: 'Pannes', icon: AlertTriangle, count: pannes.length },
+                { id: 'travaux', label: 'Travaux', icon: Wrench, count: travauxAscenseur?.length || 0 },
                 { id: 'pieces', label: 'Pièces', icon: Package, count: null },
                 { id: 'notes', label: 'Notes', icon: MessageSquare, count: notesAscenseur?.length || 0 },
                 { id: 'documents', label: 'Documents', icon: FolderOpen, count: documentsAscenseur?.length || 0 }
@@ -3374,6 +3398,158 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
             )}
 
             {/* Onglet Pièces remplacées */}
+            {activeTab === 'travaux' && (
+              <div className="space-y-4">
+                {/* En-tête */}
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                    <Wrench className="w-5 h-5 text-purple-400" />
+                    Travaux sur cet appareil
+                  </h3>
+                  <span className="text-sm text-[var(--text-muted)]">
+                    {travauxAscenseur?.length || 0} travaux
+                  </span>
+                </div>
+
+                {/* Liste des travaux */}
+                {!travauxAscenseur || travauxAscenseur.length === 0 ? (
+                  <div className="text-center py-8 text-[var(--text-muted)]">
+                    <Wrench className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                    <p>Aucun travaux enregistré sur cet appareil</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {travauxAscenseur.map((t: any) => {
+                      const statutConfig: Record<string, { label: string; color: string; bg: string }> = {
+                        planifie: { label: 'Planifié', color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                        en_cours: { label: 'En cours', color: 'text-amber-400', bg: 'bg-amber-500/10' },
+                        termine: { label: 'Terminé', color: 'text-green-400', bg: 'bg-green-500/10' },
+                        annule: { label: 'Annulé', color: 'text-gray-400', bg: 'bg-gray-500/10' },
+                      };
+                      const statut = statutConfig[t.statut] || statutConfig.planifie;
+                      
+                      const prioriteConfig: Record<string, { label: string; color: string }> = {
+                        basse: { label: 'Basse', color: 'text-gray-400' },
+                        normale: { label: 'Normale', color: 'text-blue-400' },
+                        haute: { label: 'Haute', color: 'text-amber-400' },
+                        urgente: { label: 'Urgente', color: 'text-red-400' },
+                      };
+                      const priorite = prioriteConfig[t.priorite] || prioriteConfig.normale;
+
+                      return (
+                        <div 
+                          key={t.id}
+                          className={`p-4 rounded-xl border ${statut.bg} border-[var(--border-primary)]`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-mono font-bold text-purple-400">{t.code}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${statut.bg} ${statut.color}`}>
+                                  {statut.label}
+                                </span>
+                                <span className={`text-xs ${priorite.color}`}>
+                                  {priorite.label}
+                                </span>
+                              </div>
+                              <h4 className="font-semibold text-[var(--text-primary)] mb-1">{t.titre}</h4>
+                              {t.description && (
+                                <p className="text-sm text-[var(--text-muted)] mb-2 line-clamp-2">{t.description}</p>
+                              )}
+                              <div className="flex items-center gap-4 text-xs text-[var(--text-tertiary)]">
+                                {t.technicien && (
+                                  <span className="flex items-center gap-1">
+                                    <User className="w-3 h-3" />
+                                    {t.technicien.prenom} {t.technicien.nom}
+                                  </span>
+                                )}
+                                {t.date_butoir && (
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {format(parseISO(t.date_butoir), 'd MMM yyyy', { locale: fr })}
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {format(parseISO(t.created_at), 'd MMM yyyy', { locale: fr })}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-[var(--text-primary)]">{t.progression || 0}%</div>
+                              <div className="w-16 h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden mt-1">
+                                <div 
+                                  className={`h-full ${t.progression >= 100 ? 'bg-green-500' : 'bg-amber-500'}`}
+                                  style={{ width: `${t.progression || 0}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Tâches si présentes */}
+                          {t.taches && t.taches.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
+                              <p className="text-xs text-[var(--text-muted)] mb-2">
+                                {t.taches.filter((tache: any) => tache.statut === 'termine').length}/{t.taches.length} tâches terminées
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {t.taches.slice(0, 5).map((tache: any, idx: number) => (
+                                  <span 
+                                    key={idx}
+                                    className={`text-[10px] px-2 py-0.5 rounded ${
+                                      tache.statut === 'termine' 
+                                        ? 'bg-green-500/10 text-green-400 line-through' 
+                                        : 'bg-[var(--bg-secondary)] text-[var(--text-muted)]'
+                                    }`}
+                                  >
+                                    {tache.description?.substring(0, 30)}{tache.description?.length > 30 ? '...' : ''}
+                                  </span>
+                                ))}
+                                {t.taches.length > 5 && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--text-muted)]">
+                                    +{t.taches.length - 5}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Pièces si présentes */}
+                          {t.pieces && t.pieces.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
+                              <p className="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-1">
+                                <Package className="w-3 h-3" />
+                                {t.pieces.length} pièce(s)
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {t.pieces.slice(0, 3).map((piece: any, idx: number) => (
+                                  <span 
+                                    key={idx}
+                                    className={`text-[10px] px-2 py-0.5 rounded ${
+                                      piece.consommee 
+                                        ? 'bg-green-500/10 text-green-400' 
+                                        : 'bg-[var(--bg-secondary)] text-[var(--text-muted)]'
+                                    }`}
+                                  >
+                                    {piece.designation?.substring(0, 25)}{piece.designation?.length > 25 ? '...' : ''} ×{piece.quantite}
+                                  </span>
+                                ))}
+                                {t.pieces.length > 3 && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--text-muted)]">
+                                    +{t.pieces.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === 'pieces' && (
               <div className="space-y-4">
                 <PiecesRemplaceesByAscenseur codeAppareil={ascenseur.code_appareil} />
