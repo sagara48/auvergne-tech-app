@@ -45,6 +45,11 @@ import {
   ClockWidget,
   QuickLinksWidget,
   ChecklistWidget,
+  // Nouveaux widgets synergies
+  TechnicienDashboardWidget,
+  AlertesStockReapproWidget,
+  SuiviVehiculeWidget,
+  PlanningTravauxWidget,
 } from './widgets';
 import { NotificationsWidget } from '@/components/notifications';
 import toast from 'react-hot-toast';
@@ -83,6 +88,11 @@ const WIDGET_COMPONENTS: Record<string, React.FC<{ onRemove?: () => void }>> = {
   'clock': ClockWidget,
   'quick-links': QuickLinksWidget,
   'checklist': ChecklistWidget,
+  // Nouveaux widgets synergies
+  'technicien-dashboard': TechnicienDashboardWidget,
+  'alertes-stock-reappro': AlertesStockReapproWidget,
+  'suivi-vehicule': SuiviVehiculeWidget,
+  'planning-travaux': PlanningTravauxWidget,
 };
 
 // Modal pour ajouter des widgets

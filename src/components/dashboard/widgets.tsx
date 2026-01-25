@@ -1449,3 +1449,56 @@ export function ChecklistWidget({ onRemove }: { onRemove?: () => void }) {
     </WidgetWrapper>
   );
 }
+
+// ============================================
+// WIDGETS SYNERGIES
+// ============================================
+
+import { TechnicienDashboard } from '@/components/integrations/TechnicienDashboard';
+import { AlerteStock } from '@/components/integrations/AlerteStockReappro';
+import { SuiviVehicule } from '@/components/integrations/SuiviVehicule';
+import { PlanningTravaux } from '@/components/integrations/PlanningTravaux';
+
+// Widget Dashboard Technicien
+export function TechnicienDashboardWidget({ onRemove }: { onRemove?: () => void }) {
+  return (
+    <Card className="h-full flex flex-col overflow-hidden">
+      <CardBody className="p-2 flex-1 overflow-auto">
+        <TechnicienDashboard />
+      </CardBody>
+    </Card>
+  );
+}
+
+// Widget Alertes Stock avec Réappro
+export function AlertesStockReapproWidget({ onRemove }: { onRemove?: () => void }) {
+  return (
+    <WidgetWrapper title="Alertes Stock" icon={AlertTriangle} color="#f59e0b" onRemove={onRemove}>
+      <div className="p-2 overflow-auto">
+        <AlerteStock compact showCreateButton />
+      </div>
+    </WidgetWrapper>
+  );
+}
+
+// Widget Suivi Véhicule
+export function SuiviVehiculeWidget({ onRemove }: { onRemove?: () => void }) {
+  return (
+    <Card className="h-full flex flex-col overflow-hidden">
+      <CardBody className="p-2 flex-1 overflow-auto">
+        <SuiviVehicule />
+      </CardBody>
+    </Card>
+  );
+}
+
+// Widget Planning Travaux
+export function PlanningTravauxWidget({ onRemove }: { onRemove?: () => void }) {
+  return (
+    <Card className="h-full flex flex-col overflow-hidden">
+      <CardBody className="p-2 flex-1 overflow-auto">
+        <PlanningTravaux />
+      </CardBody>
+    </Card>
+  );
+}

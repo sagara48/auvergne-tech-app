@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Calendar, Hammer, FileCheck, Package, Clock, 
   MessageCircle, Car, AlertTriangle, TrendingUp, CheckSquare,
   StickyNote, CloudSun, Link, Users, BarChart3, PieChart,
-  Timer, Truck, Bell, Activity
+  Timer, Truck, Bell, Activity, Zap, Shield
 } from 'lucide-react';
 
 export type WidgetSize = 'small' | 'medium' | 'large';
@@ -332,6 +332,43 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     icon: CheckSquare,
     defaultSize: 'medium',
     minW: 2, minH: 2, defaultW: 2, defaultH: 2,
+  },
+  // === SYNERGIES ===
+  {
+    id: 'technicien-dashboard',
+    name: 'Mon tableau de bord',
+    description: 'Vue personnalisée: visites, stock, heures, véhicule',
+    category: 'stats',
+    icon: Zap,
+    defaultSize: 'large',
+    minW: 3, minH: 3, defaultW: 4, defaultH: 4,
+  },
+  {
+    id: 'alertes-stock-reappro',
+    name: 'Alertes Stock',
+    description: 'Articles sous seuil avec création demande réappro',
+    category: 'stock',
+    icon: AlertTriangle,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 3,
+  },
+  {
+    id: 'suivi-vehicule',
+    name: 'Suivi Véhicule',
+    description: 'Alertes CT, vidange, pièces utilisées',
+    category: 'vehicule',
+    icon: Shield,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 3,
+  },
+  {
+    id: 'planning-travaux',
+    name: 'Travaux à planifier',
+    description: 'Liste travaux sans date + vue planning',
+    category: 'travaux',
+    icon: Hammer,
+    defaultSize: 'large',
+    minW: 3, minH: 3, defaultW: 3, defaultH: 4,
   },
 ];
 
