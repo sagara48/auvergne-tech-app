@@ -1344,37 +1344,48 @@ function SignalerPiecesModal({
           return;
         }
 
-        // Vérifier si admin via la table techniciens avec jointure roles
-        const { data: technicien } = await supabase
+        // Chercher le technicien par ID ou par email
+        let technicienData = null;
+        let roleCode = null;
+
+        // Essai 1: chercher par ID
+        const { data: techById } = await supabase
           .from('techniciens')
-          .select('id, role:roles(code)')
+          .select('id, email, role:roles(code)')
           .eq('id', user.id)
           .maybeSingle();
 
-        // Vérifier aussi via l'email si pas trouvé par ID
-        let userIsAdmin = false;
-        if (technicien?.role) {
-          const roleCode = (technicien.role as any)?.code;
-          userIsAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
-        } else {
-          // Fallback: chercher par email
+        if (techById) {
+          technicienData = techById;
+          roleCode = (techById.role as any)?.code;
+        } else if (user.email) {
+          // Essai 2: chercher par email
           const { data: techByEmail } = await supabase
             .from('techniciens')
-            .select('id, role:roles(code)')
+            .select('id, email, role:roles(code)')
             .eq('email', user.email)
             .maybeSingle();
-          
-          if (techByEmail?.role) {
-            const roleCode = (techByEmail.role as any)?.code;
-            userIsAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
+
+          if (techByEmail) {
+            technicienData = techByEmail;
+            roleCode = (techByEmail.role as any)?.code;
           }
         }
-        
+
+        // Vérifier si admin
+        const userIsAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
         setIsAdmin(userIsAdmin);
-        console.log('User admin check:', { userId: user.id, email: user.email, isAdmin: userIsAdmin, technicien });
+        
+        console.log('User admin check:', { 
+          userId: user.id, 
+          email: user.email, 
+          isAdmin: userIsAdmin, 
+          technicien: technicienData,
+          roleCode 
+        });
 
         if (userIsAdmin) {
-          // Charger tous les véhicules actifs avec leur technicien
+          // Charger tous les véhicules avec leur technicien
           const { data: vehiculesData, error: vehiculesError } = await supabase
             .from('vehicules')
             .select(`
@@ -1386,7 +1397,7 @@ function SignalerPiecesModal({
             `)
             .order('immatriculation');
           
-          console.log('Véhicules chargés:', vehiculesData, vehiculesError);
+          console.log('Véhicules chargés:', vehiculesData?.length, vehiculesError);
 
           // Récupérer les noms des techniciens depuis la table techniciens
           const technicienIds = (vehiculesData || [])
@@ -1464,8 +1475,9 @@ function SignalerPiecesModal({
 
   // Charger le stock d'un véhicule spécifique
   const loadStockVehicule = async (vehId: string) => {
+    console.log('loadStockVehicule appelé avec:', vehId);
     try {
-      const { data: stock } = await supabase
+      const { data: stock, error } = await supabase
         .from('stock_vehicules')
         .select(`
           id,
@@ -1474,8 +1486,9 @@ function SignalerPiecesModal({
           article:article_id(id, designation, reference, categorie:categorie_id(nom))
         `)
         .eq('vehicule_id', vehId)
-        .gt('quantite', 0)
-        .order('article(designation)');
+        .gt('quantite', 0);
+
+      console.log('Stock récupéré:', stock?.length, 'articles, error:', error);
 
       const articles: ArticleStockVehicule[] = (stock || []).map((s: any) => ({
         id: s.id,
@@ -1486,6 +1499,7 @@ function SignalerPiecesModal({
         categorie: s.article?.categorie?.nom,
       }));
 
+      console.log('Articles formatés:', articles.length);
       setStockVehicule(articles);
       setVehiculeId(vehId);
       // Reset les pièces sélectionnées quand on change de véhicule
@@ -1496,13 +1510,28 @@ function SignalerPiecesModal({
     }
   };
 
-  // Quand l'admin sélectionne un technicien
+  // Quand l'admin sélectionne un technicien/véhicule
   const handleTechnicienChange = async (techId: string) => {
+    console.log('handleTechnicienChange appelé avec:', techId);
     setSelectedTechnicienId(techId);
+    
     if (techId) {
-      const technicien = techniciens.find(t => t.id === techId);
-      if (technicien?.vehicule_id) {
-        await loadStockVehicule(technicien.vehicule_id);
+      // Cas 1: Véhicule non assigné (préfixé par "vehicule_")
+      if (techId.startsWith('vehicule_')) {
+        const realVehiculeId = techId.replace('vehicule_', '');
+        console.log('Véhicule non assigné, ID réel:', realVehiculeId);
+        await loadStockVehicule(realVehiculeId);
+      } else {
+        // Cas 2: Technicien avec véhicule
+        const technicien = techniciens.find(t => t.id === techId);
+        console.log('Technicien trouvé:', technicien);
+        if (technicien?.vehicule_id) {
+          await loadStockVehicule(technicien.vehicule_id);
+        } else {
+          console.log('Pas de vehicule_id trouvé pour ce technicien');
+          setStockVehicule([]);
+          setVehiculeId(null);
+        }
       }
     } else {
       setStockVehicule([]);

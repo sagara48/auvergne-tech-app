@@ -150,35 +150,47 @@ async function getStockVehiculeTechnicien(): Promise<{
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { vehiculeId: null, articles: [], isAdmin: false, vehicules: [] };
 
-    // Vérifier si admin via la table techniciens avec jointure roles
-    const { data: technicien } = await supabase
+    // Chercher le technicien par ID ou par email
+    let technicienData = null;
+    let roleCode = null;
+
+    // Essai 1: chercher par ID
+    const { data: techById } = await supabase
       .from('techniciens')
-      .select('id, role:roles(code)')
+      .select('id, email, role:roles(code)')
       .eq('id', user.id)
       .maybeSingle();
 
-    let isAdmin = false;
-    if (technicien?.role) {
-      const roleCode = (technicien.role as any)?.code;
-      isAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
-    } else {
-      // Fallback: chercher par email
+    if (techById) {
+      technicienData = techById;
+      roleCode = (techById.role as any)?.code;
+    } else if (user.email) {
+      // Essai 2: chercher par email
       const { data: techByEmail } = await supabase
         .from('techniciens')
-        .select('id, role:roles(code)')
+        .select('id, email, role:roles(code)')
         .eq('email', user.email)
         .maybeSingle();
-      
-      if (techByEmail?.role) {
-        const roleCode = (techByEmail.role as any)?.code;
-        isAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
+
+      if (techByEmail) {
+        technicienData = techByEmail;
+        roleCode = (techByEmail.role as any)?.code;
       }
     }
 
-    console.log('FicheNFC - User admin check:', { userId: user.id, email: user.email, isAdmin, technicien });
+    // Vérifier si admin
+    const isAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
+
+    console.log('FicheNFC - User admin check:', { 
+      userId: user.id, 
+      email: user.email, 
+      isAdmin, 
+      technicien: technicienData,
+      roleCode 
+    });
 
     if (isAdmin) {
-      // Charger tous les véhicules avec technicien_id (sans filtre actif)
+      // Charger tous les véhicules avec technicien_id
       const { data: vehiculesData, error } = await supabase
         .from('vehicules')
         .select(`
@@ -190,7 +202,7 @@ async function getStockVehiculeTechnicien(): Promise<{
         `)
         .order('immatriculation');
       
-      console.log('FicheNFC - Véhicules chargés:', vehiculesData, error);
+      console.log('FicheNFC - Véhicules chargés:', vehiculesData?.length, error);
 
       // Récupérer les noms des techniciens
       const technicienIds = (vehiculesData || [])
@@ -267,8 +279,9 @@ async function getStockVehiculeTechnicien(): Promise<{
 
 // Récupérer le stock d'un véhicule spécifique
 async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]> {
+  console.log('getStockVehiculeById appelé avec:', vehiculeId);
   try {
-    const { data: stock } = await supabase
+    const { data: stock, error } = await supabase
       .from('stock_vehicules')
       .select(`
         id,
@@ -277,10 +290,11 @@ async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]>
         article:article_id(id, designation, reference, categorie:categorie_id(nom))
       `)
       .eq('vehicule_id', vehiculeId)
-      .gt('quantite', 0)
-      .order('article(designation)');
+      .gt('quantite', 0);
 
-    return (stock || []).map((s: any) => ({
+    console.log('Stock véhicule récupéré:', stock?.length, 'articles, error:', error);
+
+    const articles = (stock || []).map((s: any) => ({
       id: s.id,
       article_id: s.article_id,
       designation: s.article?.designation || 'Article inconnu',
@@ -288,6 +302,9 @@ async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]>
       quantite: s.quantite,
       categorie: s.article?.categorie?.nom,
     }));
+
+    console.log('Articles formatés:', articles.length);
+    return articles;
   } catch (error) {
     console.error('Erreur récupération stock véhicule:', error);
     return [];
@@ -454,9 +471,11 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
   // Charger le stock quand l'admin sélectionne un véhicule
   useEffect(() => {
     async function loadAdminStock() {
+      console.log('useEffect loadAdminStock:', { isAdmin: stockVehicule?.isAdmin, selectedVehiculeId });
       if (stockVehicule?.isAdmin && selectedVehiculeId) {
         setLoadingAdminStock(true);
         const articles = await getStockVehiculeById(selectedVehiculeId);
+        console.log('Articles chargés pour admin:', articles.length);
         setArticlesAdmin(articles);
         setPiecesRemplacees([]); // Reset les pièces sélectionnées
         setLoadingAdminStock(false);
@@ -466,7 +485,9 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
   }, [selectedVehiculeId, stockVehicule?.isAdmin]);
 
   // Déterminer le vehiculeId et les articles à utiliser
-  const effectiveVehiculeId = stockVehicule?.isAdmin ? selectedVehiculeId : stockVehicule?.vehiculeId;
+  const effectiveVehiculeId = stockVehicule?.isAdmin 
+    ? (selectedVehiculeId || null) 
+    : stockVehicule?.vehiculeId;
   const effectiveArticles = stockVehicule?.isAdmin ? articlesAdmin : (stockVehicule?.articles || []);
 
   // Filtrer les articles par recherche
