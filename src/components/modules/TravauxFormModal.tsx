@@ -469,16 +469,15 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
     }
 
     // Préparer les données à sauvegarder
-    // Ne pas envoyer ascenseur_id car il contient maintenant le code_appareil
-    const { ascenseur_id, ...formWithoutAscenseurId } = form;
+    // Exclure ascenseur_id car il contient le code_appareil (pas un UUID)
+    // Exclure aussi client_id s'il est vide
+    const { ascenseur_id, client_id, technicien_id, tournee_id, ...formClean } = form;
 
-    onSave({
-      ...formWithoutAscenseurId,
-      // Stocker le code_appareil
+    // Construire l'objet final en excluant les champs vides
+    const dataToSave: any = {
+      ...formClean,
       code_appareil: ascenseur_id || null,
-      // ascenseur_id doit être null ou un UUID valide
-      ascenseur_id: null,
-      devis_montant: form.devis_montant ? parseFloat(form.devis_montant as string) : undefined,
+      devis_montant: form.devis_montant ? parseFloat(form.devis_montant as string) : null,
       date_butoir: form.date_butoir || null,
       taches: taches.map(t => ({
         id: t.id,
@@ -498,7 +497,14 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
         consommee: p.consommee,
       })),
       progression: calculerProgression(),
-    });
+    };
+
+    // Ajouter les FK seulement si elles sont remplies (UUIDs valides)
+    if (client_id && client_id.length > 10) dataToSave.client_id = client_id;
+    if (technicien_id && technicien_id.length > 10) dataToSave.technicien_id = technicien_id;
+    if (tournee_id && tournee_id.length > 10) dataToSave.tournee_id = tournee_id;
+
+    onSave(dataToSave);
   };
 
   const getStatutIcon = (statut: TacheForm['statut']) => {

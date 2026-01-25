@@ -79,13 +79,32 @@ export async function getTravaux(includeArchived = false): Promise<Travaux[]> {
 
 export async function createTravaux(travaux: Partial<Travaux>): Promise<Travaux> {
   const code = `TRV-${String(Date.now()).slice(-6)}`;
-  const { data, error } = await supabase.from('travaux').insert({ ...travaux, code }).select().single();
+  
+  // Nettoyer les champs UUID vides (sinon erreur Postgres)
+  const cleanData: any = { ...travaux, code };
+  const uuidFields = ['client_id', 'ascenseur_id', 'technicien_id', 'tournee_id'];
+  uuidFields.forEach(field => {
+    if (cleanData[field] === '' || cleanData[field] === null || cleanData[field] === undefined) {
+      delete cleanData[field];
+    }
+  });
+  
+  const { data, error } = await supabase.from('travaux').insert(cleanData).select().single();
   if (error) throw error;
   return data;
 }
 
 export async function updateTravaux(id: string, data: Partial<Travaux>): Promise<Travaux> {
-  const { data: result, error } = await supabase.from('travaux').update(data).eq('id', id).select().single();
+  // Nettoyer les champs UUID vides
+  const cleanData: any = { ...data };
+  const uuidFields = ['client_id', 'ascenseur_id', 'technicien_id', 'tournee_id'];
+  uuidFields.forEach(field => {
+    if (cleanData[field] === '') {
+      cleanData[field] = null;
+    }
+  });
+  
+  const { data: result, error } = await supabase.from('travaux').update(cleanData).eq('id', id).select().single();
   if (error) throw error;
   return result;
 }
