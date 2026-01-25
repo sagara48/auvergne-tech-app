@@ -1,7 +1,7 @@
 // src/services/notificationService.ts
 // Service unifié pour la gestion des notifications cross-modules
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/services/supabase';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 

@@ -6,7 +6,7 @@ import {
   Fuel, FileCheck, Timer, Route, User
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, ProgressBar } from '@/components/ui';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/services/supabase';
 import { format, startOfWeek, endOfWeek, isToday, isTomorrow, parseISO, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
