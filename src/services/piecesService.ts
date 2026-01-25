@@ -201,7 +201,7 @@ export async function getPieceByReference(reference: string, fournisseur?: strin
 // ============================================
 
 /**
- * Analyse une photo de pièce avec Claude Vision via Edge Function Supabase
+ * Analyse une photo de pièce avec Claude Vision via API Route Vercel
  * Retourne l'identification de la pièce et des suggestions
  */
 export async function analyserPhotoPiece(
@@ -213,19 +213,25 @@ export async function analyserPhotoPiece(
   }
 ): Promise<AnalysePhotoResult> {
   try {
-    // Appel à l'Edge Function Supabase
-    const { data, error } = await supabase.functions.invoke('analyze-piece-photo', {
-      body: {
+    // Appel à l'API Route Vercel
+    const response = await fetch('/api/analyze-piece-photo', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         imageBase64,
         contexte,
-      },
+      }),
     });
 
-    if (error) {
-      console.error('Erreur Edge Function:', error);
-      throw new Error(error.message || 'Erreur lors de l\'analyse');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Erreur ${response.status}`);
     }
 
+    const data = await response.json();
+    
     if (data.error) {
       throw new Error(data.error);
     }
