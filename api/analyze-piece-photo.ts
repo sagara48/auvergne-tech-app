@@ -12,6 +12,34 @@ interface AnalyseRequest {
   };
 }
 
+// Détecter le type MIME depuis le base64
+function detectMediaType(base64: string): string {
+  if (base64.startsWith('data:image/')) {
+    const match = base64.match(/^data:image\/(\w+);base64,/);
+    if (match) {
+      const type = match[1].toLowerCase();
+      if (type === 'jpg') return 'image/jpeg';
+      return `image/${type}`;
+    }
+  }
+  
+  // Détecter depuis les magic bytes avec Buffer (Node.js)
+  try {
+    const cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64.slice(0, 32), 'base64');
+    
+    // Check magic bytes
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return 'image/jpeg';
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'image/png';
+    if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return 'image/gif';
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) return 'image/webp';
+  } catch (e) {
+    console.log('Erreur détection type image:', e);
+  }
+  
+  return 'image/jpeg'; // Défaut
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -39,6 +67,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!anthropicApiKey) {
       console.error('ANTHROPIC_API_KEY non configurée');
       return res.status(500).json({ error: 'Configuration API manquante' });
+    }
+
+    // Détecter le type d'image et nettoyer le base64
+    const mediaType = detectMediaType(imageBase64);
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+
+    // Vérifier la taille (max ~20MB en base64)
+    if (cleanBase64.length > 20 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Image trop volumineuse (max 20MB)' });
     }
 
     // Prompt système pour l'analyse
@@ -76,8 +113,7 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
       userPrompt += `\n- Code appareil : ${contexte.codeAscenseur}`;
     }
 
-    // Nettoyer le base64 si nécessaire
-    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    console.log('Analyse photo - Type:', mediaType, '- Taille base64:', cleanBase64.length);
 
     // Appel à Claude Vision
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -88,7 +124,7 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-3-5-sonnet-20241022',
         max_tokens: 1500,
         system: systemPrompt,
         messages: [
@@ -99,7 +135,7 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
                 type: 'image',
                 source: {
                   type: 'base64',
-                  media_type: 'image/jpeg',
+                  media_type: mediaType,
                   data: cleanBase64,
                 },
               },
@@ -116,7 +152,10 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Erreur API Claude:', response.status, errorText);
-      return res.status(500).json({ error: `Erreur API Claude: ${response.status}` });
+      return res.status(500).json({ 
+        error: `Erreur API Claude: ${response.status}`,
+        details: errorText 
+      });
     }
 
     const data = await response.json();
@@ -162,6 +201,9 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
 
   } catch (error) {
     console.error('Erreur analyse photo:', error);
-    return res.status(500).json({ error: 'Erreur lors de l\'analyse' });
+    return res.status(500).json({ 
+      error: 'Erreur lors de l\'analyse',
+      details: error instanceof Error ? error.message : 'Erreur inconnue'
+    });
   }
 }
