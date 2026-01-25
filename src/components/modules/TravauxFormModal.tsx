@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Plus, Search, X, Trash2, Package, CheckCircle2, Circle, 
@@ -6,7 +6,7 @@ import {
   AlertOctagon, MessageSquare, Clock, Route, AlertTriangle, Image
 } from 'lucide-react';
 import { Button, Card, CardBody, Badge, Input, Select } from '@/components/ui';
-import { getAscenseurs, getStockArticles, createStockMouvement, getTournees } from '@/services/api';
+import { getStockArticles, createStockMouvement, getTournees } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { usePanierStore } from '@/stores/panierStore';
 import type { Travaux, StatutTravaux, Priorite, StockArticle, Tournee } from '@/types';
@@ -130,6 +130,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
   const [showPieceForm, setShowPieceForm] = useState(false);
   const [pieceMode, setPieceMode] = useState<'stock' | 'manuel'>('stock');
   const [pieceSearch, setPieceSearch] = useState('');
+  const [ascenseurSearch, setAscenseurSearch] = useState('');
   const [newPiece, setNewPiece] = useState({ designation: '', reference: '', quantite: 1, source: 'stock' as 'stock' | 'commande' });
 
   // Sections dépliables
@@ -145,7 +146,21 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
     },
   });
 
-  const { data: ascenseurs } = useQuery({ queryKey: ['ascenseurs'], queryFn: getAscenseurs });
+  // Utiliser parc_ascenseurs au lieu de la table ascenseurs
+  const { data: parcAscenseurs } = useQuery({
+    queryKey: ['parc-ascenseurs-travaux'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('parc_ascenseurs')
+        .select('id_wsoucont, code_appareil, adresse, ville, secteur, ordre2, type_planning')
+        .order('code_appareil');
+      if (error) {
+        console.warn('Erreur parc_ascenseurs:', error.message);
+        return [];
+      }
+      return data || [];
+    },
+  });
 
   const { data: techniciens } = useQuery({
     queryKey: ['techniciens'],
@@ -166,7 +181,36 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
   });
 
   const techs = techniciens?.filter(t => t.role?.code === 'technicien' || t.role?.code === 'chef_equipe') || [];
-  const filteredAscenseurs = form.client_id ? ascenseurs?.filter(a => a.client_id === form.client_id) : ascenseurs;
+  
+  // Filtrer les ascenseurs du parc (optionnel: par secteur ou autre critère)
+  const filteredAscenseurs = parcAscenseurs || [];
+
+  // Effet: auto-sélection de la tournée quand un ascenseur est sélectionné
+  useEffect(() => {
+    if (form.ascenseur_id && parcAscenseurs && tournees) {
+      // Trouver l'ascenseur sélectionné
+      const ascenseur = parcAscenseurs.find((a: any) => 
+        a.id_wsoucont?.toString() === form.ascenseur_id || a.code_appareil === form.ascenseur_id
+      );
+      
+      if (ascenseur && ascenseur.secteur && ascenseur.ordre2) {
+        // Chercher une tournée qui correspond au secteur
+        // Le code tournée peut être formaté comme "S{secteur}-T{ordre2}" ou similaire
+        const tourneeMatch = tournees.find((t: any) => {
+          // Correspondance par secteur
+          if (t.secteur === ascenseur.secteur) return true;
+          // Ou par code contenant le secteur
+          const codeMatch = t.code?.match(/S(\d+)/);
+          if (codeMatch && parseInt(codeMatch[1]) === ascenseur.secteur) return true;
+          return false;
+        });
+        
+        if (tourneeMatch && !form.tournee_id) {
+          setForm(prev => ({ ...prev, tournee_id: tourneeMatch.id }));
+        }
+      }
+    }
+  }, [form.ascenseur_id, parcAscenseurs, tournees]);
 
   // Filtrer les articles pour la recherche
   const filteredArticles = stockArticles?.filter(a => 
@@ -344,14 +388,22 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
 
     const piecesUpdated = [...pieces];
 
+    // form.ascenseur_id contient maintenant directement le code_appareil
+    const codeAppareil = form.ascenseur_id;
+
     for (const piece of piecesAConsommer) {
       try {
-        // Utiliser la bonne signature: (articleId, type, quantite, motif)
+        // Utiliser la bonne signature avec code_appareil pour traçabilité
         await createStockMouvement(
           piece.article_id!,
           'sortie',
           piece.quantite,
-          `Travaux: ${form.titre}`
+          `Travaux: ${form.titre}`,
+          {
+            code_appareil: codeAppareil,
+            reference_doc: travaux?.code || form.titre,
+            technicien_id: form.technicien_id || undefined,
+          }
         );
         
         // Marquer comme consommée
@@ -375,6 +427,8 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
 
     onSave({
       ...form,
+      // Stocker le code_appareil (form.ascenseur_id contient maintenant le code_appareil)
+      code_appareil: form.ascenseur_id,
       devis_montant: form.devis_montant ? parseFloat(form.devis_montant as string) : undefined,
       date_butoir: form.date_butoir || null,
       taches: taches.map(t => ({
@@ -451,20 +505,68 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div>
-                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Client</label>
-                <Select value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value, ascenseur_id: '' })}>
-                  <option value="">Sélectionner...</option>
-                  {clients?.map(c => <option key={c.id} value={c.id}>{c.raison_sociale}</option>)}
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Ascenseur (Parc)</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher par code ou adresse..."
+                    value={ascenseurSearch}
+                    onChange={e => setAscenseurSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] text-sm focus:outline-none focus:border-purple-500 mb-2"
+                  />
+                </div>
+                <Select 
+                  value={form.ascenseur_id} 
+                  onChange={e => {
+                    const value = e.target.value;
+                    setForm({ ...form, ascenseur_id: value });
+                    // Reset tournée pour permettre l'auto-sélection
+                    if (value) {
+                      setForm(prev => ({ ...prev, ascenseur_id: value, tournee_id: '' }));
+                    }
+                  }}
+                >
+                  <option value="">Sélectionner un ascenseur...</option>
+                  {filteredAscenseurs
+                    .filter((a: any) => {
+                      if (!ascenseurSearch) return true;
+                      const search = ascenseurSearch.toLowerCase();
+                      return (
+                        a.code_appareil?.toLowerCase().includes(search) ||
+                        a.adresse?.toLowerCase().includes(search) ||
+                        a.ville?.toLowerCase().includes(search)
+                      );
+                    })
+                    .slice(0, 50)
+                    .map((a: any) => (
+                      <option key={a.id_wsoucont} value={a.code_appareil}>
+                        {a.code_appareil} - {a.adresse}, {a.ville} {a.ordre2 ? `(T${a.ordre2})` : ''}
+                      </option>
+                    ))
+                  }
                 </Select>
-              </div>
-              <div>
-                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Ascenseur</label>
-                <Select value={form.ascenseur_id} onChange={e => setForm({ ...form, ascenseur_id: e.target.value })}>
-                  <option value="">Sélectionner...</option>
-                  {filteredAscenseurs?.map(a => <option key={a.id} value={a.id}>{a.code} - {a.adresse}</option>)}
-                </Select>
+                {ascenseurSearch && filteredAscenseurs.filter((a: any) => {
+                  const search = ascenseurSearch.toLowerCase();
+                  return (
+                    a.code_appareil?.toLowerCase().includes(search) ||
+                    a.adresse?.toLowerCase().includes(search) ||
+                    a.ville?.toLowerCase().includes(search)
+                  );
+                }).length > 50 && (
+                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                    +{filteredAscenseurs.filter((a: any) => {
+                      const search = ascenseurSearch.toLowerCase();
+                      return (
+                        a.code_appareil?.toLowerCase().includes(search) ||
+                        a.adresse?.toLowerCase().includes(search) ||
+                        a.ville?.toLowerCase().includes(search)
+                      );
+                    }).length - 50} résultats - affinez votre recherche
+                  </p>
+                )}
               </div>
             </div>
 
@@ -480,6 +582,17 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
                 <label className="text-sm text-[var(--text-tertiary)] mb-1 block flex items-center gap-2">
                   <Route className="w-4 h-4 text-green-400" />
                   Tournée d'entretien
+                  {form.ascenseur_id && (() => {
+                    const asc = parcAscenseurs?.find((a: any) => a.code_appareil === form.ascenseur_id);
+                    if (asc?.ordre2) {
+                      return (
+                        <span className="text-[10px] bg-lime-500/20 text-lime-400 px-1.5 py-0.5 rounded">
+                          S{asc.secteur} T{asc.ordre2}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                 </label>
                 <Select value={form.tournee_id} onChange={e => setForm({ ...form, tournee_id: e.target.value })}>
                   <option value="">Aucune tournée</option>

@@ -50,6 +50,7 @@ import {
   AlertesStockReapproWidget,
   SuiviVehiculeWidget,
   PlanningTravauxWidget,
+  PiecesRemplaceesWidget,
 } from './widgets';
 import { NotificationsWidget } from '@/components/notifications';
 import toast from 'react-hot-toast';
@@ -93,6 +94,7 @@ const WIDGET_COMPONENTS: Record<string, React.FC<{ onRemove?: () => void }>> = {
   'alertes-stock-reappro': AlertesStockReapproWidget,
   'suivi-vehicule': SuiviVehiculeWidget,
   'planning-travaux': PlanningTravauxWidget,
+  'pieces-remplacees': PiecesRemplaceesWidget,
 };
 
 // Modal pour ajouter des widgets

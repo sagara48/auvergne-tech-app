@@ -1502,3 +1502,179 @@ export function PlanningTravauxWidget({ onRemove }: { onRemove?: () => void }) {
     </Card>
   );
 }
+
+// ============================================
+// WIDGET PIÈCES REMPLACÉES
+// ============================================
+
+export function PiecesRemplaceesWidget({ onRemove }: { onRemove?: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboard-pieces-remplacees'],
+    queryFn: async () => {
+      // Récupérer les dernières pièces remplacées (30 derniers jours)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const dateDebut = thirtyDaysAgo.toISOString();
+      
+      // 1. Depuis stock_mouvements (avec code_appareil)
+      const { data: mouvements } = await supabase
+        .from('stock_mouvements')
+        .select(`
+          id,
+          date_mouvement,
+          quantite,
+          code_appareil,
+          article:article_id(designation, reference)
+        `)
+        .eq('type_mouvement', 'sortie')
+        .not('code_appareil', 'is', null)
+        .gte('date_mouvement', dateDebut)
+        .order('date_mouvement', { ascending: false })
+        .limit(30);
+
+      // 2. Depuis travaux terminés avec pièces consommées
+      const { data: travaux } = await supabase
+        .from('travaux')
+        .select(`
+          id,
+          code,
+          titre,
+          pieces,
+          updated_at,
+          ascenseur:ascenseur_id(code_appareil)
+        `)
+        .eq('statut', 'termine')
+        .not('pieces', 'is', null)
+        .gte('updated_at', dateDebut)
+        .order('updated_at', { ascending: false })
+        .limit(30);
+
+      // Combiner les résultats
+      const allPieces: any[] = [];
+
+      // Ajouter les mouvements
+      (mouvements || []).forEach((m: any) => {
+        allPieces.push({
+          id: m.id,
+          date: m.date_mouvement,
+          code_appareil: m.code_appareil,
+          designation: m.article?.designation || 'Article',
+          quantite: m.quantite,
+          source: 'mouvement',
+        });
+      });
+
+      // Ajouter les pièces des travaux
+      (travaux || []).forEach((t: any) => {
+        if (t.pieces && Array.isArray(t.pieces)) {
+          const codeAppareil = t.ascenseur?.code_appareil;
+          if (!codeAppareil) return;
+
+          t.pieces.forEach((p: any) => {
+            if (!p.consommee) return;
+
+            // Éviter les doublons
+            const exists = allPieces.find(
+              existing => 
+                existing.code_appareil === codeAppareil &&
+                existing.designation === p.designation &&
+                existing.quantite === p.quantite &&
+                existing.date?.substring(0, 10) === t.updated_at?.substring(0, 10)
+            );
+
+            if (!exists) {
+              allPieces.push({
+                id: `travaux-${t.id}-${p.id || p.designation}`,
+                date: t.updated_at,
+                code_appareil: codeAppareil,
+                designation: p.designation,
+                quantite: p.quantite,
+                source: 'travaux',
+              });
+            }
+          });
+        }
+      });
+
+      // Trier par date
+      allPieces.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      // Stats
+      const totalPieces = allPieces.reduce((acc, p) => acc + p.quantite, 0);
+      const appareilsUniques = new Set(allPieces.map(p => p.code_appareil)).size;
+      
+      // Aujourd'hui
+      const today = new Date().toISOString().split('T')[0];
+      const piecesAujourdhui = allPieces
+        .filter(p => p.date?.startsWith(today))
+        .reduce((acc, p) => acc + p.quantite, 0);
+
+      return {
+        pieces: allPieces.slice(0, 20),
+        stats: {
+          total: totalPieces,
+          appareils: appareilsUniques,
+          aujourdhui: piecesAujourdhui,
+        }
+      };
+    },
+    refetchInterval: 60000, // Refresh toutes les minutes
+  });
+
+  return (
+    <WidgetWrapper title="Pièces remplacées" icon={Package} color="#a855f7" onRemove={onRemove}>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Stats rapides */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-purple-500/10 rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-purple-400">{data?.stats.aujourdhui || 0}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Aujourd'hui</p>
+            </div>
+            <div className="bg-[var(--bg-secondary)] rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-[var(--text-primary)]">{data?.stats.total || 0}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">30 jours</p>
+            </div>
+            <div className="bg-[var(--bg-secondary)] rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-[var(--text-primary)]">{data?.stats.appareils || 0}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Appareils</p>
+            </div>
+          </div>
+
+          {/* Liste des dernières pièces */}
+          <div className="space-y-1.5 max-h-[300px] overflow-auto">
+            {data?.pieces.length === 0 ? (
+              <div className="text-center py-4 text-[var(--text-muted)] text-sm">
+                <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                Aucune pièce remplacée
+              </div>
+            ) : (
+              data?.pieces.slice(0, 10).map((p: any) => (
+                <div 
+                  key={p.id}
+                  className="flex items-center justify-between p-2 bg-[var(--bg-secondary)] rounded-lg"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-[var(--text-primary)] truncate">
+                      {p.designation}
+                    </p>
+                    <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
+                      <span className="font-mono">{p.code_appareil}</span>
+                      <span>•</span>
+                      <span>{format(parseISO(p.date), 'dd/MM HH:mm', { locale: fr })}</span>
+                    </div>
+                  </div>
+                  <Badge variant="purple" className="text-[10px] ml-2">×{p.quantite}</Badge>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </WidgetWrapper>
+  );
+}

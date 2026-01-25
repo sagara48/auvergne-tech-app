@@ -370,6 +370,15 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     defaultSize: 'large',
     minW: 3, minH: 3, defaultW: 3, defaultH: 4,
   },
+  {
+    id: 'pieces-remplacees',
+    name: 'Pièces remplacées',
+    description: 'Dernières pièces remplacées sur les ascenseurs',
+    category: 'stock',
+    icon: Package,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 3,
+  },
 ];
 
 // Layout par défaut pour les nouveaux utilisateurs

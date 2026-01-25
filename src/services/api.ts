@@ -157,13 +157,35 @@ export async function deleteStockArticle(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function createStockMouvement(articleId: string, type: string, quantite: number, motif?: string) {
+export async function createStockMouvement(
+  articleId: string, 
+  type: string, 
+  quantite: number, 
+  motif?: string,
+  options?: {
+    code_appareil?: string;
+    reference_doc?: string;
+    technicien_id?: string;
+    vehicule_id?: string;
+  }
+) {
   const article = await supabase.from('stock_articles').select('quantite_stock').eq('id', articleId).single();
   if (article.error) throw article.error;
   
   const newQty = type === 'entree' ? article.data.quantite_stock + quantite : article.data.quantite_stock - quantite;
   
-  await supabase.from('stock_mouvements').insert({ article_id: articleId, type_mouvement: type, quantite, motif, quantite_avant: article.data.quantite_stock, quantite_apres: newQty });
+  await supabase.from('stock_mouvements').insert({ 
+    article_id: articleId, 
+    type_mouvement: type, 
+    quantite, 
+    motif, 
+    quantite_avant: article.data.quantite_stock, 
+    quantite_apres: newQty,
+    code_appareil: options?.code_appareil,
+    reference_doc: options?.reference_doc,
+    technicien_id: options?.technicien_id,
+    vehicule_id: options?.vehicule_id,
+  });
   await supabase.from('stock_articles').update({ quantite_stock: newQty }).eq('id', articleId);
 }
 
