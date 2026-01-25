@@ -9,3 +9,7 @@ export { StockVehiculeDetail, StockVehiculeWidget } from './StockVehiculeDetail'
 
 // Travaux - Pièces et étapes détaillées
 export { TravauxPieces, TravauxEtapes } from './TravauxPiecesEtapes';
+
+// Mouvements de stock - Historique entrées/sorties
+export { StockMouvements, StockMouvementsWidget } from './StockMouvements';
+
