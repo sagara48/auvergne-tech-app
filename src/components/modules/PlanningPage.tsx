@@ -17,66 +17,60 @@ import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { supabase } from '@/services/supabase';
 
-// Types pour les secteurs du parc
-interface SecteurParc {
-  numero: number;
-  nom: string;
-  technicien_nom?: string;
+// Types pour les tournées du parc (secteur + ordre)
+interface TourneeParc {
+  secteur: number;
+  ordre: number;
   nb_ascenseurs: number;
   nb_en_arret: number;
+  villes: string[];
 }
 
-// Récupérer les secteurs du parc avec stats
-async function getSecteursParc(): Promise<SecteurParc[]> {
+// Récupérer les tournées du parc (secteur + ordre2)
+async function getTourneesParc(): Promise<TourneeParc[]> {
   try {
-    // Récupérer les secteurs
-    const { data: secteurs, error: secteursError } = await supabase
-      .from('parc_secteurs')
-      .select('*')
-      .order('numero');
+    // Récupérer les ascenseurs avec ordre2 défini (= dans une tournée)
+    const { data: ascenseurs, error } = await supabase
+      .from('parc_ascenseurs')
+      .select('secteur, ordre2, en_arret, ville, type_planning')
+      .not('ordre2', 'is', null)
+      .gt('ordre2', 0)
+      .not('type_planning', 'is', null); // Seulement sous contrat
     
-    if (secteursError) {
-      console.warn('Table parc_secteurs non disponible:', secteursError.message);
+    if (error) {
+      console.warn('Table parc_ascenseurs non disponible:', error.message);
       return [];
     }
     
-    // Récupérer les stats des ascenseurs par secteur
-    const { data: ascenseurs, error: ascError } = await supabase
-      .from('parc_ascenseurs')
-      .select('secteur, en_arret, ordre2, type_planning');
+    if (!ascenseurs) return [];
     
-    if (ascError) {
-      console.warn('Table parc_ascenseurs non disponible');
-      return secteurs?.map((s: any) => ({
-        numero: s.numero,
-        nom: s.nom || `Secteur ${s.numero}`,
-        technicien_nom: s.technicien_nom,
-        nb_ascenseurs: 0,
-        nb_en_arret: 0,
-      })) || [];
-    }
+    // Grouper par secteur + ordre2
+    const tourneesMap: Record<string, TourneeParc> = {};
     
-    // Compter les ascenseurs par secteur (uniquement ceux avec ordre2 = dans une tournée)
-    const statsBySecteur: Record<number, { total: number; arrets: number }> = {};
     (ascenseurs || []).forEach((a: any) => {
-      if (a.secteur && a.ordre2 && a.type_planning) { // Seulement ceux dans une tournée
-        if (!statsBySecteur[a.secteur]) {
-          statsBySecteur[a.secteur] = { total: 0, arrets: 0 };
-        }
-        statsBySecteur[a.secteur].total++;
-        if (a.en_arret) statsBySecteur[a.secteur].arrets++;
+      const key = `${a.secteur}-${a.ordre2}`;
+      if (!tourneesMap[key]) {
+        tourneesMap[key] = {
+          secteur: a.secteur,
+          ordre: a.ordre2,
+          nb_ascenseurs: 0,
+          nb_en_arret: 0,
+          villes: [],
+        };
+      }
+      tourneesMap[key].nb_ascenseurs++;
+      if (a.en_arret) tourneesMap[key].nb_en_arret++;
+      if (a.ville && !tourneesMap[key].villes.includes(a.ville)) {
+        tourneesMap[key].villes.push(a.ville);
       }
     });
     
-    return (secteurs || []).map((s: any) => ({
-      numero: s.numero,
-      nom: s.nom || `Secteur ${s.numero}`,
-      technicien_nom: s.technicien_nom,
-      nb_ascenseurs: statsBySecteur[s.numero]?.total || 0,
-      nb_en_arret: statsBySecteur[s.numero]?.arrets || 0,
-    })).filter(s => s.nb_ascenseurs > 0); // Ne garder que les secteurs avec des ascenseurs
+    // Convertir en array et trier par secteur puis ordre
+    return Object.values(tourneesMap)
+      .sort((a, b) => a.secteur - b.secteur || a.ordre - b.ordre);
+      
   } catch (err) {
-    console.error('Erreur getSecteursParc:', err);
+    console.error('Erreur getTourneesParc:', err);
     return [];
   }
 }
@@ -811,7 +805,7 @@ export function PlanningPage() {
   const { data: travauxNonPlanifies } = useQuery({ queryKey: ['travaux-non-planifies'], queryFn: getTravauxNonPlanifies });
   const { data: mesNonPlanifiees } = useQuery({ queryKey: ['mes-non-planifiees'], queryFn: getMESNonPlanifiees });
   const { data: tournees } = useQuery({ queryKey: ['tournees-actives'], queryFn: getTourneesActives });
-  const { data: secteursParc } = useQuery({ queryKey: ['secteurs-parc'], queryFn: getSecteursParc });
+  const { data: tourneesParc } = useQuery({ queryKey: ['tournees-parc'], queryFn: getTourneesParc });
   const { data: conges } = useQuery({ queryKey: ['planning-conges'], queryFn: getPlanningConges });
   const { data: astreinteEnCours } = useQuery({ queryKey: ['astreinte-encours', dateDebut], queryFn: () => getAstreinteEnCours(format(new Date(), 'yyyy-MM-dd')) });
 
@@ -876,19 +870,20 @@ export function PlanningPage() {
     } else if (activeData.type === 'tournee') {
       const tr = activeData.data as Tournee;
       createMutation.mutate({ titre: `Tournée ${tr.code}`, technicien_id: techId, type_event: 'tournee', date_debut: setHours(targetDate, 8).toISOString(), date_fin: setHours(targetDate, 17).toISOString(), tournee_id: tr.id, couleur: TYPE_EVENT_COLORS.tournee });
-    } else if (activeData.type === 'secteur') {
-      // Secteur du parc d'ascenseurs
-      const s = activeData.data as SecteurParc;
+    } else if (activeData.type === 'tournee-parc') {
+      // Tournée du parc d'ascenseurs (secteur + ordre)
+      const t = activeData.data as TourneeParc;
       createMutation.mutate({ 
-        titre: `Tournée S${s.numero} - ${s.nom}`, 
+        titre: `S${t.secteur} T${t.ordre}`, 
         technicien_id: techId, 
         type_event: 'tournee', 
         date_debut: setHours(targetDate, 8).toISOString(), 
         date_fin: setHours(targetDate, 17).toISOString(), 
         couleur: TYPE_EVENT_COLORS.tournee,
-        description: `Secteur ${s.numero} - ${s.nb_ascenseurs} ascenseurs${s.nb_en_arret > 0 ? ` (${s.nb_en_arret} en arrêt)` : ''}`,
+        description: `Secteur ${t.secteur} - Tournée ${t.ordre}\n${t.nb_ascenseurs} ascenseurs${t.nb_en_arret > 0 ? ` (${t.nb_en_arret} en arrêt)` : ''}\n${t.villes.join(', ')}`,
+        lieu: t.villes[0] || '',
       });
-      toast.success(`Tournée secteur ${s.numero} planifiée`);
+      toast.success(`Tournée S${t.secteur} T${t.ordre} planifiée`);
     }
   };
 
@@ -925,7 +920,7 @@ export function PlanningPage() {
     setShowCreateEvent(true);
   };
 
-  const activeDragData = activeId ? (events?.find(e => `event-${e.id}` === activeId) || travauxNonPlanifies?.find(t => `travaux-${t.id}` === activeId) || mesNonPlanifiees?.find(m => `mes-${m.id}` === activeId) || tournees?.find(t => `tournee-${t.id}` === activeId) || secteursParc?.find(s => `secteur-${s.numero}` === activeId)) : null;
+  const activeDragData = activeId ? (events?.find(e => `event-${e.id}` === activeId) || travauxNonPlanifies?.find(t => `travaux-${t.id}` === activeId) || mesNonPlanifiees?.find(m => `mes-${m.id}` === activeId) || tournees?.find(t => `tournee-${t.id}` === activeId) || tourneesParc?.find(t => `tournee-parc-${t.secteur}-${t.ordre}` === activeId)) : null;
 
   return (
     <DndContext collisionDetection={pointerWithin} onDragStart={e => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
@@ -1028,8 +1023,8 @@ export function PlanningPage() {
                   {mesNonPlanifiees && mesNonPlanifiees.length > 0 && (
                     <Badge variant="orange" className="text-xs">{mesNonPlanifiees.length} MES</Badge>
                   )}
-                  {secteursParc && secteursParc.length > 0 && (
-                    <Badge variant="blue" className="text-xs">{secteursParc.length} secteurs</Badge>
+                  {tourneesParc && tourneesParc.length > 0 && (
+                    <Badge variant="blue" className="text-xs">{tourneesParc.length} tournées</Badge>
                   )}
                 </div>
               )}
@@ -1083,7 +1078,7 @@ export function PlanningPage() {
                 </CardBody>
               </Card>
 
-              {/* Tournées (Secteurs du parc) */}
+              {/* Tournées (Secteur + Ordre) */}
               <Card className="overflow-hidden">
                 <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1091,43 +1086,40 @@ export function PlanningPage() {
                     <span className="text-sm font-medium text-[var(--text-primary)]">Tournées</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    {secteursParc?.some(s => s.nb_en_arret > 0) && (
-                      <Badge variant="red" className="text-[10px]">{secteursParc.reduce((acc, s) => acc + s.nb_en_arret, 0)} arrêts</Badge>
+                    {tourneesParc?.some(t => t.nb_en_arret > 0) && (
+                      <Badge variant="red" className="text-[10px]">{tourneesParc.reduce((acc, t) => acc + t.nb_en_arret, 0)} arrêts</Badge>
                     )}
-                    {secteursParc && secteursParc.length > 0 && (
-                      <Badge variant="blue">{secteursParc.length}</Badge>
+                    {tourneesParc && tourneesParc.length > 0 && (
+                      <Badge variant="blue">{tourneesParc.length}</Badge>
                     )}
                   </div>
                 </div>
                 <CardBody className="p-2 max-h-[200px] overflow-y-auto">
                   <div className="space-y-1">
-                    {secteursParc?.map(s => (
-                      <DraggableItem key={s.numero} id={`secteur-${s.numero}`} type="secteur" data={s}>
-                        <div className={`p-2 rounded-lg border ${s.nb_en_arret > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-blue-500/10 border-blue-500/30'} hover:border-blue-500/50 hover:scale-[1.02] transition-all`}>
+                    {tourneesParc?.map(t => (
+                      <DraggableItem key={`${t.secteur}-${t.ordre}`} id={`tournee-parc-${t.secteur}-${t.ordre}`} type="tournee-parc" data={t}>
+                        <div className={`p-2 rounded-lg border ${t.nb_en_arret > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-blue-500/10 border-blue-500/30'} hover:border-blue-500/50 hover:scale-[1.02] transition-all`}>
                           <div className="flex items-start gap-2">
-                            <div className={`p-1 rounded ${s.nb_en_arret > 0 ? 'bg-red-500/20' : 'bg-blue-500/20'}`}>
-                              <Route className={`w-3 h-3 ${s.nb_en_arret > 0 ? 'text-red-400' : 'text-blue-400'}`} />
+                            <div className={`p-1 rounded ${t.nb_en_arret > 0 ? 'bg-red-500/20' : 'bg-blue-500/20'}`}>
+                              <Route className={`w-3 h-3 ${t.nb_en_arret > 0 ? 'text-red-400' : 'text-blue-400'}`} />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="purple" className="text-[10px] px-1.5">S{s.numero}</Badge>
-                                <span className="text-xs font-semibold text-[var(--text-primary)] truncate">{s.nom}</span>
+                              <div className="flex items-center gap-1.5">
+                                <Badge variant="purple" className="text-[9px] px-1">S{t.secteur}</Badge>
+                                <span className="text-xs font-semibold text-[var(--text-primary)]">T{t.ordre}</span>
+                              </div>
+                              <div className="text-[10px] text-[var(--text-tertiary)] truncate mt-0.5">
+                                {t.villes.slice(0, 2).join(', ')}{t.villes.length > 2 ? '...' : ''}
                               </div>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="text-[10px] text-blue-400">
                                   <Building2 className="w-2.5 h-2.5 inline mr-0.5" />
-                                  {s.nb_ascenseurs} asc.
+                                  {t.nb_ascenseurs} asc.
                                 </span>
-                                {s.nb_en_arret > 0 && (
+                                {t.nb_en_arret > 0 && (
                                   <Badge variant="red" className="text-[8px] px-1">
-                                    {s.nb_en_arret} arrêt{s.nb_en_arret > 1 ? 's' : ''}
+                                    {t.nb_en_arret} arrêt{t.nb_en_arret > 1 ? 's' : ''}
                                   </Badge>
-                                )}
-                                {s.technicien_nom && (
-                                  <span className="text-[10px] text-[var(--text-muted)]">
-                                    <User className="w-2.5 h-2.5 inline mr-0.5" />
-                                    {s.technicien_nom}
-                                  </span>
                                 )}
                               </div>
                             </div>
@@ -1136,7 +1128,7 @@ export function PlanningPage() {
                         </div>
                       </DraggableItem>
                     ))}
-                    {!secteursParc?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">Aucune tournée</div>}
+                    {!tourneesParc?.length && <div className="text-center py-4 text-[var(--text-muted)] text-xs">Aucune tournée</div>}
                   </div>
                 </CardBody>
               </Card>
@@ -1145,7 +1137,7 @@ export function PlanningPage() {
         </div>
       </div>
 
-      <DragOverlay>{activeId && activeDragData && <div className="p-3 bg-[var(--bg-elevated)] rounded-lg border-2 border-blue-500 shadow-xl opacity-90 max-w-[200px]"><div className="text-sm font-semibold truncate">{(activeDragData as any).code || (activeDragData as any).titre || (activeDragData as any).nom || `S${(activeDragData as any).numero}`}</div></div>}</DragOverlay>
+      <DragOverlay>{activeId && activeDragData && <div className="p-3 bg-[var(--bg-elevated)] rounded-lg border-2 border-blue-500 shadow-xl opacity-90 max-w-[200px]"><div className="text-sm font-semibold truncate">{(activeDragData as any).code || (activeDragData as any).titre || ((activeDragData as any).secteur && (activeDragData as any).ordre ? `S${(activeDragData as any).secteur} T${(activeDragData as any).ordre}` : (activeDragData as any).nom)}</div></div>}</DragOverlay>
 
       {showCreateEvent && <CreateEventModal onClose={() => { setShowCreateEvent(false); setCreateEventDate(undefined); setCreateEventTech(undefined); }} defaultDate={createEventDate} defaultTech={createEventTech} techniciens={techs} />}
       {showConges && <CongesModal onClose={() => setShowConges(false)} techniciens={techs} />}
