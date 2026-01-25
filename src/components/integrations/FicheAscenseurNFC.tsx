@@ -150,18 +150,36 @@ async function getStockVehiculeTechnicien(): Promise<{
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { vehiculeId: null, articles: [], isAdmin: false, vehicules: [] };
 
-    // Vérifier si admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
+    // Vérifier si admin via la table techniciens avec jointure roles
+    const { data: technicien } = await supabase
+      .from('techniciens')
+      .select('id, role:roles(code)')
       .eq('id', user.id)
       .maybeSingle();
 
-    const isAdmin = profile?.role === 'admin' || profile?.role === 'superadmin';
+    let isAdmin = false;
+    if (technicien?.role) {
+      const roleCode = (technicien.role as any)?.code;
+      isAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
+    } else {
+      // Fallback: chercher par email
+      const { data: techByEmail } = await supabase
+        .from('techniciens')
+        .select('id, role:roles(code)')
+        .eq('email', user.email)
+        .maybeSingle();
+      
+      if (techByEmail?.role) {
+        const roleCode = (techByEmail.role as any)?.code;
+        isAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
+      }
+    }
+
+    console.log('FicheNFC - User admin check:', { userId: user.id, email: user.email, isAdmin, technicien });
 
     if (isAdmin) {
-      // Charger tous les véhicules actifs avec technicien_id
-      const { data: vehiculesData } = await supabase
+      // Charger tous les véhicules avec technicien_id (sans filtre actif)
+      const { data: vehiculesData, error } = await supabase
         .from('vehicules')
         .select(`
           id, 
@@ -170,38 +188,39 @@ async function getStockVehiculeTechnicien(): Promise<{
           modele,
           technicien_id
         `)
-        .eq('actif', true)
         .order('immatriculation');
+      
+      console.log('FicheNFC - Véhicules chargés:', vehiculesData, error);
 
-      // Récupérer les profils des techniciens
+      // Récupérer les noms des techniciens
       const technicienIds = (vehiculesData || [])
         .map((v: any) => v.technicien_id)
         .filter(Boolean);
 
-      let profilesMap: Record<string, { prenom: string; nom: string }> = {};
+      let techniciensMap: Record<string, { prenom: string; nom: string }> = {};
       
       if (technicienIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
+        const { data: techniciens } = await supabase
+          .from('techniciens')
           .select('id, prenom, nom')
           .in('id', technicienIds);
 
-        profilesMap = (profiles || []).reduce((acc: any, p: any) => {
-          acc[p.id] = { prenom: p.prenom || '', nom: p.nom || '' };
+        techniciensMap = (techniciens || []).reduce((acc: any, t: any) => {
+          acc[t.id] = { prenom: t.prenom || '', nom: t.nom || '' };
           return acc;
         }, {});
       }
 
       // Construire la liste des véhicules avec nom technicien
       const vehiculesList: VehiculeOption[] = (vehiculesData || []).map((v: any) => {
-        const techProfile = v.technicien_id ? profilesMap[v.technicien_id] : null;
+        const tech = v.technicien_id ? techniciensMap[v.technicien_id] : null;
         return {
           id: v.id,
           immatriculation: v.immatriculation,
           marque: v.marque,
           modele: v.modele,
           technicien_id: v.technicien_id,
-          technicien_nom: techProfile ? `${techProfile.prenom} ${techProfile.nom}`.trim() : undefined,
+          technicien_nom: tech ? `${tech.prenom} ${tech.nom}`.trim() : undefined,
         };
       });
 

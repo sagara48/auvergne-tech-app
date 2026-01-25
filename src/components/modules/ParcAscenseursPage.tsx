@@ -1344,19 +1344,38 @@ function SignalerPiecesModal({
           return;
         }
 
-        // Vérifier si admin
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
+        // Vérifier si admin via la table techniciens avec jointure roles
+        const { data: technicien } = await supabase
+          .from('techniciens')
+          .select('id, role:roles(code)')
           .eq('id', user.id)
           .maybeSingle();
 
-        const userIsAdmin = profile?.role === 'admin' || profile?.role === 'superadmin';
+        // Vérifier aussi via l'email si pas trouvé par ID
+        let userIsAdmin = false;
+        if (technicien?.role) {
+          const roleCode = (technicien.role as any)?.code;
+          userIsAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
+        } else {
+          // Fallback: chercher par email
+          const { data: techByEmail } = await supabase
+            .from('techniciens')
+            .select('id, role:roles(code)')
+            .eq('email', user.email)
+            .maybeSingle();
+          
+          if (techByEmail?.role) {
+            const roleCode = (techByEmail.role as any)?.code;
+            userIsAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
+          }
+        }
+        
         setIsAdmin(userIsAdmin);
+        console.log('User admin check:', { userId: user.id, email: user.email, isAdmin: userIsAdmin, technicien });
 
         if (userIsAdmin) {
           // Charger tous les véhicules actifs avec leur technicien
-          const { data: vehiculesData } = await supabase
+          const { data: vehiculesData, error: vehiculesError } = await supabase
             .from('vehicules')
             .select(`
               id, 
@@ -1365,24 +1384,25 @@ function SignalerPiecesModal({
               modele, 
               technicien_id
             `)
-            .eq('actif', true)
             .order('immatriculation');
+          
+          console.log('Véhicules chargés:', vehiculesData, vehiculesError);
 
-          // Récupérer les profils des techniciens
+          // Récupérer les noms des techniciens depuis la table techniciens
           const technicienIds = (vehiculesData || [])
             .map((v: any) => v.technicien_id)
             .filter(Boolean);
 
-          let profilesMap: Record<string, { prenom: string; nom: string }> = {};
+          let techniciensMap: Record<string, { prenom: string; nom: string }> = {};
           
           if (technicienIds.length > 0) {
-            const { data: profiles } = await supabase
-              .from('profiles')
+            const { data: techniciens } = await supabase
+              .from('techniciens')
               .select('id, prenom, nom')
               .in('id', technicienIds);
 
-            profilesMap = (profiles || []).reduce((acc: any, p: any) => {
-              acc[p.id] = { prenom: p.prenom || '', nom: p.nom || '' };
+            techniciensMap = (techniciens || []).reduce((acc: any, t: any) => {
+              acc[t.id] = { prenom: t.prenom || '', nom: t.nom || '' };
               return acc;
             }, {});
           }
@@ -1391,11 +1411,11 @@ function SignalerPiecesModal({
           const techniciensList: TechnicienAvecVehicule[] = (vehiculesData || [])
             .filter((v: any) => v.technicien_id) // Véhicules avec technicien
             .map((v: any) => {
-              const techProfile = profilesMap[v.technicien_id];
+              const tech = techniciensMap[v.technicien_id];
               return {
                 id: v.technicien_id,
-                prenom: techProfile?.prenom || 'Technicien',
-                nom: techProfile?.nom || v.technicien_id.slice(0, 8),
+                prenom: tech?.prenom || 'Technicien',
+                nom: tech?.nom || v.technicien_id.slice(0, 8),
                 vehicule_id: v.id,
                 vehicule_immatriculation: v.immatriculation,
                 vehicule_marque: v.marque,
