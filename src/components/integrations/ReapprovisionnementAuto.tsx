@@ -35,7 +35,7 @@ interface ReapprovisionnementAutoProps {
 async function getArticlesSousSeuil(vehiculeId: string): Promise<ArticleSousSeuil[]> {
   // Récupérer le stock du véhicule
   const { data: stockVehicule, error: svError } = await supabase
-    .from('stock_vehicules')
+    .from('stock_vehicule')
     .select(`
       id,
       article_id,

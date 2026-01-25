@@ -1478,7 +1478,7 @@ function SignalerPiecesModal({
     console.log('loadStockVehicule appelé avec:', vehId);
     try {
       const { data: stock, error } = await supabase
-        .from('stock_vehicules')
+        .from('stock_vehicule')
         .select(`
           id,
           article_id,
@@ -1488,7 +1488,59 @@ function SignalerPiecesModal({
         .eq('vehicule_id', vehId)
         .gt('quantite', 0);
 
-      console.log('Stock récupéré:', stock?.length, 'articles, error:', error);
+      if (error) {
+        console.error('ERREUR stock_vehicule:', error.message, error.code, error.details, error.hint);
+        
+        // Essayer une requête plus simple si la jointure pose problème
+        console.log('Tentative requête simplifiée...');
+        const { data: stockSimple, error: errorSimple } = await supabase
+          .from('stock_vehicule')
+          .select('id, article_id, quantite')
+          .eq('vehicule_id', vehId)
+          .gt('quantite', 0);
+        
+        if (errorSimple) {
+          console.error('ERREUR requête simplifiée:', errorSimple.message);
+          setStockVehicule([]);
+          return;
+        }
+        
+        console.log('Stock simplifié récupéré:', stockSimple?.length, 'articles');
+        
+        // Récupérer les articles séparément si on a des résultats
+        if (stockSimple && stockSimple.length > 0) {
+          const articleIds = stockSimple.map((s: any) => s.article_id);
+          const { data: articles } = await supabase
+            .from('articles')
+            .select('id, designation, reference')
+            .in('id', articleIds);
+          
+          const articlesMap: Record<string, any> = {};
+          (articles || []).forEach((a: any) => {
+            articlesMap[a.id] = a;
+          });
+          
+          const formattedArticles: ArticleStockVehicule[] = stockSimple.map((s: any) => ({
+            id: s.id,
+            article_id: s.article_id,
+            designation: articlesMap[s.article_id]?.designation || 'Article inconnu',
+            reference: articlesMap[s.article_id]?.reference,
+            quantite: s.quantite,
+            categorie: undefined,
+          }));
+          
+          console.log('Articles formatés (méthode alternative):', formattedArticles.length);
+          setStockVehicule(formattedArticles);
+          setVehiculeId(vehId);
+          setPiecesRemplacees([]);
+          return;
+        }
+        
+        setStockVehicule([]);
+        return;
+      }
+
+      console.log('Stock récupéré:', stock?.length, 'articles');
 
       const articles: ArticleStockVehicule[] = (stock || []).map((s: any) => ({
         id: s.id,
@@ -1502,7 +1554,6 @@ function SignalerPiecesModal({
       console.log('Articles formatés:', articles.length);
       setStockVehicule(articles);
       setVehiculeId(vehId);
-      // Reset les pièces sélectionnées quand on change de véhicule
       setPiecesRemplacees([]);
     } catch (error) {
       console.error('Erreur chargement stock véhicule:', error);
@@ -1594,7 +1645,7 @@ function SignalerPiecesModal({
       for (const piece of piecesRemplacees) {
         // Décrémenter le stock véhicule
         const { data: stockActuel } = await supabase
-          .from('stock_vehicules')
+          .from('stock_vehicule')
           .select('quantite')
           .eq('vehicule_id', vehiculeId)
           .eq('article_id', piece.article_id)
@@ -1603,7 +1654,7 @@ function SignalerPiecesModal({
         if (stockActuel) {
           const nouvelleQuantite = Math.max(0, stockActuel.quantite - piece.quantite);
           await supabase
-            .from('stock_vehicules')
+            .from('stock_vehicule')
             .update({ quantite: nouvelleQuantite, updated_at: now })
             .eq('vehicule_id', vehiculeId)
             .eq('article_id', piece.article_id);
