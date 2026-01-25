@@ -451,7 +451,8 @@ async function enregistrerPiecesRemplacees(
   // 2. Créer un enregistrement d'intervention rapide
   const piecesListe = pieces.map(p => `${p.quantite}x ${p.designation}`).join(', ');
   
-  await supabase.from('interventions_rapides').insert({
+  // Table peut ne pas exister, on ignore l'erreur
+  const { error: interventionError } = await supabase.from('interventions_rapides').insert({
     code_appareil: ascenseur.code_appareil,
     id_wsoucont: ascenseur.id_wsoucont,
     adresse: ascenseur.adresse,
@@ -463,9 +464,11 @@ async function enregistrerPiecesRemplacees(
     pieces_utilisees: piecesListe,
     pieces_detail: pieces,
     technicien_id: technicienId,
-  }).catch(() => {
-    // Table peut ne pas exister, on continue
   });
+  
+  if (interventionError) {
+    console.log('Note: Table interventions_rapides peut ne pas exister:', interventionError.message);
+  }
 
   // 3. Mettre à jour le dernier passage
   await supabase
