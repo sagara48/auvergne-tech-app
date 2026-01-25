@@ -24,7 +24,7 @@ export type NotificationType =
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 export interface CreateNotificationParams {
-  userId?: string; // Si non fourni, utilise l'utilisateur connecté
+  technicienId?: string; // ID du technicien destinataire
   type: NotificationType;
   priority?: NotificationPriority;
   titre: string;
@@ -65,22 +65,32 @@ class NotificationService {
   // Créer une notification
   async create(params: CreateNotificationParams): Promise<string | null> {
     try {
-      let userId = params.userId;
+      let technicienId = params.technicienId;
       
-      if (!userId) {
+      if (!technicienId) {
+        // Récupérer le technicien connecté
         const { data: { user } } = await supabase.auth.getUser();
-        userId = user?.id;
+        if (user?.email) {
+          const { data: tech } = await supabase
+            .from('techniciens')
+            .select('id')
+            .eq('email', user.email)
+            .maybeSingle();
+          technicienId = tech?.id || user.id;
+        } else if (user?.id) {
+          technicienId = user.id;
+        }
       }
 
-      if (!userId) {
-        console.error('NotificationService: Aucun utilisateur pour la notification');
+      if (!technicienId) {
+        console.error('NotificationService: Aucun destinataire pour la notification');
         return null;
       }
 
       const { data, error } = await supabase
         .from('notifications')
         .insert({
-          user_id: userId,
+          technicien_id: technicienId,
           type: params.type,
           priority: params.priority || 'normal',
           titre: params.titre,
@@ -105,10 +115,10 @@ class NotificationService {
     }
   }
 
-  // Créer une notification pour plusieurs utilisateurs
-  async createForUsers(userIds: string[], params: Omit<CreateNotificationParams, 'userId'>): Promise<void> {
-    const notifications = userIds.map(userId => ({
-      user_id: userId,
+  // Créer une notification pour plusieurs techniciens
+  async createForTechniciens(technicienIds: string[], params: Omit<CreateNotificationParams, 'technicienId'>): Promise<void> {
+    const notifications = technicienIds.map(technicienId => ({
+      technicien_id: technicienId,
       type: params.type,
       priority: params.priority || 'normal',
       titre: params.titre,
@@ -119,11 +129,14 @@ class NotificationService {
       metadata: params.metadata,
     }));
 
-    await supabase.from('notifications').insert(notifications);
+    const { error } = await supabase.from('notifications').insert(notifications);
+    if (error) {
+      console.error('NotificationService: Erreur création multiple', error);
+    }
   }
 
   // Créer une notification pour tous les admins
-  async notifyAdmins(params: Omit<CreateNotificationParams, 'userId'>): Promise<void> {
+  async notifyAdmins(params: Omit<CreateNotificationParams, 'technicienId'>): Promise<void> {
     // Récupérer les admins
     const { data: admins } = await supabase
       .from('techniciens')
@@ -135,7 +148,7 @@ class NotificationService {
       .map((a: any) => a.id);
 
     if (adminIds.length > 0) {
-      await this.createForUsers(adminIds, params);
+      await this.createForTechniciens(adminIds, params);
     }
   }
 
@@ -146,7 +159,7 @@ class NotificationService {
   // Stock bas sur véhicule
   async notifyStockBas(vehiculeImmat: string, articlesCount: number, technicienId?: string): Promise<void> {
     const params: CreateNotificationParams = {
-      userId: technicienId,
+      technicienId,
       type: 'stock',
       priority: articlesCount > 5 ? 'high' : 'normal',
       titre: `Stock bas - ${vehiculeImmat}`,
@@ -164,7 +177,7 @@ class NotificationService {
   // Nouvelle panne assignée
   async notifyNouvellePanne(codeAppareil: string, technicienId: string, panneId: string): Promise<void> {
     await this.create({
-      userId: technicienId,
+      technicienId,
       type: 'panne',
       priority: 'high',
       titre: `Nouvelle panne - ${codeAppareil}`,
@@ -177,7 +190,7 @@ class NotificationService {
   // Travaux planifié
   async notifyTravauxPlanifie(travauxCode: string, date: string, technicienId: string): Promise<void> {
     await this.create({
-      userId: technicienId,
+      technicienId,
       type: 'travaux',
       priority: 'normal',
       titre: `Travaux planifié - ${travauxCode}`,
@@ -189,7 +202,7 @@ class NotificationService {
   // Visite planifiée demain
   async notifyVisiteDemain(technicienId: string, visitesCount: number): Promise<void> {
     await this.create({
-      userId: technicienId,
+      technicienId,
       type: 'planning',
       priority: 'normal',
       titre: 'Visites demain',
@@ -213,7 +226,7 @@ class NotificationService {
     };
 
     await this.create({
-      userId: technicienId,
+      technicienId,
       type: 'vehicule',
       priority: joursRestants <= 7 ? 'urgent' : joursRestants <= 15 ? 'high' : 'normal',
       titre: `${labels[typeAlerte]} - ${vehiculeImmat}`,
@@ -251,7 +264,7 @@ class NotificationService {
   // Document à signer
   async notifyDocumentASigner(documentNom: string, technicienId: string): Promise<void> {
     await this.create({
-      userId: technicienId,
+      technicienId,
       type: 'system',
       priority: 'normal',
       titre: 'Document à signer',
@@ -263,7 +276,7 @@ class NotificationService {
 
   // Nouvelle note partagée
   async notifyNouvelleNote(noteId: string, titre: string, destinataireIds: string[]): Promise<void> {
-    await this.createForUsers(destinataireIds, {
+    await this.createForTechniciens(destinataireIds, {
       type: 'note',
       priority: 'low',
       titre: 'Nouvelle note partagée',
@@ -276,7 +289,7 @@ class NotificationService {
   // Message reçu
   async notifyNouveauMessage(expediteurNom: string, destinataireId: string, conversationId: string): Promise<void> {
     await this.create({
-      userId: destinataireId,
+      technicienId: destinataireId,
       type: 'message',
       priority: 'normal',
       titre: `Message de ${expediteurNom}`,

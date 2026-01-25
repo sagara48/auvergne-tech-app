@@ -316,7 +316,7 @@ async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]>
       if (stockSimple && stockSimple.length > 0) {
         const articleIds = stockSimple.map((s: any) => s.article_id);
         const { data: articles } = await supabase
-          .from('articles')
+          .from('stock_articles')
           .select('id, designation, reference')
           .in('id', articleIds);
         
