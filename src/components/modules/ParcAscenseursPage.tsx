@@ -7,8 +7,8 @@ import {
   CheckCircle, XCircle, Settings, Eye, FileText, BarChart3, Play,
   Pause, RotateCcw, Database, Cloud, CloudOff, Loader2, History,
   Server, Wifi, WifiOff, Download, Upload, X, Route, FileDown,
-  Navigation, Compass, Globe, MessageSquare, Send, Plus,
-  FolderOpen, File, Image, FileSpreadsheet, Trash2
+  Navigation, Compass, Globe, MessageSquare, Send, Plus, Minus,
+  FolderOpen, File, Image, FileSpreadsheet, Trash2, Package
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
@@ -1287,6 +1287,391 @@ function AscenseurRow({ ascenseur, onClick }: { ascenseur: any; onClick: () => v
   );
 }
 
+// Modal Signaler Pièces Remplacées
+interface ArticleStockVehicule {
+  id: string;
+  article_id: string;
+  designation: string;
+  reference?: string;
+  quantite: number;
+  categorie?: string;
+}
+
+interface PieceRemplacee {
+  article_id: string;
+  designation: string;
+  reference?: string;
+  quantite: number;
+  disponible: number;
+}
+
+function SignalerPiecesModal({ 
+  ascenseur, 
+  onClose 
+}: { 
+  ascenseur: Ascenseur; 
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [piecesRemplacees, setPiecesRemplacees] = useState<PieceRemplacee[]>([]);
+  const [searchPiece, setSearchPiece] = useState('');
+  const [notePieces, setNotePieces] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [vehiculeId, setVehiculeId] = useState<string | null>(null);
+  const [stockVehicule, setStockVehicule] = useState<ArticleStockVehicule[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Charger le stock véhicule du technicien connecté
+  useEffect(() => {
+    async function loadStockVehicule() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setIsLoading(false);
+          return;
+        }
+
+        // Trouver le véhicule assigné au technicien
+        const { data: vehicule } = await supabase
+          .from('vehicules')
+          .select('id')
+          .eq('technicien_id', user.id)
+          .maybeSingle();
+
+        if (!vehicule) {
+          setIsLoading(false);
+          return;
+        }
+
+        setVehiculeId(vehicule.id);
+
+        // Récupérer le stock du véhicule
+        const { data: stock } = await supabase
+          .from('stock_vehicules')
+          .select(`
+            id,
+            article_id,
+            quantite,
+            article:article_id(id, designation, reference, categorie:categorie_id(nom))
+          `)
+          .eq('vehicule_id', vehicule.id)
+          .gt('quantite', 0)
+          .order('article(designation)');
+
+        const articles: ArticleStockVehicule[] = (stock || []).map((s: any) => ({
+          id: s.id,
+          article_id: s.article_id,
+          designation: s.article?.designation || 'Article inconnu',
+          reference: s.article?.reference,
+          quantite: s.quantite,
+          categorie: s.article?.categorie?.nom,
+        }));
+
+        setStockVehicule(articles);
+      } catch (error) {
+        console.error('Erreur chargement stock véhicule:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadStockVehicule();
+  }, []);
+
+  // Filtrer les articles par recherche
+  const articlesFiltres = stockVehicule.filter(a => 
+    !searchPiece || 
+    a.designation.toLowerCase().includes(searchPiece.toLowerCase()) ||
+    a.reference?.toLowerCase().includes(searchPiece.toLowerCase())
+  );
+
+  // Ajouter une pièce à la liste
+  const ajouterPiece = (article: ArticleStockVehicule) => {
+    const exists = piecesRemplacees.find(p => p.article_id === article.article_id);
+    if (exists) {
+      setPiecesRemplacees(prev => prev.map(p => 
+        p.article_id === article.article_id 
+          ? { ...p, quantite: Math.min(p.quantite + 1, p.disponible) }
+          : p
+      ));
+    } else {
+      setPiecesRemplacees(prev => [...prev, {
+        article_id: article.article_id,
+        designation: article.designation,
+        reference: article.reference,
+        quantite: 1,
+        disponible: article.quantite,
+      }]);
+    }
+  };
+
+  // Modifier la quantité
+  const modifierQuantite = (articleId: string, delta: number) => {
+    setPiecesRemplacees(prev => prev.map(p => {
+      if (p.article_id === articleId) {
+        const newQty = Math.max(1, Math.min(p.quantite + delta, p.disponible));
+        return { ...p, quantite: newQty };
+      }
+      return p;
+    }));
+  };
+
+  // Retirer une pièce
+  const retirerPiece = (articleId: string) => {
+    setPiecesRemplacees(prev => prev.filter(p => p.article_id !== articleId));
+  };
+
+  // Enregistrer les pièces
+  const enregistrerPieces = async () => {
+    if (!vehiculeId || piecesRemplacees.length === 0) return;
+
+    setIsSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const now = new Date().toISOString();
+
+      for (const piece of piecesRemplacees) {
+        // Décrémenter le stock véhicule
+        const { data: stockActuel } = await supabase
+          .from('stock_vehicules')
+          .select('quantite')
+          .eq('vehicule_id', vehiculeId)
+          .eq('article_id', piece.article_id)
+          .single();
+
+        if (stockActuel) {
+          const nouvelleQuantite = Math.max(0, stockActuel.quantite - piece.quantite);
+          await supabase
+            .from('stock_vehicules')
+            .update({ quantite: nouvelleQuantite, updated_at: now })
+            .eq('vehicule_id', vehiculeId)
+            .eq('article_id', piece.article_id);
+        }
+
+        // Créer le mouvement de stock
+        await supabase.from('stock_mouvements').insert({
+          article_id: piece.article_id,
+          type_mouvement: 'sortie',
+          quantite: piece.quantite,
+          motif: `Remplacement sur ${ascenseur.code_appareil}`,
+          reference_doc: ascenseur.code_appareil,
+          vehicule_id: vehiculeId,
+          technicien_id: user?.id,
+          created_at: now,
+        });
+      }
+
+      // Mettre à jour le dernier passage
+      await supabase
+        .from('parc_ascenseurs')
+        .update({ dernier_passage: now })
+        .eq('id_wsoucont', ascenseur.id_wsoucont);
+
+      // Créer une intervention rapide (si table existe)
+      const piecesListe = piecesRemplacees.map(p => `${p.quantite}x ${p.designation}`).join(', ');
+      await supabase.from('interventions_rapides').insert({
+        code_appareil: ascenseur.code_appareil,
+        id_wsoucont: ascenseur.id_wsoucont,
+        adresse: ascenseur.adresse,
+        ville: ascenseur.ville,
+        secteur: ascenseur.secteur,
+        date_intervention: now,
+        type_intervention: 'remplacement_pieces',
+        description: notePieces || 'Remplacement de pièces',
+        pieces_utilisees: piecesListe,
+        pieces_detail: piecesRemplacees,
+        technicien_id: user?.id,
+      }).catch(() => {});
+
+      toast.success(`${piecesRemplacees.length} pièce(s) enregistrée(s)`);
+      queryClient.invalidateQueries({ queryKey: ['stock-vehicules'] });
+      onClose();
+    } catch (error) {
+      console.error('Erreur enregistrement pièces:', error);
+      toast.error('Erreur lors de l\'enregistrement');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+      <div className="bg-[var(--bg-primary)] rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="p-4 border-b border-[var(--border-primary)]">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold flex items-center gap-2">
+              <Package className="w-5 h-5 text-purple-400" />
+              Pièces remplacées
+            </h3>
+            <button onClick={onClose} className="p-1 hover:bg-[var(--bg-tertiary)] rounded">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            {ascenseur.code_appareil} - {ascenseur.adresse}, {ascenseur.ville}
+          </p>
+        </div>
+
+        {/* Contenu */}
+        <div className="flex-1 overflow-auto p-4 space-y-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+            </div>
+          ) : !vehiculeId ? (
+            <div className="text-center py-8">
+              <AlertTriangle className="w-10 h-10 text-orange-400 mx-auto mb-2" />
+              <p className="text-sm text-[var(--text-muted)]">Aucun véhicule assigné</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">Contactez votre responsable</p>
+            </div>
+          ) : (
+            <>
+              {/* Pièces sélectionnées */}
+              {piecesRemplacees.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-[var(--text-muted)]">
+                    Pièces à enregistrer ({piecesRemplacees.length})
+                  </h4>
+                  {piecesRemplacees.map(piece => (
+                    <div key={piece.article_id} className="flex items-center gap-2 p-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{piece.designation}</p>
+                        {piece.reference && (
+                          <p className="text-[10px] text-[var(--text-muted)]">{piece.reference}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => modifierQuantite(piece.article_id, -1)}
+                          className="w-6 h-6 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-elevated)] flex items-center justify-center"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="w-8 text-center text-sm font-bold">{piece.quantite}</span>
+                        <button
+                          onClick={() => modifierQuantite(piece.article_id, 1)}
+                          className="w-6 h-6 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-elevated)] flex items-center justify-center"
+                          disabled={piece.quantite >= piece.disponible}
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => retirerPiece(piece.article_id)}
+                          className="w-6 h-6 rounded bg-red-500/20 hover:bg-red-500/30 flex items-center justify-center ml-1"
+                        >
+                          <Trash2 className="w-3 h-3 text-red-400" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recherche */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <Input
+                  value={searchPiece}
+                  onChange={e => setSearchPiece(e.target.value)}
+                  placeholder="Rechercher une pièce..."
+                  className="pl-9"
+                />
+              </div>
+
+              {/* Liste du stock véhicule */}
+              {articlesFiltres.length === 0 ? (
+                <div className="text-center py-8">
+                  <Package className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-2 opacity-50" />
+                  <p className="text-sm text-[var(--text-muted)]">
+                    {searchPiece ? 'Aucun résultat' : 'Stock véhicule vide'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                  <h4 className="text-xs font-semibold text-[var(--text-muted)] sticky top-0 bg-[var(--bg-primary)] py-1">
+                    Stock véhicule ({articlesFiltres.length})
+                  </h4>
+                  {articlesFiltres.slice(0, 30).map(article => {
+                    const dejaAjoute = piecesRemplacees.find(p => p.article_id === article.article_id);
+                    return (
+                      <button
+                        key={article.id}
+                        onClick={() => ajouterPiece(article)}
+                        disabled={dejaAjoute && dejaAjoute.quantite >= article.quantite}
+                        className={`w-full text-left p-2 rounded-lg border transition-colors ${
+                          dejaAjoute 
+                            ? 'bg-purple-500/5 border-purple-500/30' 
+                            : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-purple-500/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm truncate">{article.designation}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {article.reference && (
+                                <span className="text-[10px] text-[var(--text-muted)]">{article.reference}</span>
+                              )}
+                              {article.categorie && (
+                                <Badge variant="gray" className="text-[8px]">{article.categorie}</Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={article.quantite > 2 ? 'green' : article.quantite > 0 ? 'orange' : 'red'} className="text-[10px]">
+                              {article.quantite} dispo
+                            </Badge>
+                            <Plus className={`w-4 h-4 ${dejaAjoute ? 'text-purple-400' : 'text-[var(--text-muted)]'}`} />
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Note */}
+              {piecesRemplacees.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block">
+                    Note (optionnel)
+                  </label>
+                  <Textarea
+                    value={notePieces}
+                    onChange={e => setNotePieces(e.target.value)}
+                    placeholder="Ex: Remplacement suite usure normale..."
+                    rows={2}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-[var(--border-primary)] flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={onClose}>
+            Annuler
+          </Button>
+          <Button 
+            variant="primary" 
+            className="flex-1"
+            onClick={enregistrerPieces}
+            disabled={piecesRemplacees.length === 0 || isSubmitting}
+          >
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <CheckCircle className="w-4 h-4 mr-2" />
+            )}
+            Enregistrer ({piecesRemplacees.length})
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Modal Détail Ascenseur
 function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse' | 'notes' | 'documents'>('info');
@@ -1294,6 +1679,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
   const [newNoteContent, setNewNoteContent] = useState('');
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [showPiecesModal, setShowPiecesModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   
@@ -1814,6 +2200,13 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowPiecesModal(true)}
+                  className="p-2 hover:bg-purple-500/20 rounded-lg"
+                  title="Signaler pièces remplacées"
+                >
+                  <Package className="w-5 h-5 text-purple-500" />
+                </button>
                 <button 
                   onClick={() => {
                     try {
@@ -2682,6 +3075,14 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
           </div>
         </CardBody>
       </Card>
+
+      {/* Modal Signaler Pièces */}
+      {showPiecesModal && (
+        <SignalerPiecesModal
+          ascenseur={ascenseur}
+          onClose={() => setShowPiecesModal(false)}
+        />
+      )}
     </div>
   );
 }
