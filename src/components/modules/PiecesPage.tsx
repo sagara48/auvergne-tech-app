@@ -23,7 +23,7 @@ import {
   supprimerPiecePersonnelle,
   getUrlRechercheFournisseur,
   uploadPhotoPiece,
-  fileToBase64,
+  compressImageForAnalysis,
   MARQUES_ASCENSEURS,
   TYPES_PIECES,
   type AnalysePhotoResult,
@@ -334,8 +334,8 @@ function AnalysePhotoModal({
 
     setIsAnalysing(true);
     try {
-      // Convertir en base64
-      const base64 = await fileToBase64(photo);
+      // Compresser l'image avant envoi (max 1024px, 85% qualité)
+      const base64 = await compressImageForAnalysis(photo);
       
       // Analyser avec Claude Vision
       const result = await analyserPhotoPiece(base64, {

@@ -428,6 +428,55 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
+/**
+ * Compresse et redimensionne une image avant envoi à Claude
+ * Max 1024px, qualité 85%, format JPEG
+ */
+export function compressImageForAnalysis(file: File, maxSize = 1024, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    img.onload = () => {
+      // Calculer les nouvelles dimensions
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height && width > maxSize) {
+        height = (height * maxSize) / width;
+        width = maxSize;
+      } else if (height > maxSize) {
+        width = (width * maxSize) / height;
+        height = maxSize;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      // Dessiner l'image redimensionnée
+      ctx?.drawImage(img, 0, 0, width, height);
+
+      // Convertir en JPEG compressé
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      
+      console.log(`Image compressée: ${img.width}x${img.height} -> ${Math.round(width)}x${Math.round(height)}, ~${Math.round(dataUrl.length / 1024)}KB`);
+      
+      resolve(dataUrl);
+    };
+
+    img.onerror = () => reject(new Error('Erreur chargement image'));
+
+    // Charger l'image depuis le fichier
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 // ============================================
 // MARQUES D'ASCENSEURS CONNUES
 // ============================================
