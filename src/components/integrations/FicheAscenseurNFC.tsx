@@ -4,13 +4,15 @@ import {
   X, Phone, MapPin, Building2, Calendar, Clock, AlertTriangle,
   FileText, Camera, CheckCircle, Wrench, History, Download,
   Navigation, ExternalLink, User, Shield, ChevronRight, Zap,
-  Package, Plus, Minus, Search, Barcode, Trash2, Settings, Loader2
+  Package, Plus, Minus, Search, Barcode, Trash2, Settings, Loader2,
+  StickyNote
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Textarea, Input, Select } from '@/components/ui';
 import { supabase } from '@/services/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import { ActionsRapidesNFC } from './ActionsRapidesNFC';
 
 interface FicheAscenseurNFCProps {
   codeAppareil: string;
@@ -477,6 +479,7 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
   const [showSignalerModal, setShowSignalerModal] = useState(false);
   const [showValiderModal, setShowValiderModal] = useState(false);
   const [showPiecesModal, setShowPiecesModal] = useState(false);
+  const [showActionsRapides, setShowActionsRapides] = useState(false);
   const [motifProbleme, setMotifProbleme] = useState('');
   const [noteVisite, setNoteVisite] = useState('');
   
@@ -901,6 +904,16 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
             </Button>
           </div>
 
+          {/* Bouton Actions rapides */}
+          <Button 
+            variant="secondary" 
+            className="w-full border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10"
+            onClick={() => setShowActionsRapides(true)}
+          >
+            <Zap className="w-4 h-4 mr-2" />
+            Actions rapides (notes, signalement...)
+          </Button>
+
           {/* Bouton Pièces remplacées */}
           <Button 
             variant="secondary" 
@@ -940,6 +953,32 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
             </Button>
           )}
         </div>
+
+        {/* Modal Actions Rapides */}
+        {showActionsRapides && ascenseur && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4 z-10">
+            <div className="bg-[var(--bg-primary)] rounded-xl p-4 w-full max-w-sm max-h-[80vh] overflow-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                  ⚡ Actions rapides
+                </h3>
+                <button 
+                  onClick={() => setShowActionsRapides(false)}
+                  className="p-1 hover:bg-[var(--bg-tertiary)] rounded"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <ActionsRapidesNFC 
+                ascenseur={{
+                  code_appareil: ascenseur.code_appareil,
+                  adresse: ascenseur.adresse,
+                }}
+                onActionComplete={() => setShowActionsRapides(false)}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Modal Signaler problème */}
         {showSignalerModal && (

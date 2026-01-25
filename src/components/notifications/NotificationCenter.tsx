@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Bell, Check, CheckCheck, X, Settings, Volume2,
   AlertTriangle, Hammer, MessageCircle, Package, Calendar, FileCheck,
-  StickyNote, Info, Clock, Archive
+  StickyNote, Info, Clock, Archive, Car, Send, Timer
 } from 'lucide-react';
 import { Button, Badge, Switch } from '@/components/ui';
 import { 
@@ -20,8 +20,10 @@ import toast from 'react-hot-toast';
 // ID utilisateur actuel (à remplacer par auth)
 const CURRENT_USER_ID = '11111111-1111-1111-1111-111111111111';
 
-// Configuration des types de notification
-const NOTIFICATION_TYPE_CONFIG: Record<NotificationType, { 
+// Configuration des types de notification (étendue)
+type ExtendedNotificationType = NotificationType | 'vehicule' | 'demande' | 'feuille_heures';
+
+const NOTIFICATION_TYPE_CONFIG: Record<ExtendedNotificationType, { 
   icon: any; 
   color: string; 
   label: string;
@@ -35,6 +37,9 @@ const NOTIFICATION_TYPE_CONFIG: Record<NotificationType, {
   planning: { icon: Calendar, color: '#3b82f6', label: 'Planning', defaultIcon: '📅' },
   note: { icon: StickyNote, color: '#eab308', label: 'Note', defaultIcon: '📝' },
   system: { icon: Info, color: '#6b7280', label: 'Système', defaultIcon: 'ℹ️' },
+  vehicule: { icon: Car, color: '#06b6d4', label: 'Véhicule', defaultIcon: '🚐' },
+  demande: { icon: Send, color: '#ec4899', label: 'Demande', defaultIcon: '📩' },
+  feuille_heures: { icon: Timer, color: '#10b981', label: 'Heures', defaultIcon: '⏱️' },
 };
 
 const PRIORITY_CONFIG = {
@@ -56,7 +61,7 @@ function NotificationItem({
   onArchive: () => void;
   onClick: () => void;
 }) {
-  const config = NOTIFICATION_TYPE_CONFIG[notification.type];
+  const config = NOTIFICATION_TYPE_CONFIG[notification.type as ExtendedNotificationType] || NOTIFICATION_TYPE_CONFIG.system;
   const priorityConfig = PRIORITY_CONFIG[notification.priority];
   const Icon = config.icon;
 
