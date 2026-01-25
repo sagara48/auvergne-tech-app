@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
 import { PiecesPicker } from '@/components/integrations/PiecesPicker';
-import {
 import { 
   getCommandes, createCommande, updateCommande, archiveCommande,
   addCommandeLigne, deleteCommandeLigne, updateCommandeLigne, getStockArticles, getAscenseurs,
