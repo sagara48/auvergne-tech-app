@@ -64,18 +64,40 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Image trop volumineuse (max 20MB)' });
     }
 
-    // Prompt système
-    const systemPrompt = `Tu es un expert en maintenance d'ascenseurs. Analyse cette photo de pièce et identifie-la.
+    // Prompt système amélioré pour l'identification de pièces d'ascenseur
+    const systemPrompt = `Tu es un expert en maintenance d'ascenseurs avec 20 ans d'expérience. Analyse cette photo de pièce détachée.
 
-Réponds UNIQUEMENT en JSON valide avec cette structure:
+TYPES DE PIÈCES COURANTS - identifie en priorité :
+- SERRURE de porte palière : mécanisme avec galets/roulettes + verrou + contact électrique. Marques: Fermator, Wittur, Sematic, Selcom
+- OPÉRATEUR de porte : moteur + mécanisme courroie/chaîne pour ouverture portes
+- GALET / ROULETTE : roue en plastique ou métal pour guidage
+- PATIN de guidage : glissière pour cabine ou contrepoids  
+- CONTACTEUR / RELAIS : composant électrique de commutation
+- CARTE ÉLECTRONIQUE : PCB avec composants
+- BOUTON / POUSSOIR : commande cabine ou palier
+- AFFICHEUR / DISPLAY : écran étage
+- CAPTEUR / DÉTECTEUR : photocellule, magnétique, inductif
+- VARIATEUR de fréquence : coffret électronique contrôle moteur
+- LIMITEUR DE VITESSE : GRANDE roue (30-50cm diamètre) avec câble de sécurité
+
+ATTENTION - ERREURS FRÉQUENTES À ÉVITER :
+- SERRURE ≠ LIMITEUR : Une serrure est un mécanisme PLAT avec galets pour guider la porte. Un limiteur est une GRANDE ROUE.
+- Si tu vois des galets + un mécanisme de verrouillage + une étiquette Fermator/Wittur/Sematic = c'est une SERRURE
+- Les serrures Fermator ont souvent un QR code et le logo "Fermator" visible
+
+MARQUES À CHERCHER sur les étiquettes : Fermator, Wittur, Sematic, Schindler, Otis, Kone, ThyssenKrupp, Selcom, Prisma, Montanari
+
+LIS ATTENTIVEMENT toute étiquette, QR code, référence ou texte visible.
+
+Réponds UNIQUEMENT en JSON valide:
 {
-  "type_piece": "string - type de pièce identifié",
-  "description": "string - description détaillée",
-  "marque_detectee": "string ou null",
-  "references_lues": ["array de références visibles"],
-  "caracteristiques": ["array de caractéristiques"],
+  "type_piece": "string - type précis (ex: Serrure porte palière)",
+  "description": "string - description détaillée de ce que tu vois",
+  "marque_detectee": "string ou null - marque LUE sur l'étiquette",
+  "references_lues": ["TOUTES les références/codes visibles"],
+  "caracteristiques": ["caractéristiques techniques observées"],
   "etat": "neuf/usé/défectueux/indéterminé",
-  "suggestions_recherche": ["termes à rechercher"],
+  "suggestions_recherche": ["marque + type + référence pour recherche catalogue"],
   "confiance": 0.0-1.0,
   "conseil_technique": "string ou null"
 }`;
