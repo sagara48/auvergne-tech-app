@@ -1691,7 +1691,7 @@ function SignalerPiecesModal({
         ? user?.id 
         : (selectedTechnicienId || user?.id);
         
-      await supabase.from('interventions_rapides').insert({
+      const { error: interventionError } = await supabase.from('interventions_rapides').insert({
         code_appareil: ascenseur.code_appareil,
         id_wsoucont: ascenseur.id_wsoucont,
         adresse: ascenseur.adresse,
@@ -1704,7 +1704,11 @@ function SignalerPiecesModal({
         pieces_detail: piecesRemplacees,
         technicien_id: effectiveTechnicienIdFinal,
         technicien_info: technicienInfo ? `${technicienInfo.prenom} ${technicienInfo.nom}` : null,
-      }).catch(() => {});
+      });
+      
+      if (interventionError) {
+        console.log('Note: Table interventions_rapides peut ne pas exister:', interventionError.message);
+      }
 
       toast.success(`${piecesRemplacees.length} pièce(s) enregistrée(s)`);
       queryClient.invalidateQueries({ queryKey: ['stock-vehicules'] });
