@@ -924,13 +924,3 @@ export function RecurrencePannesWidget({ onRemove }: { onRemove?: () => void }) 
     </Card>
   );
 }
-
-
-// =============================================
-// EXPORTS
-// =============================================
-
-export {
-  StockVehiculeTournee,
-  RecurrencePannes,
-};

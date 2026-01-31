@@ -78,6 +78,12 @@ import {
   PrevisionConsoWidget,
   FeedbackTerrainWidget
 } from '@/components/integrations/synergiesV5';
+import {
+  DicteeVocaleWidget,
+  ScanNFCWidget,
+  ModeHorsLigneWidget,
+  AbsencesWidget
+} from '@/components/integrations/synergiesV6';
 import { NotificationsWidget } from '@/components/notifications';
 import toast from 'react-hot-toast';
 
@@ -143,6 +149,11 @@ const WIDGET_COMPONENTS: Record<string, React.FC<{ onRemove?: () => void }>> = {
   'age-pieces': AgePiecesWidget,
   'prevision-conso': PrevisionConsoWidget,
   'feedback-terrain': FeedbackTerrainWidget,
+  // Synergies V6
+  'dictee-vocale': DicteeVocaleWidget,
+  'scan-nfc': ScanNFCWidget,
+  'mode-hors-ligne': ModeHorsLigneWidget,
+  'absences-reaffectation': AbsencesWidget,
 };
 
 // Modal pour ajouter des widgets

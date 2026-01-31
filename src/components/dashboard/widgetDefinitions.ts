@@ -520,6 +520,43 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     defaultSize: 'small',
     minW: 1, minH: 1, defaultW: 2, defaultH: 2,
   },
+  // === SYNERGIES V6 ===
+  {
+    id: 'dictee-vocale',
+    name: 'Dictée Vocale',
+    description: 'Rapport d\'intervention par la voix',
+    category: 'utilitaires',
+    icon: MessageCircle,
+    defaultSize: 'small',
+    minW: 1, minH: 1, defaultW: 2, defaultH: 1,
+  },
+  {
+    id: 'scan-nfc',
+    name: 'Scan NFC',
+    description: 'Identifier ascenseur via badge NFC',
+    category: 'utilitaires',
+    icon: Zap,
+    defaultSize: 'small',
+    minW: 1, minH: 1, defaultW: 2, defaultH: 2,
+  },
+  {
+    id: 'mode-hors-ligne',
+    name: 'Mode Hors-ligne',
+    description: 'Statut connexion et sync différée',
+    category: 'utilitaires',
+    icon: Shield,
+    defaultSize: 'small',
+    minW: 1, minH: 1, defaultW: 2, defaultH: 2,
+  },
+  {
+    id: 'absences-reaffectation',
+    name: 'Réaffectation',
+    description: 'Redistribuer travaux lors d\'absences',
+    category: 'planning',
+    icon: Users,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 3,
+  },
 ];
 
 // Layout par défaut pour les nouveaux utilisateurs

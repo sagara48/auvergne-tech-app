@@ -182,3 +182,32 @@ export {
   FeedbackTerrain,
   FeedbackTerrainWidget 
 } from './synergiesV5';
+
+// ============================================
+// SYNERGIES V6
+// ============================================
+
+// Dictée Vocale
+export { 
+  DicteeVocale,
+  DicteeVocaleWidget 
+} from './synergiesV6';
+
+// Scan NFC
+export { 
+  ScanNFC,
+  ScanNFCWidget 
+} from './synergiesV6';
+
+// Mode Hors-ligne
+export { 
+  ModeHorsLigne,
+  ModeHorsLigneWidget,
+  useOfflineMode 
+} from './synergiesV6';
+
+// Absences ↔ Réaffectation
+export { 
+  AbsencesReaffectation,
+  AbsencesWidget 
+} from './synergiesV6';
