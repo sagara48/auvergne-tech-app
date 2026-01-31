@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   AlertTriangle, Calendar, Check, ChevronRight, Clock, Package, 
   Hammer, FileCheck, Car, MessageCircle, Plus, Trash2, Cloud,
-  Sun, CloudRain, CloudSnow, Wind, Droplets, X, ExternalLink
+  Sun, CloudRain, CloudSnow, Wind, Droplets, X, ExternalLink, Truck
 } from 'lucide-react';
 import { Card, CardBody, Badge, ProgressBar, Button } from '@/components/ui';
 import { supabase } from '@/services/supabase';
@@ -1673,6 +1673,520 @@ export function PiecesRemplaceesWidget({ onRemove }: { onRemove?: () => void }) 
               ))
             )}
           </div>
+        </div>
+      )}
+    </WidgetWrapper>
+  );
+}
+
+// ============================================
+// WIDGET TRAVAUX BLOQUÉS PAR STOCK
+// ============================================
+
+export function TravauxBloquesStockWidget({ onRemove }: { onRemove?: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['widget-travaux-bloques'],
+    queryFn: async () => {
+      // Récupérer les travaux non terminés avec des pièces
+      const { data: travaux } = await supabase
+        .from('travaux')
+        .select('id, code, titre, code_appareil, pieces, statut')
+        .in('statut', ['planifie', 'en_cours'])
+        .not('pieces', 'is', null);
+
+      // Récupérer le stock actuel
+      const { data: articles } = await supabase
+        .from('stock_articles')
+        .select('id, designation, reference, quantite_stock');
+
+      const stockMap = new Map((articles || []).map((a: any) => [a.id, a]));
+
+      // Identifier les pièces manquantes
+      const manquantes: any[] = [];
+
+      (travaux || []).forEach((t: any) => {
+        if (t.pieces && Array.isArray(t.pieces)) {
+          t.pieces.forEach((p: any) => {
+            if (p.consommee) return;
+            if (p.source !== 'stock') return;
+
+            const article = p.article_id ? stockMap.get(p.article_id) : null;
+            const stockDispo = article?.quantite_stock || 0;
+
+            if (stockDispo < p.quantite) {
+              manquantes.push({
+                travaux_code: t.code,
+                travaux_titre: t.titre,
+                piece_designation: p.designation || article?.designation || 'Pièce',
+                manquant: p.quantite - stockDispo,
+                stock_disponible: stockDispo,
+              });
+            }
+          });
+        }
+      });
+
+      return {
+        manquantes: manquantes.slice(0, 8),
+        total: manquantes.length,
+      };
+    },
+    refetchInterval: 60000,
+  });
+
+  return (
+    <WidgetWrapper title="Travaux bloqués" icon={AlertTriangle} color="#ef4444" onRemove={onRemove}>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[var(--text-muted)]">Pièces manquantes</span>
+            <Badge variant={data?.total ? 'red' : 'green'}>{data?.total || 0}</Badge>
+          </div>
+
+          {!data?.manquantes.length ? (
+            <div className="text-center py-4 text-[var(--text-muted)]">
+              <Check className="w-8 h-8 mx-auto mb-2 text-green-400" />
+              <p className="text-sm">Aucun blocage</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[250px] overflow-auto">
+              {data.manquantes.map((item: any, idx: number) => (
+                <div key={idx} className="p-2 bg-red-500/10 rounded-lg">
+                  <p className="text-xs font-medium text-[var(--text-primary)] truncate">
+                    {item.piece_designation}
+                  </p>
+                  <div className="flex justify-between text-[10px] text-[var(--text-muted)]">
+                    <span>{item.travaux_code}</span>
+                    <span className="text-red-400 font-bold">-{item.manquant}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </WidgetWrapper>
+  );
+}
+
+// ============================================
+// WIDGET TRAVAUX PAR TOURNÉE
+// ============================================
+
+export function TravauxParTourneeWidget({ onRemove }: { onRemove?: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['widget-travaux-tournee'],
+    queryFn: async () => {
+      // Récupérer les travaux non terminés
+      const { data: travaux } = await supabase
+        .from('travaux')
+        .select('id, code, titre, code_appareil, statut')
+        .in('statut', ['planifie', 'en_cours'])
+        .not('code_appareil', 'is', null);
+
+      // Récupérer les ascenseurs avec tournées
+      const { data: ascenseurs } = await supabase
+        .from('parc_ascenseurs')
+        .select('code_appareil, secteur, ordre2')
+        .not('ordre2', 'is', null)
+        .gt('ordre2', 0);
+
+      const ascMap = new Map((ascenseurs || []).map((a: any) => [a.code_appareil, a]));
+
+      // Grouper par tournée
+      const tourneesMap = new Map<string, { secteur: number; ordre2: number; count: number }>();
+
+      (travaux || []).forEach((t: any) => {
+        const asc = ascMap.get(t.code_appareil);
+        if (!asc) return;
+
+        const key = `${asc.secteur}-${asc.ordre2}`;
+        if (!tourneesMap.has(key)) {
+          tourneesMap.set(key, { secteur: asc.secteur, ordre2: asc.ordre2, count: 0 });
+        }
+        tourneesMap.get(key)!.count++;
+      });
+
+      const tournees = Array.from(tourneesMap.values())
+        .filter(t => t.count > 0)
+        .sort((a, b) => b.count - a.count);
+
+      return {
+        tournees: tournees.slice(0, 6),
+        total: tournees.reduce((acc, t) => acc + t.count, 0),
+      };
+    },
+    refetchInterval: 60000,
+  });
+
+  return (
+    <WidgetWrapper title="Travaux / tournée" icon={Car} color="#22c55e" onRemove={onRemove}>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[var(--text-muted)]">Total travaux</span>
+            <Badge variant="purple">{data?.total || 0}</Badge>
+          </div>
+
+          {!data?.tournees.length ? (
+            <div className="text-center py-4 text-[var(--text-muted)]">
+              <Check className="w-8 h-8 mx-auto mb-2 text-green-400" />
+              <p className="text-sm">Aucun travaux en tournée</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {data.tournees.map((t: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between p-2 bg-[var(--bg-secondary)] rounded-lg">
+                  <span className="text-sm font-semibold text-lime-400">
+                    S{t.secteur} - T{t.ordre2}
+                  </span>
+                  <Badge variant="amber">{t.count}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </WidgetWrapper>
+  );
+}
+
+// ============================================
+// WIDGET ANALYSE PRÉDICTIVE
+// ============================================
+
+export function AnalysePredictiveWidget({ onRemove }: { onRemove?: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['widget-analyse-predictive'],
+    queryFn: async () => {
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+      // Récupérer les pannes des 6 derniers mois
+      const { data: pannes } = await supabase
+        .from('parc_pannes')
+        .select('code_appareil, date_appel')
+        .gte('date_appel', sixMonthsAgo.toISOString());
+
+      // Compter par appareil
+      const countMap = new Map<string, number>();
+      (pannes || []).forEach((p: any) => {
+        countMap.set(p.code_appareil, (countMap.get(p.code_appareil) || 0) + 1);
+      });
+
+      // Récupérer les infos des appareils à risque (>= 3 pannes)
+      const risques = Array.from(countMap.entries())
+        .filter(([_, count]) => count >= 3)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      const codes = risques.map(r => r[0]);
+      const { data: ascenseurs } = await supabase
+        .from('parc_ascenseurs')
+        .select('code_appareil, adresse, ville')
+        .in('code_appareil', codes);
+
+      const ascMap = new Map((ascenseurs || []).map((a: any) => [a.code_appareil, a]));
+
+      return {
+        appareils: risques.map(([code, count]) => ({
+          code_appareil: code,
+          adresse: ascMap.get(code)?.adresse || '',
+          ville: ascMap.get(code)?.ville || '',
+          nb_pannes: count,
+        })),
+        totalARisque: risques.length,
+      };
+    },
+    refetchInterval: 300000,
+  });
+
+  return (
+    <WidgetWrapper title="Appareils à risque" icon={AlertTriangle} color="#f97316" onRemove={onRemove}>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[var(--text-muted)]">≥3 pannes/6 mois</span>
+            <Badge variant={data?.totalARisque ? 'red' : 'green'}>{data?.totalARisque || 0}</Badge>
+          </div>
+
+          {!data?.appareils.length ? (
+            <div className="text-center py-4 text-[var(--text-muted)]">
+              <Check className="w-8 h-8 mx-auto mb-2 text-green-400" />
+              <p className="text-sm">Aucun appareil à risque</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {data.appareils.map((a: any, idx: number) => (
+                <div key={idx} className="p-2 bg-orange-500/10 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-mono font-bold text-[var(--text-primary)]">
+                      {a.code_appareil}
+                    </span>
+                    <Badge variant="red">{a.nb_pannes} pannes</Badge>
+                  </div>
+                  <p className="text-[10px] text-[var(--text-muted)] truncate">
+                    {a.adresse}, {a.ville}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </WidgetWrapper>
+  );
+}
+
+
+// ============================================
+// WIDGET TRAVAUX PAR SECTEUR
+// ============================================
+
+export function TravauxParSecteurWidget({ onRemove }: { onRemove?: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['widget-travaux-par-secteur'],
+    queryFn: async () => {
+      const { data: travaux } = await supabase
+        .from('travaux')
+        .select('code_appareil, priorite')
+        .in('statut', ['planifie', 'en_cours'])
+        .not('code_appareil', 'is', null);
+
+      const { data: ascenseurs } = await supabase
+        .from('parc_ascenseurs')
+        .select('code_appareil, secteur');
+
+      if (!travaux || !ascenseurs) return [];
+
+      const ascMap = new Map(ascenseurs.map((a: any) => [a.code_appareil, a.secteur]));
+      
+      // Compter par secteur
+      const parSecteur: Record<number, { total: number; urgents: number }> = {};
+      travaux.forEach((t: any) => {
+        const secteur = ascMap.get(t.code_appareil);
+        if (secteur) {
+          if (!parSecteur[secteur]) parSecteur[secteur] = { total: 0, urgents: 0 };
+          parSecteur[secteur].total++;
+          if (t.priorite === 'urgente' || t.priorite === 'haute') {
+            parSecteur[secteur].urgents++;
+          }
+        }
+      });
+
+      return Object.entries(parSecteur)
+        .map(([secteur, data]) => ({ secteur: Number(secteur), ...data }))
+        .sort((a, b) => b.urgents - a.urgents || b.total - a.total);
+    },
+  });
+
+  return (
+    <WidgetWrapper title="Travaux / Secteur" icon={Truck} color="#22c55e" onRemove={onRemove}>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500" />
+        </div>
+      ) : !data || data.length === 0 ? (
+        <div className="text-center py-4 text-[var(--text-muted)]">
+          <Check className="w-8 h-8 mx-auto mb-2 text-green-400" />
+          <p className="text-sm">Aucun travaux en attente</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {data.slice(0, 6).map((s: any) => (
+            <div key={s.secteur} className="flex items-center justify-between text-sm p-2 bg-[var(--bg-tertiary)] rounded-lg">
+              <span className="flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg bg-green-500/20 text-green-400 text-xs flex items-center justify-center font-bold">
+                  S{s.secteur}
+                </span>
+                <span className="text-[var(--text-secondary)]">{s.total} travaux</span>
+              </span>
+              {s.urgents > 0 && (
+                <Badge variant="red">{s.urgents}</Badge>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </WidgetWrapper>
+  );
+}
+
+
+// ============================================
+// WIDGET STOCK ALERTES PRÉVENTIVES
+// ============================================
+
+export function StockAlertesPreventivesWidget({ onRemove }: { onRemove?: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['widget-stock-alertes-preventives'],
+    queryFn: async () => {
+      const { data: articles } = await supabase
+        .from('stock_articles')
+        .select('id, designation, quantite_stock, seuil_alerte');
+
+      const articlesBasStock = articles?.filter((a: any) => 
+        a.quantite_stock <= (a.seuil_alerte || 5)
+      ) || [];
+
+      // Vérifier les travaux en attente de pièces
+      const { data: travaux } = await supabase
+        .from('travaux')
+        .select('code_appareil, pieces')
+        .in('statut', ['planifie', 'en_cours'])
+        .not('pieces', 'is', null);
+
+      // Vérifier les appareils en panne
+      const { data: pannes } = await supabase
+        .from('parc_pannes')
+        .select('code_appareil')
+        .is('date_fin_panne', null);
+
+      const pannesSet = new Set(pannes?.map((p: any) => p.code_appareil) || []);
+
+      // Identifier les alertes critiques
+      let critiques = 0;
+      articlesBasStock.forEach((art: any) => {
+        if (art.quantite_stock === 0) critiques++;
+      });
+
+      return {
+        critiques,
+        alertes: articlesBasStock.filter((a: any) => a.quantite_stock > 0).length,
+        articles: articlesBasStock.slice(0, 5),
+        pannesActives: pannes?.length || 0,
+      };
+    },
+  });
+
+  return (
+    <WidgetWrapper title="Alertes stock" icon={Package} color="#f97316" onRemove={onRemove}>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="text-center p-2 bg-red-500/10 rounded-lg">
+              <p className="text-lg font-bold text-red-400">{data?.critiques || 0}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Ruptures</p>
+            </div>
+            <div className="text-center p-2 bg-orange-500/10 rounded-lg">
+              <p className="text-lg font-bold text-orange-400">{data?.alertes || 0}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Stock bas</p>
+            </div>
+          </div>
+
+          {data?.articles && data.articles.length > 0 && (
+            <div className="space-y-1">
+              {data.articles.map((art: any) => (
+                <div key={art.id} className="flex items-center justify-between text-xs p-1.5 bg-[var(--bg-tertiary)] rounded">
+                  <span className="truncate flex-1">{art.designation}</span>
+                  <span className={`font-bold ml-2 ${art.quantite_stock === 0 ? 'text-red-400' : 'text-orange-400'}`}>
+                    {art.quantite_stock}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </WidgetWrapper>
+  );
+}
+
+
+// ============================================
+// WIDGET TRAVAUX À PLANIFIER
+// ============================================
+
+export function TravauxAPlanifierWidget({ onRemove }: { onRemove?: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['widget-travaux-a-planifier'],
+    queryFn: async () => {
+      const { data: travaux } = await supabase
+        .from('travaux')
+        .select('id, code, titre, priorite, date_butoir')
+        .in('statut', ['planifie', 'en_cours']);
+
+      const { data: events } = await supabase
+        .from('planning_events')
+        .select('travaux_id')
+        .not('travaux_id', 'is', null);
+
+      const planifiesIds = new Set(events?.map((e: any) => e.travaux_id) || []);
+      const nonPlanifies = travaux?.filter((t: any) => !planifiesIds.has(t.id)) || [];
+
+      const urgents = nonPlanifies.filter((t: any) => 
+        t.priorite === 'urgente' || t.priorite === 'haute'
+      ).length;
+
+      const now = new Date();
+      const enRetard = nonPlanifies.filter((t: any) => {
+        if (!t.date_butoir) return false;
+        return new Date(t.date_butoir) < now;
+      }).length;
+
+      return {
+        total: nonPlanifies.length,
+        urgents,
+        enRetard,
+        travaux: nonPlanifies.slice(0, 5),
+      };
+    },
+  });
+
+  return (
+    <WidgetWrapper title="À planifier" icon={Calendar} color="#3b82f6" onRemove={onRemove}>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="text-center p-2 bg-blue-500/10 rounded-lg">
+              <p className="text-lg font-bold text-blue-400">{data?.total || 0}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Total</p>
+            </div>
+            <div className="text-center p-2 bg-orange-500/10 rounded-lg">
+              <p className="text-lg font-bold text-orange-400">{data?.urgents || 0}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Urgents</p>
+            </div>
+            <div className="text-center p-2 bg-red-500/10 rounded-lg">
+              <p className="text-lg font-bold text-red-400">{data?.enRetard || 0}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Retard</p>
+            </div>
+          </div>
+
+          {data?.travaux && data.travaux.length > 0 && (
+            <div className="space-y-1">
+              {data.travaux.map((t: any) => (
+                <div key={t.id} className="flex items-center justify-between text-xs p-1.5 bg-[var(--bg-tertiary)] rounded">
+                  <span className="font-mono text-purple-400">{t.code}</span>
+                  <span className={`font-bold ${
+                    t.priorite === 'urgente' ? 'text-red-400' : 
+                    t.priorite === 'haute' ? 'text-orange-400' : 'text-[var(--text-muted)]'
+                  }`}>
+                    {t.priorite?.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </WidgetWrapper>

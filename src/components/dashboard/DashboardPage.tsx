@@ -51,7 +51,24 @@ import {
   SuiviVehiculeWidget,
   PlanningTravauxWidget,
   PiecesRemplaceesWidget,
+  // Widgets synergies modules
+  TravauxBloquesStockWidget,
+  TravauxParTourneeWidget,
+  AnalysePredictiveWidget,
+  // Nouvelles synergies
+  TravauxParSecteurWidget,
+  StockAlertesPreventivesWidget,
+  TravauxAPlanifierWidget,
 } from './widgets';
+import { 
+  AstreintePannesWidget, 
+  ChargeTechWidget, 
+  ChaineApproWidget 
+} from '@/components/integrations/synergiesAvancees';
+import { 
+  GEDWidget, 
+  AlertesEntretienWidget as AlertesEntretienWidgetV3 
+} from '@/components/integrations/synergiesV3';
 import { NotificationsWidget } from '@/components/notifications';
 import toast from 'react-hot-toast';
 
@@ -95,6 +112,21 @@ const WIDGET_COMPONENTS: Record<string, React.FC<{ onRemove?: () => void }>> = {
   'suivi-vehicule': SuiviVehiculeWidget,
   'planning-travaux': PlanningTravauxWidget,
   'pieces-remplacees': PiecesRemplaceesWidget,
+  // Widgets synergies modules
+  'travaux-bloques-stock': TravauxBloquesStockWidget,
+  'travaux-par-tournee': TravauxParTourneeWidget,
+  'analyse-predictive': AnalysePredictiveWidget,
+  // Nouvelles synergies avancées
+  'travaux-par-secteur': TravauxParSecteurWidget,
+  'stock-alertes-preventives': StockAlertesPreventivesWidget,
+  'travaux-a-planifier': TravauxAPlanifierWidget,
+  // Synergies avancées v2
+  'astreinte-pannes': AstreintePannesWidget,
+  'charge-techniciens': ChargeTechWidget,
+  'chaine-appro': ChaineApproWidget,
+  // Synergies V3
+  'ged-ascenseurs': GEDWidget,
+  'alertes-entretien-v3': AlertesEntretienWidgetV3,
 };
 
 // Modal pour ajouter des widgets

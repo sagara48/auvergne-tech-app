@@ -6,7 +6,7 @@ import {
   Wrench, MessageSquare, Package, Upload
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Textarea, Select } from '@/components/ui';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 

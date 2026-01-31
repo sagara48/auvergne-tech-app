@@ -32,7 +32,7 @@ interface HistoriqueAscenseurProps {
 interface TimelineEvent {
   id: string;
   date: string;
-  type: 'visite' | 'panne' | 'arret' | 'travaux' | 'mes' | 'document';
+  type: 'visite' | 'panne' | 'arret' | 'travaux' | 'mes' | 'document' | 'pieces_remplacees';
   titre: string;
   description?: string;
   technicien?: string;
@@ -49,6 +49,7 @@ async function getHistoriqueAscenseur(codeAppareil: string, idWsoucont?: number)
     visites: number;
     pannes: number;
     travaux: number;
+    piecesRemplacees: number;
     coutTotal: number;
     piecesUtilisees: { designation: string; quantite: number }[];
   };
@@ -193,6 +194,91 @@ async function getHistoriqueAscenseur(codeAppareil: string, idWsoucont?: number)
     });
   });
 
+  // 7. Interventions rapides avec pièces remplacées
+  const { data: interventions } = await supabase
+    .from('interventions_rapides')
+    .select(`
+      *,
+      technicien:technicien_id(prenom, nom),
+      pieces:intervention_pieces(
+        quantite,
+        article:article_id(designation, reference)
+      )
+    `)
+    .eq('code_appareil', codeAppareil)
+    .order('date_intervention', { ascending: false })
+    .limit(50);
+
+  (interventions || []).forEach((i: any) => {
+    const pieces = (i.pieces || []).map((p: any) => ({
+      designation: p.article?.designation || 'Pièce',
+      quantite: p.quantite,
+    }));
+
+    // Ajouter les pièces au compteur global
+    pieces.forEach((p: any) => {
+      piecesMap[p.designation] = (piecesMap[p.designation] || 0) + p.quantite;
+    });
+
+    if (pieces.length > 0) {
+      timeline.push({
+        id: `intervention-pieces-${i.id}`,
+        date: i.date_intervention,
+        type: 'pieces_remplacees' as any,
+        titre: `Pièces remplacées`,
+        description: i.description || `${pieces.length} pièce(s) remplacée(s)`,
+        technicien: i.technicien ? `${i.technicien.prenom} ${i.technicien.nom}` : undefined,
+        pieces,
+      });
+    }
+  });
+
+  // 8. Mouvements de stock liés à cet ascenseur (sorties)
+  const { data: mouvements } = await supabase
+    .from('stock_mouvements')
+    .select(`
+      *,
+      technicien:technicien_id(prenom, nom),
+      article:article_id(designation, reference)
+    `)
+    .eq('code_appareil', codeAppareil)
+    .eq('type_mouvement', 'sortie')
+    .order('date_mouvement', { ascending: false })
+    .limit(50);
+
+  // Grouper les mouvements par date et technicien
+  const mouvementsGroupes: Record<string, any[]> = {};
+  (mouvements || []).forEach((m: any) => {
+    const key = `${m.date_mouvement}_${m.technicien_id}`;
+    if (!mouvementsGroupes[key]) {
+      mouvementsGroupes[key] = [];
+    }
+    mouvementsGroupes[key].push(m);
+  });
+
+  Object.entries(mouvementsGroupes).forEach(([key, mvts]) => {
+    const firstMvt = mvts[0];
+    const pieces = mvts.map((m: any) => ({
+      designation: m.article?.designation || 'Article',
+      quantite: m.quantite,
+    }));
+
+    // Ajouter les pièces au compteur global
+    pieces.forEach((p: any) => {
+      piecesMap[p.designation] = (piecesMap[p.designation] || 0) + p.quantite;
+    });
+
+    timeline.push({
+      id: `mouvement-${key}`,
+      date: firstMvt.date_mouvement,
+      type: 'pieces_remplacees' as any,
+      titre: `Pièces utilisées`,
+      description: firstMvt.motif || `${pieces.length} article(s)`,
+      technicien: firstMvt.technicien ? `${firstMvt.technicien.prenom} ${firstMvt.technicien.nom}` : undefined,
+      pieces,
+    });
+  });
+
   // Trier par date décroissante
   timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -201,6 +287,7 @@ async function getHistoriqueAscenseur(codeAppareil: string, idWsoucont?: number)
     visites: timeline.filter(e => e.type === 'visite').length,
     pannes: timeline.filter(e => e.type === 'panne').length,
     travaux: timeline.filter(e => e.type === 'travaux').length,
+    piecesRemplacees: timeline.filter(e => e.type === 'pieces_remplacees').length,
     coutTotal,
     piecesUtilisees: Object.entries(piecesMap)
       .map(([designation, quantite]) => ({ designation, quantite }))
@@ -220,6 +307,7 @@ function EventIcon({ type }: { type: TimelineEvent['type'] }) {
     travaux: <Wrench className="w-4 h-4 text-purple-400" />,
     mes: <Building2 className="w-4 h-4 text-blue-400" />,
     document: <FileText className="w-4 h-4 text-gray-400" />,
+    pieces_remplacees: <Package className="w-4 h-4 text-cyan-400" />,
   };
   return icons[type] || <Clock className="w-4 h-4" />;
 }
@@ -233,6 +321,7 @@ function EventBadge({ type }: { type: TimelineEvent['type'] }) {
     travaux: { variant: 'purple', label: 'Travaux' },
     mes: { variant: 'blue', label: 'MES' },
     document: { variant: 'gray', label: 'Document' },
+    pieces_remplacees: { variant: 'cyan', label: 'Pièces' },
   };
   const b = badges[type] || { variant: 'gray', label: type };
   return <Badge variant={b.variant} className="text-[10px]">{b.label}</Badge>;

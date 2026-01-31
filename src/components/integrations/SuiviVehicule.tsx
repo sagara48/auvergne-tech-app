@@ -6,7 +6,7 @@ import {
   Settings, History, Shield, Bell
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, ProgressBar } from '@/components/ui';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/lib/supabase';
 import { format, parseISO, differenceInDays, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 

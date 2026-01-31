@@ -16,7 +16,7 @@ export { StockMouvements, StockMouvementsWidget } from './StockMouvements';
 // Sélecteur de pièces détachées
 export { PiecesPicker, AddToPanierButton } from './PiecesPicker';
 
-// Historique complet ascenseur (timeline pannes, visites, travaux, docs)
+// Historique complet ascenseur (timeline pannes, visites, travaux, docs, pièces)
 export { HistoriqueAscenseur } from './HistoriqueAscenseur';
 
 // Réapprovisionnement automatique véhicule (stock sous seuil)
@@ -28,3 +28,119 @@ export { FicheAscenseurNFC } from './FicheAscenseurNFC';
 // Créer travaux depuis arrêt/panne du parc
 export { CreerTravauxDepuisArret, BoutonCreerTravaux } from './CreerTravauxDepuisArret';
 
+// ============================================
+// NOUVELLES SYNERGIES
+// ============================================
+
+// Dashboard Technicien Personnalisé
+export { TechnicienDashboard } from './TechnicienDashboard';
+
+// Alertes Stock avec création de demandes réappro automatiques
+export { AlerteStock, AlerteStockWidget, useStockAlerts } from './AlerteStockReappro';
+
+// Suivi Véhicule Intelligent (alertes CT, vidange, stock)
+export { SuiviVehicule, SuiviVehiculeWidget } from './SuiviVehicule';
+
+// Intégration Planning ↔ Travaux
+export { PlanningTravaux, TravauxAPlanifier, PlanningTravauxView } from './PlanningTravaux';
+
+// Actions Rapides NFC (notes, signalement, demande travaux)
+export { 
+  ActionsRapidesNFC, 
+  ActionNoteRapide, 
+  ActionSignalerProbleme, 
+  ActionDemanderTravaux 
+} from './ActionsRapidesNFC';
+
+// Pièces remplacées - Vue globale et par ascenseur
+export { 
+  PiecesRemplaceesParc, 
+  PiecesRemplaceesByAscenseur 
+} from './PiecesRemplacees';
+
+// ============================================
+// SYNERGIES AVANCÉES
+// ============================================
+
+// Analyse prédictive des pannes
+export { 
+  AnalysePredictivePannes,
+  AnalysePredictiveWidget 
+} from './synergies';
+
+// Tournées ↔ Travaux à proximité
+export { 
+  TourneeTravauxProximite,
+  TravauxParSecteurWidget 
+} from './synergies';
+
+// Stock ↔ Alertes préventives
+export { 
+  StockAlertesPreventives,
+  StockAlertesWidget 
+} from './synergies';
+
+// Travaux ↔ Planning intégration
+export { 
+  TravauxPlanningIntegration,
+  TravauxAPlanifierWidget 
+} from './synergies';
+
+// ============================================
+// SYNERGIES AVANCÉES V2
+// ============================================
+
+// Astreintes ↔ Pannes
+export { 
+  AstreintesPannes,
+  AstreintePannesWidget 
+} from './synergiesAvancees';
+
+// Charge de travail équipe
+export { 
+  ChargeTravailTechniciens,
+  ChargeTechWidget 
+} from './synergiesAvancees';
+
+// Chaîne d'approvisionnement
+export { 
+  ChaineApprovisionnement,
+  ChaineApproWidget 
+} from './synergiesAvancees';
+
+// Suivi kilométrage véhicules
+export { 
+  SuiviKilometrage 
+} from './synergiesAvancees';
+
+// Notes contextuelles
+export { 
+  NotesContextuelles 
+} from './synergiesAvancees';
+
+// ============================================
+// SYNERGIES V3
+// ============================================
+
+// GED ↔ Ascenseurs
+export { 
+  GEDAscenseurs,
+  GEDWidget 
+} from './synergiesV3';
+
+// Chaîne d'approvisionnement complète
+export { 
+  ChaineApprovisionnement,
+  ChaineApproWidget 
+} from './synergiesV3';
+
+// Alertes entretien (véhicules + ascenseurs)
+export { 
+  AlertesEntretien,
+  AlertesEntretienWidget 
+} from './synergiesV3';
+
+// Notes contextuelles améliorées
+export { 
+  NotesContextuelles as NotesContextuellesV3 
+} from './synergiesV3';
