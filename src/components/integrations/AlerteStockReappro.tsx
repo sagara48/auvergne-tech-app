@@ -5,7 +5,7 @@ import {
   Loader2, ShoppingCart, Plus, Minus, Send, RefreshCw
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Textarea, Select } from '@/components/ui';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/services/supabase';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';

@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, AlertTriangle, Check, Loader2
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/services/supabase';
 import { 
   format, parseISO, addDays, startOfWeek, endOfWeek, 
   eachDayOfInterval, isSameDay, isToday 
