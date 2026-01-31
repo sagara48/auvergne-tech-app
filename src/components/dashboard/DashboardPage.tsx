@@ -45,45 +45,35 @@ import {
   ClockWidget,
   QuickLinksWidget,
   ChecklistWidget,
-  // Nouveaux widgets synergies
   TechnicienDashboardWidget,
   AlertesStockReapproWidget,
   SuiviVehiculeWidget,
   PlanningTravauxWidget,
   PiecesRemplaceesWidget,
-  // Widgets synergies modules
   TravauxBloquesStockWidget,
   TravauxParTourneeWidget,
   AnalysePredictiveWidget,
-  // Nouvelles synergies
   TravauxParSecteurWidget,
   StockAlertesPreventivesWidget,
   TravauxAPlanifierWidget,
 } from './widgets';
+// Synergies widgets
 import { 
   AstreintePannesWidget, 
   ChargeTechWidget, 
-  ChaineApproWidget 
-} from '@/components/integrations/synergiesAvancees';
-import { 
-  GEDWidget, 
-  AlertesEntretienWidget as AlertesEntretienWidgetV3 
-} from '@/components/integrations/synergiesV3';
-import {
+  ChaineApproWidget,
+  GEDWidget,
+  AlertesEntretienWidget,
   StockTourneeWidget,
-  RecurrencePannesWidget
-} from '@/components/integrations/synergiesV4';
-import {
+  RecurrencePannesWidget,
   AgePiecesWidget,
   PrevisionConsoWidget,
-  FeedbackTerrainWidget
-} from '@/components/integrations/synergiesV5';
-import {
+  FeedbackTerrainWidget,
   DicteeVocaleWidget,
   ScanNFCWidget,
   ModeHorsLigneWidget,
-  AbsencesWidget
-} from '@/components/integrations/synergiesV6';
+  AbsencesWidget,
+} from '@/components/integrations';
 import { NotificationsWidget } from '@/components/notifications';
 import toast from 'react-hot-toast';
 
@@ -141,7 +131,7 @@ const WIDGET_COMPONENTS: Record<string, React.FC<{ onRemove?: () => void }>> = {
   'chaine-appro': ChaineApproWidget,
   // Synergies V3
   'ged-ascenseurs': GEDWidget,
-  'alertes-entretien-v3': AlertesEntretienWidgetV3,
+  'alertes-entretien-v3': AlertesEntretienWidget,
   // Synergies V4
   'stock-tournee': StockTourneeWidget,
   'recurrence-pannes': RecurrencePannesWidget,

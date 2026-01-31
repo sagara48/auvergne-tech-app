@@ -1,32 +1,10 @@
 export { useFeuilleHeures } from './useFeuilleHeures';
-export { useRealtimeSubscriptions, useRealtimeTable } from './useRealtimeSubscriptions';
+export { useRealtimeSubscriptions, useRealtimeTable, useRealtimePresence } from './useRealtimeSubscriptions';
 export { useOnlineStatus, useOfflineCache, getOfflineData } from './useOnlineStatus';
+export { useNFC } from './useNFC';
 
 // Hooks centralisés
 export * from './useCentralizedHooks';
 
-// Temps réel
-export {
-  useRealtimeQuery,
-  useRealtimeStatus,
-  useRealtimePannes,
-  useRealtimeTravaux,
-  useRealtimeStock,
-  useRealtimePlanning,
-  useRealtimeCommandes,
-  useRealtimeVehicules,
-  useRealtimeNotes,
-  useRealtimeDocuments,
-  useRealtimeNotifications,
-  useRealtimeAscenseurs,
-  useRealtimeVisites,
-  useRealtimeStats,
-  RealtimeProvider,
-  RealtimeIndicator,
-} from './useRealtime';
-
-// Temps réel global
-export {
-  useGlobalRealtime,
-  RealtimeStatusWidget,
-} from './useGlobalRealtime';
+// Queries optimisées
+export * from './useOptimizedQueries';
