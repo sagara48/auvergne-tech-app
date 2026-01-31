@@ -69,6 +69,15 @@ import {
   GEDWidget, 
   AlertesEntretienWidget as AlertesEntretienWidgetV3 
 } from '@/components/integrations/synergiesV3';
+import {
+  StockTourneeWidget,
+  RecurrencePannesWidget
+} from '@/components/integrations/synergiesV4';
+import {
+  AgePiecesWidget,
+  PrevisionConsoWidget,
+  FeedbackTerrainWidget
+} from '@/components/integrations/synergiesV5';
 import { NotificationsWidget } from '@/components/notifications';
 import toast from 'react-hot-toast';
 
@@ -127,6 +136,13 @@ const WIDGET_COMPONENTS: Record<string, React.FC<{ onRemove?: () => void }>> = {
   // Synergies V3
   'ged-ascenseurs': GEDWidget,
   'alertes-entretien-v3': AlertesEntretienWidgetV3,
+  // Synergies V4
+  'stock-tournee': StockTourneeWidget,
+  'recurrence-pannes': RecurrencePannesWidget,
+  // Synergies V5
+  'age-pieces': AgePiecesWidget,
+  'prevision-conso': PrevisionConsoWidget,
+  'feedback-terrain': FeedbackTerrainWidget,
 };
 
 // Modal pour ajouter des widgets

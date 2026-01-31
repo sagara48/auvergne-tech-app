@@ -144,3 +144,41 @@ export {
 export { 
   NotesContextuelles as NotesContextuellesV3 
 } from './synergiesV3';
+
+// ============================================
+// SYNERGIES V4
+// ============================================
+
+// Stock Véhicule ↔ Tournée du jour
+export { 
+  StockVehiculeTournee,
+  StockTourneeWidget 
+} from './synergiesV4';
+
+// Récurrence Pannes ↔ Alertes
+export { 
+  RecurrencePannes,
+  RecurrencePannesWidget 
+} from './synergiesV4';
+
+// ============================================
+// SYNERGIES V5
+// ============================================
+
+// Âge Pièces ↔ Remplacement Préventif
+export { 
+  AgePiecesPreventif,
+  AgePiecesWidget 
+} from './synergiesV5';
+
+// Consommation Pièces ↔ Prévisions
+export { 
+  PrevisionConsommation,
+  PrevisionConsoWidget 
+} from './synergiesV5';
+
+// Feedback Terrain
+export { 
+  FeedbackTerrain,
+  FeedbackTerrainWidget 
+} from './synergiesV5';

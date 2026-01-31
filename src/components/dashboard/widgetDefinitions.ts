@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Calendar, Hammer, FileCheck, Package, Clock, 
   MessageCircle, Car, AlertTriangle, TrendingUp, CheckSquare,
   StickyNote, CloudSun, Link, Users, BarChart3, PieChart,
-  Timer, Truck, Bell, Activity, Zap, Shield
+  Timer, Truck, Bell, Activity, Zap, Shield, MessageSquare
 } from 'lucide-react';
 
 export type WidgetSize = 'small' | 'medium' | 'large';
@@ -470,6 +470,53 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: 'Alertes CT, vidange, visites en retard',
     category: 'vehicule',
     icon: Bell,
+    defaultSize: 'small',
+    minW: 1, minH: 1, defaultW: 2, defaultH: 2,
+  },
+  // === SYNERGIES V4 ===
+  {
+    id: 'stock-tournee',
+    name: 'Stock Tournée',
+    description: 'Vérification pièces avant départ tournée',
+    category: 'stock',
+    icon: Truck,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 3,
+  },
+  {
+    id: 'recurrence-pannes',
+    name: 'Récurrence Pannes',
+    description: 'Ascenseurs avec pannes répétitives',
+    category: 'stats',
+    icon: Activity,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 3,
+  },
+  // === SYNERGIES V5 ===
+  {
+    id: 'age-pieces',
+    name: 'Âge Pièces',
+    description: 'Pièces à remplacer préventivement',
+    category: 'stock',
+    icon: Clock,
+    defaultSize: 'small',
+    minW: 1, minH: 1, defaultW: 2, defaultH: 2,
+  },
+  {
+    id: 'prevision-conso',
+    name: 'Prévisions Stock',
+    description: 'Prévisions de consommation et alertes rupture',
+    category: 'stock',
+    icon: TrendingUp,
+    defaultSize: 'small',
+    minW: 1, minH: 1, defaultW: 2, defaultH: 2,
+  },
+  {
+    id: 'feedback-terrain',
+    name: 'Feedback Terrain',
+    description: 'Remontées terrain des techniciens',
+    category: 'communication',
+    icon: MessageSquare,
     defaultSize: 'small',
     minW: 1, minH: 1, defaultW: 2, defaultH: 2,
   },
