@@ -24,6 +24,8 @@ import {
   AdminPage,
   PiecesPage,
   AtelierToleriePage,
+  ControlesPage,
+  IoTSigmaPage,
 } from '@/components/modules';
 import { useAppStore } from '@/stores/appStore';
 import { useRealtimeSubscriptions } from '@/hooks/useRealtimeSubscriptions';
@@ -88,6 +90,10 @@ function AppContent() {
         return <PiecesPage />;
       case 'tolerie':
         return <AtelierToleriePage />;
+      case 'controles':
+        return <ControlesPage />;
+      case 'iot':
+        return <IoTSigmaPage />;
       case 'admin':
         return <AdminPage />;
       default:

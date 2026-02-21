@@ -28,6 +28,7 @@ import {
   Route,
   Search,
   Scissors,
+  Radio,
 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { NotificationCenter } from '@/components/notifications';
@@ -68,6 +69,8 @@ const NAV_GROUPS = [
     label: 'PARC',
     items: [
       { id: 'ascenseurs', name: 'Parc Ascenseurs', icon: Building2 },
+      { id: 'controles', name: 'Contrôles Techniques', icon: Shield },
+      { id: 'iot', name: 'IoT Sigma4Lifts', icon: Radio },
       { id: 'vehicules', name: 'Véhicules', icon: Car },
       { id: 'nfc', name: 'QR Codes', icon: QrCode },
     ],

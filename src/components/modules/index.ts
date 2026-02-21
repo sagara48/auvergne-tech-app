@@ -18,4 +18,6 @@ export { PiecesPage } from './PiecesPage';
 export { FicheAscenseurNFC } from './FicheAscenseurNFC';
 export { StockMouvements } from './StockMouvements';
 export { default as AtelierToleriePage } from './AtelierToleriePage';
+export { ControlesPage } from './ControlesPage';
+export { IoTSigmaPage } from './IoTSigmaPage';
 
