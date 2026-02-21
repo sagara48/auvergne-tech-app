@@ -8,37 +8,44 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Couleurs sombres (utilisées en mode dark)
+        // Couleurs sombres (mode dark - lavender undertones)
         dark: {
-          900: '#09090b',
-          800: '#18181b',
-          700: '#27272a',
-          600: '#3f3f46',
-          500: '#52525b',
-          400: '#71717a',
-          300: '#a1a1aa',
+          900: '#0F0D14',
+          800: '#161420',
+          700: '#1E1B2A',
+          600: '#2A2640',
+          500: '#3E3858',
+          400: '#5A5270',
+          300: '#A49BB5',
         },
-        // Couleurs claires (utilisées en mode light)
+        // Couleurs claires (mode light - lavender)
         light: {
-          50: '#fafafa',
-          100: '#f4f4f5',
-          200: '#e4e4e7',
-          300: '#d4d4d8',
-          400: '#a1a1aa',
-          500: '#71717a',
-          600: '#52525b',
-          700: '#3f3f46',
-          800: '#27272a',
-          900: '#18181b',
+          50: '#FAFAFC',
+          100: '#F3F1F6',
+          200: '#EDE9F5',
+          300: '#E4DFF0',
+          400: '#B0ABBD',
+          500: '#9490A8',
+          600: '#7A7190',
+          700: '#585270',
+          800: '#1E1B2E',
+          900: '#0F0D14',
         },
         // Couleurs thématiques
         surface: {
           DEFAULT: 'var(--bg-secondary)',
           elevated: 'var(--bg-tertiary)',
         },
+        // Accent rouge bordeaux
+        accent: {
+          DEFAULT: '#B91C1C',
+          light: '#DC4444',
+          dark: '#991B1B',
+          bg: 'var(--accent-bg)',
+        },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['DM Sans', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       backgroundColor: {
