@@ -15,7 +15,7 @@ import {
   PenLine, MessageSquare, Move, Crosshair, Type, Download,
   Link2, Target, Activity, Image, Users, Keyboard, Cuboid,
   Play, Pause, ShieldAlert, Sparkles, ScanLine, Wifi, WifiOff,
-  RefreshCw, Expand, Package,
+  RefreshCw, Expand, Package, Wand2, Loader2, Send, ChevronDown,
 } from 'lucide-react';
 import { Card, CardBody, Badge, Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,7 @@ import {
   savePieceOffline, getPiecesOffline, deletePieceOffline,
   addToSyncQueue, syncWithServer, isOnline, onNetworkChange, cacheAllPieces, getDirtyPiecesCount,
 } from '@/services/tolerieOffline';
+import { genererPieceDepuisTexte, EXEMPLES_IA } from '@/services/tolerieIA';
 import { PDFBuilder, fmtDate } from '@/services/pdfBuilder';
 import { useAppStore } from '@/stores/appStore';
 
@@ -385,7 +386,73 @@ export default function AtelierToleriePage() {
 
 function Step1({ piece, update, reset, matConfig, travauxList }: { piece: PieceConfig; update: (p: Partial<PieceConfig>) => void; reset: (p: PieceConfig) => void; matConfig: MatiereConfig; travauxList: { id: string; code: string; titre: string }[] }) {
   const [showLib, setShowLib] = useState(false);
+  const [showIA, setShowIA] = useState(false);
+  const [iaText, setIAText] = useState('');
+  const [iaLoading, setIALoading] = useState(false);
+  const [iaError, setIAError] = useState('');
+  const [showExamples, setShowExamples] = useState(false);
+
+  const handleGenerate = async () => {
+    if (!iaText.trim() || iaLoading) return;
+    setIALoading(true); setIAError('');
+    try {
+      const result = await genererPieceDepuisTexte(iaText);
+      if (result.success && result.piece) {
+        reset(result.piece);
+        setShowIA(false); setIAText('');
+        toast.success(`✨ Pièce "${result.piece.nom}" générée par IA`);
+      } else {
+        setIAError(result.error || 'Erreur inconnue');
+      }
+    } catch (e: any) {
+      setIAError(e.message);
+    }
+    setIALoading(false);
+  };
+
   return (<>
+    {/* Feature 65: Génération IA */}
+    <Card><CardBody className="p-2">
+      <button onClick={() => setShowIA(!showIA)}
+        className={cn('w-full flex items-center gap-2 p-1.5 rounded-lg border-2 border-dashed transition-all', showIA ? 'border-[#8B5CF6] bg-[#8B5CF6]/5' : 'border-[var(--border-secondary)] hover:border-[#8B5CF6]/50')}>
+        <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center', showIA ? 'bg-[#8B5CF6] text-white' : 'bg-[var(--bg-tertiary)]')}>
+          <Wand2 className="w-3.5 h-3.5" />
+        </div>
+        <div className="flex-1 text-left">
+          <p className={cn('text-[10px] font-bold', showIA ? 'text-[#8B5CF6]' : 'text-[var(--text-primary)]')}>Générer avec l'IA</p>
+          <p className="text-[7px] text-[var(--text-muted)]">Décrivez votre pièce en français</p>
+        </div>
+        <Sparkles className={cn('w-3.5 h-3.5', showIA ? 'text-[#8B5CF6]' : 'text-[var(--text-muted)]')} />
+      </button>
+
+      {showIA && <div className="mt-2 space-y-1.5">
+        <textarea value={iaText} onChange={e => setIAText(e.target.value)} rows={3} placeholder="Ex: Équerre de fixation rail Otis, acier galva 3mm, 140×60mm, 1 pli 90°, 2 trous oblongs ∅10..."
+          className="w-full px-2 py-1.5 text-[9px] bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded-lg resize-none focus:outline-none focus:border-[#8B5CF6] focus:ring-1 focus:ring-[#8B5CF6]/30 placeholder:text-[var(--text-muted)]/50"
+          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleGenerate(); }} />
+
+        {/* Exemples rapides */}
+        <div>
+          <button onClick={() => setShowExamples(!showExamples)} className="flex items-center gap-1 text-[7px] text-[#8B5CF6] font-semibold hover:underline">
+            <ChevronDown className={cn('w-2.5 h-2.5 transition-transform', showExamples && 'rotate-180')} /> Exemples
+          </button>
+          {showExamples && <div className="mt-1 space-y-0.5 max-h-[80px] overflow-y-auto">
+            {EXEMPLES_IA.map(ex => <button key={ex.label} onClick={() => setIAText(ex.description)}
+              className="w-full text-left px-1.5 py-1 rounded text-[7px] hover:bg-[#8B5CF6]/5 border border-transparent hover:border-[#8B5CF6]/20 transition-colors">
+              <span className="font-semibold text-[#8B5CF6]">{ex.label}</span>
+              <span className="text-[var(--text-muted)] ml-1 line-clamp-1">{ex.description.slice(0, 60)}…</span>
+            </button>)}
+          </div>}
+        </div>
+
+        {iaError && <div className="px-2 py-1 rounded bg-red-500/10 text-red-500 text-[7px]"><AlertCircle className="w-2.5 h-2.5 inline mr-0.5" />{iaError}</div>}
+
+        <button onClick={handleGenerate} disabled={!iaText.trim() || iaLoading}
+          className={cn('w-full py-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all', iaLoading ? 'bg-[#8B5CF6]/60 text-white' : 'bg-[#8B5CF6] text-white hover:bg-[#7C3AED] disabled:opacity-30')}>
+          {iaLoading ? <><Loader2 className="w-3 h-3 animate-spin" /> Génération en cours…</> : <><Wand2 className="w-3 h-3" /> Générer la pièce</>}
+        </button>
+        <p className="text-[6px] text-[var(--text-muted)] text-center">Ctrl+Entrée pour générer • Claude Sonnet 4</p>
+      </div>}
+    </CardBody></Card>
     {/* Feature 26: Travaux link */}
     <Card><CardBody className="p-2">
       <div className="flex items-center gap-1.5 mb-1"><Link2 className="w-3 h-3 text-[#3B82F6]" /><p className="text-[9px] font-bold">Rattacher à un travaux</p></div>
