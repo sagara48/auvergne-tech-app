@@ -185,13 +185,7 @@ async function getStockVehiculeTechnicien(): Promise<{
     // Vérifier si admin
     const isAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
 
-//     console.log('FicheNFC - User admin check:', { 
-      userId: user.id, 
-      email: user.email, 
-      isAdmin, 
-      technicien: technicienData,
-      roleCode 
-    });
+    // console.log('FicheNFC - User admin check:', { userId: user.id, email: user.email, isAdmin, technicien: technicienData, roleCode });
 
     if (isAdmin) {
       // Charger tous les véhicules avec technicien_id

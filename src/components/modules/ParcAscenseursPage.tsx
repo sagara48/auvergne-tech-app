@@ -1376,13 +1376,7 @@ function SignalerPiecesModal({
         const userIsAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
         setIsAdmin(userIsAdmin);
         
-//         console.log('User admin check:', { 
-          userId: user.id, 
-          email: user.email, 
-          isAdmin: userIsAdmin, 
-          technicien: technicienData,
-          roleCode 
-        });
+        // console.log('User admin check:', { userId: user.id, email: user.email, isAdmin: userIsAdmin, technicien: technicienData, roleCode });
 
         if (userIsAdmin) {
           // Charger tous les véhicules avec leur technicien
