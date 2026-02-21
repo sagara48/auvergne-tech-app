@@ -3,10 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ShoppingCart, Plus, Search, Package, Truck, Check, X, Eye, Edit, 
   Archive, Calendar, User, Clock, AlertTriangle, Minus, MoreVertical,
-  ChevronRight, FileText, Trash2, ChevronDown, ChevronUp, ArrowRight, Wrench
+  ChevronRight, FileText, Trash2, ChevronDown, ChevronUp, ArrowRight
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
-import { PiecesPicker } from '@/components/integrations/PiecesPicker';
 import { 
   getCommandes, createCommande, updateCommande, archiveCommande,
   addCommandeLigne, deleteCommandeLigne, updateCommandeLigne, getStockArticles, getAscenseurs,
@@ -60,7 +59,6 @@ interface LigneForm {
   quantite: number;
   ascenseur_id?: string;
   detail?: string;
-  fournisseur?: string;
 }
 
 // Helper pour obtenir l'action suivante logique
@@ -181,8 +179,7 @@ function CommandeFormModal({
   // Lignes de commande
   const [lignes, setLignes] = useState<LigneForm[]>([]);
   const [showAddLigne, setShowAddLigne] = useState(false);
-  const [ligneType, setLigneType] = useState<'stock' | 'manuel' | 'catalogue'>('stock');
-  const [showPiecesPicker, setShowPiecesPicker] = useState(false);
+  const [ligneType, setLigneType] = useState<'stock' | 'manuel'>('stock');
   const [articleSearch, setArticleSearch] = useState('');
   const [newLigne, setNewLigne] = useState({
     designation: '',
@@ -190,7 +187,6 @@ function CommandeFormModal({
     quantite: 1,
     ascenseur_id: '',
     detail: '',
-    fournisseur: '',
   });
 
   // Queries
@@ -237,27 +233,9 @@ function CommandeFormModal({
       quantite: newLigne.quantite || 1,
       ascenseur_id: newLigne.ascenseur_id || '',
       detail: newLigne.detail || '',
-      fournisseur: newLigne.fournisseur || '',
     }]);
-    setNewLigne({ designation: '', reference: '', quantite: 1, ascenseur_id: '', detail: '', fournisseur: '' });
+    setNewLigne({ designation: '', reference: '', quantite: 1, ascenseur_id: '', detail: '' });
     setShowAddLigne(false);
-  };
-
-  // Ajouter des pièces depuis le catalogue
-  const addLignesFromCatalogue = (pieces: Array<{ reference: string; designation: string; quantite: number; fournisseur?: string }>) => {
-    const nouvelleLignes = pieces.map((piece, index) => ({
-      id: `ligne-cat-${Date.now()}-${index}`,
-      type: 'manuel' as const,
-      designation: piece.designation,
-      reference: piece.reference,
-      quantite: piece.quantite,
-      ascenseur_id: '',
-      detail: '',
-      fournisseur: piece.fournisseur || '',
-    }));
-    setLignes([...lignes, ...nouvelleLignes]);
-    setShowPiecesPicker(false);
-    toast.success(`${pieces.length} pièce(s) ajoutée(s)`);
   };
 
   const removeLigne = (id: string) => {
@@ -359,7 +337,7 @@ function CommandeFormModal({
               {/* Formulaire ajout pièce */}
               {showAddLigne && (
                 <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl mb-4 space-y-3">
-                  {/* Tabs Stock / Manuel / Catalogue */}
+                  {/* Tabs Stock / Manuel */}
                   <div className="flex gap-2">
                     <button
                       onClick={() => setLigneType('stock')}
@@ -369,7 +347,7 @@ function CommandeFormModal({
                           : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                       }`}
                     >
-                      <Package className="w-4 h-4 inline mr-2" />Stock
+                      <Package className="w-4 h-4 inline mr-2" />Depuis le stock
                     </button>
                     <button
                       onClick={() => setLigneType('manuel')}
@@ -379,35 +357,11 @@ function CommandeFormModal({
                           : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                       }`}
                     >
-                      <Edit className="w-4 h-4 inline mr-2" />Manuel
-                    </button>
-                    <button
-                      onClick={() => setLigneType('catalogue')}
-                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                        ligneType === 'catalogue'
-                          ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                          : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                      }`}
-                    >
-                      <Wrench className="w-4 h-4 inline mr-2" />Pièces détachées
+                      <Edit className="w-4 h-4 inline mr-2" />Saisie manuelle
                     </button>
                   </div>
 
-                  {ligneType === 'catalogue' ? (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-[var(--text-muted)] mb-3">
-                        Recherchez et ajoutez des pièces depuis le catalogue
-                      </p>
-                      <Button 
-                        variant="primary" 
-                        onClick={() => setShowPiecesPicker(true)}
-                        className="bg-gradient-to-r from-purple-500 to-indigo-500"
-                      >
-                        <Search className="w-4 h-4" />
-                        Ouvrir le catalogue
-                      </Button>
-                    </div>
-                  ) : ligneType === 'stock' ? (
+                  {ligneType === 'stock' ? (
                     <div>
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
@@ -458,7 +412,7 @@ function CommandeFormModal({
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-4 gap-3">
+                      <div className="grid grid-cols-3 gap-3">
                         <div>
                           <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Quantité</label>
                           <Input
@@ -469,19 +423,6 @@ function CommandeFormModal({
                           />
                         </div>
                         <div>
-                          <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Fournisseur pièce</label>
-                          <Select
-                            value={newLigne.fournisseur}
-                            onChange={e => setNewLigne({ ...newLigne, fournisseur: e.target.value })}
-                          >
-                            <option value="">Non spécifié</option>
-                            <option value="HAUER">Hauer</option>
-                            <option value="SODIMAS">Sodimas</option>
-                            <option value="MGTI">MGTI</option>
-                            <option value="MP">MP Servicenter</option>
-                          </Select>
-                        </div>
-                        <div>
                           <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Ascenseur (opt.)</label>
                           <Select
                             value={newLigne.ascenseur_id}
@@ -489,7 +430,7 @@ function CommandeFormModal({
                           >
                             <option value="">Aucun</option>
                             {ascenseurs?.map(a => (
-                              <option key={a.id} value={a.id}>{a.code}</option>
+                              <option key={a.id} value={a.id}>{a.code} - {a.adresse?.slice(0, 30)}</option>
                             ))}
                           </Select>
                         </div>
@@ -520,13 +461,10 @@ function CommandeFormModal({
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <div className="flex items-center gap-2 mb-1">
                             <span className="text-sm font-medium text-[var(--text-primary)]">{ligne.designation}</span>
                             {ligne.type === 'stock' && <Badge variant="blue" className="text-xs">Stock</Badge>}
                             {ligne.type === 'manuel' && <Badge variant="amber" className="text-xs">Manuel</Badge>}
-                            {ligne.fournisseur && (
-                              <Badge variant="purple" className="text-xs">{ligne.fournisseur}</Badge>
-                            )}
                           </div>
                           {ligne.reference && (
                             <div className="text-xs text-[var(--text-muted)]">Réf: {ligne.reference}</div>
@@ -608,16 +546,6 @@ function CommandeFormModal({
           </div>
         </CardBody>
       </Card>
-
-      {/* Modal sélecteur de pièces */}
-      {showPiecesPicker && (
-        <PiecesPicker
-          onClose={() => setShowPiecesPicker(false)}
-          onSelect={addLignesFromCatalogue}
-          mode="selection"
-          title="Ajouter des pièces depuis le catalogue"
-        />
-      )}
     </div>
   );
 }

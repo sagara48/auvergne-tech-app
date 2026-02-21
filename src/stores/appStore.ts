@@ -93,7 +93,7 @@ export const useAppStore = create<AppState>()(
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       
       // Module
-      moduleActif: 'heures',
+      moduleActif: 'dashboard',
       setModuleActif: (module) => set({ moduleActif: module }),
       
       // Thème

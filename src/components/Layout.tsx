@@ -29,6 +29,8 @@ import {
   Settings,
   Shield,
   Wrench,
+  Route,
+  Mic,
 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { NotificationCenter } from '@/components/notifications';
@@ -45,24 +47,59 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-const modules = [
-  { id: 'dashboard', name: 'Tableau de bord', icon: LayoutDashboard, color: '#3b82f6' },
-  { id: 'planning', name: 'Planning', icon: Calendar, color: '#f59e0b' },
-  { id: 'travaux', name: 'Travaux', icon: Hammer, color: '#a855f7' },
-  { id: 'miseservice', name: 'Mise en service', icon: FileCheck, color: '#f97316' },
-  { id: 'ascenseurs', name: 'Parc Ascenseurs', icon: Building2, color: '#06b6d4' },
-  { id: 'stock', name: 'Stock', icon: Package, color: '#ef4444' },
-  { id: 'pieces', name: 'Pièces détachées', icon: Wrench, color: '#8b5cf6' },
-  { id: 'commandes', name: 'Commandes', icon: ShoppingCart, color: '#06b6d4' },
-  { id: 'vehicules', name: 'Véhicules', icon: Car, color: '#22c55e' },
-  { id: 'demandes', name: 'Demandes', icon: HelpCircle, color: '#ec4899' },
-  { id: 'ged', name: 'GED', icon: FolderOpen, color: '#6366f1' },
-  { id: 'heures', name: "Feuilles d'heures", icon: Clock, color: '#14b8a6' },
-  { id: 'notes', name: 'Notes', icon: StickyNote, color: '#eab308' },
-  { id: 'chat', name: 'Messages', icon: MessageCircle, color: '#8b5cf6' },
-  { id: 'nfc', name: 'Tags NFC', icon: Nfc, color: '#06b6d4' },
-  { id: 'archives', name: 'Archives', icon: Archive, color: '#64748b' },
+// ═══ Navigation groupée par domaine ═══
+const NAV_GROUPS = [
+  {
+    label: null,
+    items: [
+      { id: 'dashboard', name: 'Tableau de bord', icon: LayoutDashboard, color: '#3b82f6' },
+    ],
+  },
+  {
+    label: 'TERRAIN',
+    items: [
+      { id: 'planning', name: 'Planning', icon: Calendar, color: '#f59e0b' },
+      { id: 'travaux', name: 'Travaux', icon: Hammer, color: '#a855f7' },
+      { id: 'miseservice', name: 'Mise en service', icon: FileCheck, color: '#f97316' },
+      { id: 'tournees', name: 'Tournées', icon: Route, color: '#84cc16' },
+    ],
+  },
+  {
+    label: 'PARC',
+    items: [
+      { id: 'ascenseurs', name: 'Parc Ascenseurs', icon: Building2, color: '#06b6d4' },
+      { id: 'vehicules', name: 'Véhicules', icon: Car, color: '#22c55e' },
+      { id: 'nfc', name: 'Tags NFC', icon: Nfc, color: '#06b6d4' },
+    ],
+  },
+  {
+    label: 'STOCK',
+    items: [
+      { id: 'stock', name: 'Stock', icon: Package, color: '#ef4444' },
+      { id: 'pieces', name: 'Pièces détachées', icon: Wrench, color: '#8b5cf6' },
+      { id: 'commandes', name: 'Commandes', icon: ShoppingCart, color: '#06b6d4' },
+    ],
+  },
+  {
+    label: 'COLLAB',
+    items: [
+      { id: 'chat', name: 'Messages', icon: MessageCircle, color: '#8b5cf6' },
+      { id: 'notes', name: 'Notes', icon: StickyNote, color: '#eab308' },
+      { id: 'ged', name: 'Documents', icon: FolderOpen, color: '#6366f1' },
+    ],
+  },
+  {
+    label: 'RH',
+    items: [
+      { id: 'heures', name: "Feuilles d'heures", icon: Clock, color: '#14b8a6' },
+      { id: 'demandes', name: 'Demandes', icon: HelpCircle, color: '#ec4899' },
+      { id: 'archives', name: 'Archives', icon: Archive, color: '#64748b' },
+    ],
+  },
 ];
+
+// Flat list for title lookup
+const allModules = NAV_GROUPS.flatMap(g => g.items);
 
 export function Layout({ children }: LayoutProps) {
   const { moduleActif, setModuleActif, user, theme, toggleTheme } = useAppStore();
@@ -101,7 +138,7 @@ export function Layout({ children }: LayoutProps) {
         className={cn(
           "flex flex-col transition-all duration-300 ease-in-out",
           "bg-[var(--bg-secondary)] border-r border-[var(--border-secondary)]",
-          sidebarCollapsed ? "w-[72px]" : "w-64"
+          sidebarCollapsed ? "w-[62px]" : "w-[220px]"
         )}
       >
         {/* Logo */}
@@ -125,55 +162,77 @@ export function Layout({ children }: LayoutProps) {
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation groupée */}
         <nav className={cn(
           "flex-1 overflow-y-auto",
-          sidebarCollapsed ? "p-2" : "p-3"
+          sidebarCollapsed ? "px-1.5 py-1" : "px-2.5 py-1"
         )}>
-          {modules.map((module) => {
-            const Icon = module.icon;
-            const isActive = moduleActif === module.id;
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={gi} className="mb-0.5">
+              {/* Label de groupe */}
+              {group.label && !sidebarCollapsed && (
+                <div className="px-2.5 pt-3 pb-1 text-[9px] font-bold text-[var(--text-muted)] tracking-[1.2px] uppercase select-none">
+                  {group.label}
+                </div>
+              )}
+              {group.label && sidebarCollapsed && (
+                <div className="h-px bg-[var(--border-secondary)] mx-2 my-1.5" />
+              )}
 
-            return (
-              <div key={module.id} className="relative group">
-                <button
-                  onClick={() => setModuleActif(module.id)}
-                  className={cn(
-                    'w-full flex items-center rounded-xl mb-1 transition-all',
-                    sidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3',
-                    isActive
-                      ? 'bg-gradient-to-r from-blue-500/15 to-purple-500/15 border border-blue-500/30'
-                      : 'hover:bg-[var(--bg-tertiary)]'
-                  )}
-                  title={sidebarCollapsed ? module.name : undefined}
-                >
-                  <Icon
-                    className="w-5 h-5 flex-shrink-0"
-                    style={{ color: module.color }}
-                  />
-                  {!sidebarCollapsed && (
-                    <span
+              {/* Items du groupe */}
+              {group.items.map((module) => {
+                const Icon = module.icon;
+                const isActive = moduleActif === module.id;
+
+                return (
+                  <div key={module.id} className="relative group">
+                    <button
+                      onClick={() => setModuleActif(module.id)}
                       className={cn(
-                        'text-sm whitespace-nowrap overflow-hidden',
-                        isActive 
-                          ? 'text-[var(--text-primary)] font-semibold' 
-                          : 'text-[var(--text-secondary)]'
+                        'w-full flex items-center rounded-lg mb-px transition-all duration-150',
+                        sidebarCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-[7px]',
+                        isActive
+                          ? 'bg-gradient-to-r from-blue-500/15 to-purple-500/15 border border-blue-500/30'
+                          : 'hover:bg-[var(--bg-tertiary)]'
                       )}
+                      title={sidebarCollapsed ? module.name : undefined}
                     >
-                      {module.name}
-                    </span>
-                  )}
-                </button>
-                
-                {/* Tooltip en mode collapsed */}
-                {sidebarCollapsed && (
-                  <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-sm text-[var(--text-primary)] whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 shadow-lg">
-                    {module.name}
+                      {/* Active indicator bar */}
+                      {isActive && (
+                        <div className={cn(
+                          "absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-3.5 rounded-r-sm",
+                          sidebarCollapsed && "-left-1.5"
+                        )} style={{ backgroundColor: module.color }} />
+                      )}
+                      <Icon
+                        className="w-[18px] h-[18px] flex-shrink-0"
+                        style={{ color: module.color }}
+                      />
+                      {!sidebarCollapsed && (
+                        <span
+                          className={cn(
+                            'text-[12.5px] whitespace-nowrap overflow-hidden',
+                            isActive 
+                              ? 'text-[var(--text-primary)] font-semibold' 
+                              : 'text-[var(--text-secondary)] font-medium'
+                          )}
+                        >
+                          {module.name}
+                        </span>
+                      )}
+                    </button>
+                    
+                    {/* Tooltip en mode collapsed */}
+                    {sidebarCollapsed && (
+                      <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-xs text-[var(--text-primary)] whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 shadow-lg">
+                        {module.name}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Bottom Section */}
@@ -181,14 +240,54 @@ export function Layout({ children }: LayoutProps) {
           "border-t border-[var(--border-secondary)]",
           sidebarCollapsed ? "p-2" : "p-3"
         )}>
-          {/* Toggle Sidebar Button - Discret */}
+          {/* Admin */}
+          <button
+            onClick={() => setModuleActif('admin')}
+            className={cn(
+              "w-full flex items-center rounded-lg transition-all mb-1.5",
+              sidebarCollapsed ? "justify-center p-2" : "gap-2.5 px-3 py-[7px]",
+              moduleActif === 'admin'
+                ? 'bg-purple-500/10 text-purple-400'
+                : 'text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
+            )}
+            title={sidebarCollapsed ? 'Administration' : undefined}
+          >
+            <Shield className="w-[18px] h-[18px]" />
+            {!sidebarCollapsed && <span className="text-[12.5px] font-medium">Admin</span>}
+          </button>
+
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className={cn(
+              "w-full flex items-center rounded-xl transition-all mb-2",
+              "bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]",
+              "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+              sidebarCollapsed ? "justify-center p-3" : "justify-center gap-2 px-4 py-2.5"
+            )}
+            title={sidebarCollapsed ? (theme === 'dark' ? 'Mode clair' : 'Mode sombre') : undefined}
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400" />
+                {!sidebarCollapsed && <span className="text-sm">Mode clair</span>}
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-indigo-500" />
+                {!sidebarCollapsed && <span className="text-sm">Mode sombre</span>}
+              </>
+            )}
+          </button>
+
+          {/* Toggle Sidebar Button */}
           <button
             onClick={toggleSidebar}
             className={cn(
-              "w-full flex items-center rounded-lg transition-all",
-              "hover:bg-[var(--bg-tertiary)]",
-              "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
-              sidebarCollapsed ? "justify-center p-2" : "justify-center gap-2 px-3 py-1.5"
+              "w-full flex items-center rounded-xl transition-all",
+              "bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]",
+              "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+              sidebarCollapsed ? "justify-center p-3" : "justify-center gap-2 px-4 py-2.5"
             )}
             title={sidebarCollapsed ? 'Ouvrir le menu' : 'Réduire le menu'}
           >
@@ -196,8 +295,8 @@ export function Layout({ children }: LayoutProps) {
               <PanelLeft className="w-4 h-4" />
             ) : (
               <>
-                <PanelLeftClose className="w-3.5 h-3.5" />
-                <span className="text-xs">Réduire</span>
+                <PanelLeftClose className="w-4 h-4" />
+                <span className="text-sm">Réduire</span>
               </>
             )}
           </button>
@@ -209,7 +308,7 @@ export function Layout({ children }: LayoutProps) {
         {/* Topbar */}
         <header className="h-16 flex items-center justify-between px-6 transition-theme bg-[var(--bg-secondary)] border-b border-[var(--border-secondary)]">
           <h2 className="text-lg font-bold text-[var(--text-primary)]">
-            {modules.find((m) => m.id === moduleActif)?.name}
+            {moduleActif === 'admin' ? 'Administration' : allModules.find((m) => m.id === moduleActif)?.name || 'Tableau de bord'}
           </h2>
 
           <div className="flex items-center gap-3">
@@ -235,6 +334,15 @@ export function Layout({ children }: LayoutProps) {
               ) : (
                 <Moon className="w-5 h-5 text-indigo-500" />
               )}
+            </button>
+
+            {/* Dictée vocale */}
+            <button
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+              title="Dictée vocale"
+            >
+              <Mic className="w-3.5 h-3.5" />
+              Dictée
             </button>
 
             {/* NFC Scanner */}

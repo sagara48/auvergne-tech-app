@@ -1,27 +1,55 @@
-// src/hooks/useRealtimeSubscriptions.ts
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
+import { useAppStore } from '@/stores/appStore';
 import toast from 'react-hot-toast';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // ID utilisateur actuel (à remplacer par auth)
 const CURRENT_USER_ID = '11111111-1111-1111-1111-111111111111';
 
+// Types pour les payloads
+type RealtimeEvent = 'INSERT' | 'UPDATE' | 'DELETE';
+
+interface RealtimePayload<T = any> {
+  eventType: RealtimeEvent;
+  new: T;
+  old: T;
+  schema: string;
+  table: string;
+}
+
+// Configuration des canaux
+interface ChannelConfig {
+  name: string;
+  table: string;
+  filter?: string;
+  onInsert?: (payload: any) => void;
+  onUpdate?: (payload: any) => void;
+  onDelete?: (payload: any) => void;
+  queryKeys: string[][];
+  showToast?: boolean;
+  toastConfig?: {
+    insert?: { icon: string; message: (data: any) => string };
+    update?: { icon: string; message: (data: any) => string };
+  };
+}
+
 /**
- * Hook principal - S'abonne à TOUTES les tables de l'application
+ * Hook principal pour gérer toutes les subscriptions temps réel
  */
 export function useRealtimeSubscriptions() {
   const queryClient = useQueryClient();
+  const { theme } = useAppStore();
 
   useEffect(() => {
     const channels: RealtimeChannel[] = [];
 
     // ============================================
-    // CANAL 1: NOTIFICATIONS (prioritaire)
+    // CANAL: NOTIFICATIONS
     // ============================================
     const notificationsChannel = supabase
-      .channel('rt-notifications')
+      .channel('realtime-notifications')
       .on(
         'postgres_changes',
         {
@@ -33,11 +61,15 @@ export function useRealtimeSubscriptions() {
         (payload) => {
           queryClient.invalidateQueries({ queryKey: ['notifications'] });
           queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+          queryClient.invalidateQueries({ queryKey: ['notifications-widget'] });
 
           if (payload.eventType === 'INSERT') {
             const notif = payload.new as any;
             if (notif.priority === 'urgent' || notif.priority === 'high') {
-              toast(notif.titre, { icon: notif.icone || '🔔', duration: 5000 });
+              toast(notif.titre, {
+                icon: notif.icone || '🔔',
+                duration: 5000,
+              });
             }
           }
         }
@@ -46,369 +78,396 @@ export function useRealtimeSubscriptions() {
     channels.push(notificationsChannel);
 
     // ============================================
-    // CANAL 2: TRAVAUX + PIÈCES + ÉTAPES
+    // CANAL: TRAVAUX
     // ============================================
     const travauxChannel = supabase
-      .channel('rt-travaux')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'travaux' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['travaux'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-        queryClient.invalidateQueries({ queryKey: ['planning'] });
-        queryClient.invalidateQueries({ queryKey: ['v_travaux_avancement'] });
+      .channel('realtime-travaux')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'travaux' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['travaux'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+          queryClient.invalidateQueries({ queryKey: ['planning'] });
 
-        if (payload.eventType === 'INSERT') {
-          toast.success('Nouveau travaux créé', { icon: '🔧' });
-        } else if (payload.eventType === 'UPDATE') {
-          const t = payload.new as any;
-          if (t.statut === 'termine') toast.success(`Travaux ${t.code} terminé`, { icon: '✅' });
+          if (payload.eventType === 'INSERT') {
+            toast.success('Nouveau travaux créé', { icon: '🔧' });
+          } else if (payload.eventType === 'UPDATE') {
+            const travaux = payload.new as any;
+            if (travaux.statut === 'termine') {
+              toast.success(`Travaux ${travaux.code} terminé`, { icon: '✅' });
+            }
+          }
         }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'travaux_pieces' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['travaux-pieces'] });
-        queryClient.invalidateQueries({ queryKey: ['v_travaux_avancement'] });
-        
-        if (payload.eventType === 'UPDATE') {
-          const p = payload.new as any;
-          if (p.statut === 'installe') toast.success('Pièce installée', { icon: '✅' });
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'travaux_etapes' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['travaux-etapes'] });
-        queryClient.invalidateQueries({ queryKey: ['v_travaux_avancement'] });
-        
-        if (payload.eventType === 'UPDATE') {
-          const e = payload.new as any;
-          if (e.statut === 'termine') toast.success(`Étape "${e.titre}" terminée`, { icon: '✅' });
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'travaux_temps' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['travaux-temps'] });
-        queryClient.invalidateQueries({ queryKey: ['v_travaux_avancement'] });
-      })
+      )
       .subscribe();
     channels.push(travauxChannel);
 
     // ============================================
-    // CANAL 3: ASCENSEURS + PARC
+    // CANAL: ASCENSEURS
     // ============================================
     const ascenseursChannel = supabase
-      .channel('rt-ascenseurs')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ascenseurs' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['ascenseurs'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-        queryClient.invalidateQueries({ queryKey: ['parc-ascenseurs'] });
+      .channel('realtime-ascenseurs')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ascenseurs' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['ascenseurs'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 
-        if (payload.eventType === 'UPDATE') {
-          const asc = payload.new as any;
-          const old = payload.old as any;
-          if (asc.statut === 'en_panne' && old.statut !== 'en_panne') {
-            toast.error(`🚨 ${asc.code} en panne !`, { duration: 6000 });
-          }
-          if (asc.statut === 'en_service' && old.statut === 'en_panne') {
-            toast.success(`✅ ${asc.code} remis en service`);
+          if (payload.eventType === 'UPDATE') {
+            const asc = payload.new as any;
+            const oldAsc = payload.old as any;
+            
+            // Notification si passage en panne
+            if (asc.statut === 'en_panne' && oldAsc.statut !== 'en_panne') {
+              toast.error(`🚨 ${asc.code} en panne !`, { duration: 6000 });
+            }
+            // Notification si remise en service
+            if (asc.statut === 'en_service' && oldAsc.statut === 'en_panne') {
+              toast.success(`✅ ${asc.code} remis en service`, { duration: 4000 });
+            }
           }
         }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'parc_ascenseurs' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['parc-ascenseurs'] });
-      })
+      )
       .subscribe();
     channels.push(ascenseursChannel);
 
     // ============================================
-    // CANAL 4: STOCK COMPLET (dépôt + véhicules + mouvements)
-    // ============================================
-    const stockChannel = supabase
-      .channel('rt-stock')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_articles' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['stock'] });
-        queryClient.invalidateQueries({ queryKey: ['articles'] });
-        queryClient.invalidateQueries({ queryKey: ['stock-articles'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-        queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
-        
-        if (payload.eventType === 'UPDATE') {
-          const art = payload.new as any;
-          const old = payload.old as any;
-          if (art.quantite_stock <= art.seuil_critique && old.quantite_stock > art.seuil_critique) {
-            toast.error(`Stock critique: ${art.reference}`, { icon: '⚠️' });
-          }
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_vehicule' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['stock-vehicule'] });
-        queryClient.invalidateQueries({ queryKey: ['alertes-stock-vehicule'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-        queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_mouvements' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_transferts' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['transferts'] });
-        queryClient.invalidateQueries({ queryKey: ['stock'] });
-
-        if (payload.eventType === 'INSERT') {
-          toast('Nouvelle demande de transfert', { icon: '📦' });
-        } else if (payload.eventType === 'UPDATE') {
-          const t = payload.new as any;
-          if (t.statut === 'valide') toast.success('Transfert validé', { icon: '✅' });
-          if (t.statut === 'refuse') toast.error('Transfert refusé', { icon: '❌' });
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_demandes_reappro' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['demandes-reappro'] });
-        
-        if (payload.eventType === 'INSERT') {
-          toast('Nouvelle demande de réappro', { icon: '🚚' });
-        } else if (payload.eventType === 'UPDATE') {
-          const d = payload.new as any;
-          if (d.statut === 'validee') toast.success('Demande réappro validée');
-          if (d.statut === 'livree') toast.success('Réappro livrée !', { icon: '📦' });
-        }
-      })
-      .subscribe();
-    channels.push(stockChannel);
-
-    // ============================================
-    // CANAL 5: MISE EN SERVICE
+    // CANAL: MISE EN SERVICE
     // ============================================
     const mesChannel = supabase
-      .channel('rt-mes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mise_en_service' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['mise-en-service'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      .channel('realtime-mise-en-service')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mise_en_service' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['mise-en-service'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 
-        if (payload.eventType === 'UPDATE') {
-          const mes = payload.new as any;
-          if (mes.statut === 'termine') toast.success(`MES ${mes.code} terminée !`, { icon: '🎉' });
+          if (payload.eventType === 'UPDATE') {
+            const mes = payload.new as any;
+            if (mes.statut === 'termine') {
+              toast.success(`MES ${mes.code} terminée !`, { icon: '🎉' });
+            }
+          }
         }
-      })
+      )
       .subscribe();
     channels.push(mesChannel);
 
     // ============================================
-    // CANAL 6: CHAT & MESSAGERIE
+    // CANAL: STOCK - TRANSFERTS
     // ============================================
-    const chatChannel = supabase
-      .channel('rt-chat')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['chat-messages'] });
-        queryClient.invalidateQueries({ queryKey: ['chat-channels'] });
+    const transfertsChannel = supabase
+      .channel('realtime-transferts')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'stock_transferts' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['transferts'] });
+          queryClient.invalidateQueries({ queryKey: ['stock'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 
-        const msg = payload.new as any;
-        if (msg.sender_id !== CURRENT_USER_ID) {
-          if (msg.mentions?.includes(CURRENT_USER_ID)) {
-            toast('Vous avez été mentionné', { icon: '💬' });
+          if (payload.eventType === 'INSERT') {
+            toast('Nouvelle demande de transfert', { icon: '📦' });
+          } else if (payload.eventType === 'UPDATE') {
+            const transfert = payload.new as any;
+            if (transfert.statut === 'valide') {
+              toast.success('Transfert validé', { icon: '✅' });
+            } else if (transfert.statut === 'refuse') {
+              toast.error('Transfert refusé', { icon: '❌' });
+            }
           }
         }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_channels' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['chat-channels'] });
-      })
+      )
+      .subscribe();
+    channels.push(transfertsChannel);
+
+    // ============================================
+    // CANAL: STOCK - ARTICLES
+    // ============================================
+    const stockChannel = supabase
+      .channel('realtime-stock')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'stock_vehicules' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['stock'] });
+          queryClient.invalidateQueries({ queryKey: ['stock-vehicule'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'stock_articles' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['articles'] });
+          queryClient.invalidateQueries({ queryKey: ['stock'] });
+        }
+      )
+      .subscribe();
+    channels.push(stockChannel);
+
+    // ============================================
+    // CANAL: CHAT - MESSAGES
+    // ============================================
+    const chatChannel = supabase
+      .channel('realtime-chat')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'chat_messages' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['chat-messages'] });
+          queryClient.invalidateQueries({ queryKey: ['chat-channels'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
+          const msg = payload.new as any;
+          // Toast si mention ou message direct (pas de self-notification)
+          if (msg.user_id !== CURRENT_USER_ID) {
+            if (msg.contenu?.includes(`@${CURRENT_USER_ID}`) || msg.mentions?.includes(CURRENT_USER_ID)) {
+              toast('Vous avez été mentionné', { icon: '💬' });
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chat_channels' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['chat-channels'] });
+        }
+      )
       .subscribe();
     channels.push(chatChannel);
 
     // ============================================
-    // CANAL 7: NOTES
-    // ============================================
-    const notesChannel = supabase
-      .channel('rt-notes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['notes'] });
-        queryClient.invalidateQueries({ queryKey: ['context-notes'] });
-        
-        if (payload.eventType === 'INSERT') {
-          const n = payload.new as any;
-          if (n.partage && n.technicien_id !== CURRENT_USER_ID) {
-            toast('Nouvelle note partagée', { icon: '📝' });
-          }
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes_commentaires' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['note-commentaires'] });
-      })
-      .subscribe();
-    channels.push(notesChannel);
-
-    // ============================================
-    // CANAL 8: DOCUMENTS / GED
-    // ============================================
-    const gedChannel = supabase
-      .channel('rt-ged')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['documents'] });
-        queryClient.invalidateQueries({ queryKey: ['documents-lies'] });
-        queryClient.invalidateQueries({ queryKey: ['ged'] });
-        
-        if (payload.eventType === 'INSERT') {
-          toast('Nouveau document ajouté', { icon: '📄' });
-        }
-      })
-      .subscribe();
-    channels.push(gedChannel);
-
-    // ============================================
-    // CANAL 9: COMMANDES
-    // ============================================
-    const commandesChannel = supabase
-      .channel('rt-commandes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['commandes'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-
-        if (payload.eventType === 'UPDATE') {
-          const cmd = payload.new as any;
-          if (cmd.statut === 'recue') toast.success(`Commande ${cmd.code} reçue !`, { icon: '📦' });
-          if (cmd.statut === 'expediee') toast(`Commande ${cmd.code} expédiée`, { icon: '🚚' });
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'commande_lignes' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['commandes'] });
-      })
-      .subscribe();
-    channels.push(commandesChannel);
-
-    // ============================================
-    // CANAL 10: DEMANDES
-    // ============================================
-    const demandesChannel = supabase
-      .channel('rt-demandes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'demandes' }, (payload) => {
-        queryClient.invalidateQueries({ queryKey: ['demandes'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-
-        if (payload.eventType === 'INSERT') {
-          toast('Nouvelle demande', { icon: '📋' });
-        } else if (payload.eventType === 'UPDATE') {
-          const d = payload.new as any;
-          if (d.statut === 'validee') toast.success('Demande validée');
-          if (d.statut === 'refusee') toast.error('Demande refusée');
-        }
-      })
-      .subscribe();
-    channels.push(demandesChannel);
-
-    // ============================================
-    // CANAL 11: PLANNING
+    // CANAL: PLANNING - ÉVÉNEMENTS
     // ============================================
     const planningChannel = supabase
-      .channel('rt-planning')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'planning_events' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['planning'] });
-        queryClient.invalidateQueries({ queryKey: ['planning-events'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      })
+      .channel('realtime-planning')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'evenements' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['evenements'] });
+          queryClient.invalidateQueries({ queryKey: ['planning'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'astreintes' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['astreintes'] });
+          queryClient.invalidateQueries({ queryKey: ['planning'] });
+        }
+      )
       .subscribe();
     channels.push(planningChannel);
 
     // ============================================
-    // CANAL 12: VÉHICULES
+    // CANAL: NOTES
     // ============================================
-    const vehiculesChannel = supabase
-      .channel('rt-vehicules')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicules' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['vehicules'] });
-        queryClient.invalidateQueries({ queryKey: ['vehicule'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      })
+    const notesChannel = supabase
+      .channel('realtime-notes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notes' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['notes'] });
+          queryClient.invalidateQueries({ queryKey: ['context-notes'] });
+          queryClient.invalidateQueries({ queryKey: ['notes-widget'] });
+
+          // Toast si note partagée par quelqu'un d'autre
+          if (payload.eventType === 'INSERT') {
+            const note = payload.new as any;
+            if (note.partage && note.technicien_id !== CURRENT_USER_ID) {
+              toast('Nouvelle note partagée', { icon: '📝' });
+            }
+          }
+        }
+      )
       .subscribe();
-    channels.push(vehiculesChannel);
+    channels.push(notesChannel);
 
     // ============================================
-    // CANAL 13: TOURNÉES
+    // CANAL: DEMANDES
     // ============================================
-    const tourneesChannel = supabase
-      .channel('rt-tournees')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tournees' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['tournees'] });
-        queryClient.invalidateQueries({ queryKey: ['planning'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tournee_ascenseurs' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['tournees'] });
-      })
+    const demandesChannel = supabase
+      .channel('realtime-demandes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'demandes' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['demandes'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
+          if (payload.eventType === 'INSERT') {
+            toast('Nouvelle demande reçue', { icon: '📋' });
+          }
+        }
+      )
       .subscribe();
-    channels.push(tourneesChannel);
+    channels.push(demandesChannel);
 
     // ============================================
-    // CANAL 14: NFC
+    // CANAL: COMMANDES
+    // ============================================
+    const commandesChannel = supabase
+      .channel('realtime-commandes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'commandes' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['commandes'] });
+          queryClient.invalidateQueries({ queryKey: ['archives'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
+          if (payload.eventType === 'UPDATE') {
+            const cmd = payload.new as any;
+            if (cmd.statut === 'recue') {
+              toast.success(`Commande ${cmd.code} reçue !`, { icon: '📦' });
+            } else if (cmd.statut === 'expediee') {
+              toast(`Commande ${cmd.code} expédiée`, { icon: '🚚' });
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'commande_lignes' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['commandes'] });
+        }
+      )
+      .subscribe();
+    channels.push(commandesChannel);
+
+    // ============================================
+    // CANAL: NFC
     // ============================================
     const nfcChannel = supabase
-      .channel('rt-nfc')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'nfc_tags' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['nfc-tags'] });
-        queryClient.invalidateQueries({ queryKey: ['nfc-stats'] });
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'nfc_scans' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['nfc-scans'] });
-        queryClient.invalidateQueries({ queryKey: ['nfc-stats'] });
-      })
+      .channel('realtime-nfc')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'nfc_tags' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['nfc-tags'] });
+          queryClient.invalidateQueries({ queryKey: ['nfc-stats'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'nfc_scans' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['nfc-scans'] });
+          queryClient.invalidateQueries({ queryKey: ['nfc-stats'] });
+        }
+      )
       .subscribe();
     channels.push(nfcChannel);
 
     // ============================================
-    // CANAL 15: FEUILLES D'HEURES
+    // CANAL: TOURNÉES
+    // ============================================
+    const tourneesChannel = supabase
+      .channel('realtime-tournees')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tournees' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['tournees'] });
+          queryClient.invalidateQueries({ queryKey: ['planning'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tournee_ascenseurs' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['tournees'] });
+        }
+      )
+      .subscribe();
+    channels.push(tourneesChannel);
+
+    // ============================================
+    // CANAL: VÉHICULES
+    // ============================================
+    const vehiculesChannel = supabase
+      .channel('realtime-vehicules')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'vehicules' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['vehicules'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        }
+      )
+      .subscribe();
+    channels.push(vehiculesChannel);
+
+    // ============================================
+    // CANAL: FEUILLES D'HEURES
     // ============================================
     const heuresChannel = supabase
-      .channel('rt-heures')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'semaines' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['semaine'] });
-        queryClient.invalidateQueries({ queryKey: ['feuille-heures'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'jours' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['semaine'] });
-        queryClient.invalidateQueries({ queryKey: ['jours'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'taches' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['semaine'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'astreintes' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['semaine'] });
-        queryClient.invalidateQueries({ queryKey: ['astreintes'] });
-      })
+      .channel('realtime-heures')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'semaines' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['semaine'] });
+          queryClient.invalidateQueries({ queryKey: ['feuille-heures'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'jours' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['semaine'] });
+          queryClient.invalidateQueries({ queryKey: ['jours'] });
+        }
+      )
       .subscribe();
     channels.push(heuresChannel);
 
     // ============================================
-    // CANAL 16: CLIENTS
+    // CANAL: GED - DOCUMENTS
     // ============================================
-    const clientsChannel = supabase
-      .channel('rt-clients')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['clients'] });
-      })
+    const gedChannel = supabase
+      .channel('realtime-ged')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'documents' },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['documents'] });
+          queryClient.invalidateQueries({ queryKey: ['ged'] });
+        }
+      )
       .subscribe();
-    channels.push(clientsChannel);
+    channels.push(gedChannel);
 
     // ============================================
-    // CANAL 17: TECHNICIENS
-    // ============================================
-    const techniciensChannel = supabase
-      .channel('rt-techniciens')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'techniciens' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['techniciens'] });
-        queryClient.invalidateQueries({ queryKey: ['equipe'] });
-      })
-      .subscribe();
-    channels.push(techniciensChannel);
-
-    // ============================================
-    // CANAL 18: DASHBOARD CONFIG
+    // CANAL: DASHBOARD CONFIGS
     // ============================================
     const dashboardChannel = supabase
-      .channel('rt-dashboard')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'dashboard_configs',
-        filter: `technicien_id=eq.${CURRENT_USER_ID}`,
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ['dashboard-config'] });
-      })
+      .channel('realtime-dashboard')
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'dashboard_configs',
+          filter: `technicien_id=eq.${CURRENT_USER_ID}`,
+        },
+        (payload) => {
+          queryClient.invalidateQueries({ queryKey: ['dashboard-config'] });
+        }
+      )
       .subscribe();
     channels.push(dashboardChannel);
 
-    // Cleanup
+    // Cleanup: fermer tous les canaux
     return () => {
       channels.forEach(channel => {
         supabase.removeChannel(channel);
@@ -418,7 +477,7 @@ export function useRealtimeSubscriptions() {
 }
 
 /**
- * Hook pour s'abonner à une table spécifique (usage ponctuel)
+ * Hook pour s'abonner à une table spécifique
  */
 export function useRealtimeTable<T = any>(
   table: string,
@@ -434,7 +493,7 @@ export function useRealtimeTable<T = any>(
 
   useEffect(() => {
     const channel = supabase
-      .channel(`rt-custom-${table}-${options.filter || 'all'}`)
+      .channel(`realtime-${table}-${options.filter || 'all'}`)
       .on(
         'postgres_changes',
         {
@@ -444,10 +503,12 @@ export function useRealtimeTable<T = any>(
           ...(options.filter && { filter: options.filter }),
         },
         (payload) => {
+          // Invalider les queries
           options.queryKeys.forEach(key => {
             queryClient.invalidateQueries({ queryKey: key });
           });
 
+          // Callbacks
           if (payload.eventType === 'INSERT' && options.onInsert) {
             options.onInsert(payload.new as T);
           }
@@ -472,72 +533,27 @@ export function useRealtimeTable<T = any>(
  */
 export function useRealtimeStatus() {
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
-  const [latency, setLatency] = useState<number | null>(null);
 
   useEffect(() => {
-    let pingInterval: NodeJS.Timeout;
-    
     const channel = supabase
-      .channel('connection-status-check')
+      .channel('connection-status')
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           setStatus('connected');
-          
-          // Ping pour mesurer latence
-          pingInterval = setInterval(async () => {
-            const start = Date.now();
-            try {
-              await supabase.from('techniciens').select('id').limit(1).single();
-              setLatency(Date.now() - start);
-            } catch {
-              setLatency(null);
-            }
-          }, 30000);
-          
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
           setStatus('disconnected');
-          setLatency(null);
         } else {
           setStatus('connecting');
         }
       });
 
     return () => {
-      clearInterval(pingInterval);
       supabase.removeChannel(channel);
     };
   }, []);
 
-  return { status, latency };
+  return status;
 }
 
-/**
- * Hook pour compter les connexions actives (Presence)
- */
-export function useRealtimePresence(roomName: string = 'app-presence') {
-  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-
-  useEffect(() => {
-    const channel = supabase.channel(roomName, {
-      config: { presence: { key: CURRENT_USER_ID } },
-    });
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const users = Object.keys(state);
-        setOnlineUsers(users);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: CURRENT_USER_ID, online_at: new Date().toISOString() });
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [roomName]);
-
-  return onlineUsers;
-}
+// Import manquant
+import { useState } from 'react';

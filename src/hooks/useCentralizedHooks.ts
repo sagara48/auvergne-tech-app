@@ -1,767 +1,411 @@
 // src/hooks/useCentralizedHooks.ts
-// Hooks centralisés et optimisés pour Auvergne Tech
-// Évite les requêtes dupliquées et optimise le cache
-
-import { useQuery, useQueryClient, useMutation, UseQueryOptions } from '@tanstack/react-query';
+import { useEffect, useState, useCallback } from 'react';
+import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
-import { useMemo, useCallback, useState, useEffect } from 'react';
-import { differenceInDays, parseISO, subMonths, addDays } from 'date-fns';
+import toast from 'react-hot-toast';
 
-// =============================================
-// CONFIGURATION CACHE
-// =============================================
-
-export const CACHE_CONFIG = {
-  STATIC: { staleTime: 10 * 60 * 1000, gcTime: 30 * 60 * 1000 },
-  DYNAMIC: { staleTime: 2 * 60 * 1000, gcTime: 10 * 60 * 1000 },
-  REALTIME: { staleTime: 30 * 1000, gcTime: 5 * 60 * 1000, refetchInterval: 60 * 1000 },
-  CRITICAL: { staleTime: 15 * 1000, gcTime: 2 * 60 * 1000, refetchInterval: 30 * 1000 },
-};
-
-// =============================================
-// TYPES
-// =============================================
-
-export interface ParcAscenseur {
-  id_wsoucont: string;
-  code_appareil: string;
-  adresse: string;
-  ville: string;
-  code_postal: string;
-  secteur: number;
-  ordre2: number;
-  type_planning: string;
-  en_arret: boolean;
-  date_arret: string | null;
-  motif_arret: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  marque: string;
-  type_machine: string;
-  date_installation: string | null;
-  client_nom: string;
-}
-
-export interface Travaux {
-  id: string;
-  code: string;
-  titre: string;
-  description: string;
-  code_appareil: string;
-  priorite: string;
-  statut: string;
-  progression: number;
-  date_butoir: string | null;
-  technicien_id: string | null;
-  pieces: any[];
-}
-
-export interface Document {
-  id: string;
-  nom: string;
-  description: string;
-  type: string;
-  categorie: string;
-  fichier_url: string;
-  taille: number;
-  code_appareil: string | null;
-  date_expiration: string | null;
-  created_at: string;
-  technicien_id: string | null;
-}
-
-export interface Note {
-  id: string;
-  titre: string;
-  contenu: string;
-  code_ascenseur: string | null;
-  travaux_id: string | null;
-  partage: boolean;
-  important: boolean;
-  created_at: string;
-  technicien_id: string | null;
-}
-
-export interface Vehicule {
-  id: string;
-  immatriculation: string;
-  marque: string;
-  modele: string;
-  kilometrage: number;
-  date_prochain_ct: string | null;
-  prochain_entretien_km: number | null;
-  technicien_id: string | null;
-}
-
-export interface AlerteEntretien {
-  id: string;
-  type: 'vehicule' | 'ascenseur';
-  code: string;
-  nom: string;
-  typeAlerte: 'ct' | 'vidange' | 'visite' | 'controle';
-  dateEcheance?: string;
-  kmRestant?: number;
-  urgence: 'critique' | 'haute' | 'moyenne' | 'basse';
-  details?: string;
-}
-
-// =============================================
-// HOOK: PARC ASCENSEURS
-// =============================================
-
-export function useParcAscenseurs(options?: {
-  secteur?: number;
-  enArretOnly?: boolean;
-  enabled?: boolean;
-}) {
-  const { secteur, enArretOnly, enabled = true } = options || {};
-
-  return useQuery({
-    queryKey: ['parc-ascenseurs', { secteur, enArretOnly }],
-    queryFn: async () => {
-      let query = supabase.from('parc_ascenseurs').select('*').order('code_appareil');
-      if (secteur) query = query.eq('secteur', secteur);
-      if (enArretOnly) query = query.eq('en_arret', true);
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []) as ParcAscenseur[];
-    },
-    enabled,
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-export function useParcAscenseursLeger() {
-  return useQuery({
-    queryKey: ['parc-ascenseurs-leger'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('parc_ascenseurs')
-        .select('id_wsoucont, code_appareil, adresse, ville, secteur, ordre2, type_planning')
-        .not('type_planning', 'is', null)
-        .order('code_appareil');
-      if (error) throw error;
-      return data || [];
-    },
-    ...CACHE_CONFIG.STATIC,
-  });
-}
-
-export function useSearchAscenseurs(search: string, enabled = true) {
-  return useQuery({
-    queryKey: ['search-ascenseurs', search],
-    queryFn: async () => {
-      if (search.length < 2) return [];
-      const { data, error } = await supabase
-        .from('parc_ascenseurs')
-        .select('id_wsoucont, code_appareil, adresse, ville, secteur, ordre2')
-        .or(`code_appareil.ilike.%${search}%,adresse.ilike.%${search}%,ville.ilike.%${search}%`)
-        .order('code_appareil')
-        .limit(20);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: enabled && search.length >= 2,
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-export function useAscenseurByCode(codeAppareil: string, enabled = true) {
-  return useQuery({
-    queryKey: ['ascenseur', codeAppareil],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('parc_ascenseurs')
-        .select('*')
-        .eq('code_appareil', codeAppareil)
-        .single();
-      if (error) throw error;
-      return data as ParcAscenseur;
-    },
-    enabled: enabled && !!codeAppareil,
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-// =============================================
-// HOOK: PANNES
-// =============================================
-
-export function usePannesActives() {
-  return useQuery({
-    queryKey: ['pannes-actives'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('parc_pannes')
-        .select('*, ascenseur:parc_ascenseurs!code_appareil(adresse, ville, secteur)')
-        .is('date_fin_panne', null)
-        .order('date_appel', { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    ...CACHE_CONFIG.CRITICAL,
-  });
-}
-
-export function usePannesParAppareil(codeAppareil: string, enabled = true) {
-  return useQuery({
-    queryKey: ['pannes-appareil', codeAppareil],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('parc_pannes')
-        .select('*')
-        .eq('code_appareil', codeAppareil)
-        .order('date_appel', { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: enabled && !!codeAppareil,
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-// =============================================
-// HOOK: TRAVAUX
-// =============================================
-
-export function useTravauxActifs() {
-  return useQuery({
-    queryKey: ['travaux-actifs'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('travaux')
-        .select(`*, technicien:techniciens!travaux_technicien_id_fkey(id, prenom, nom)`)
-        .in('statut', ['planifie', 'en_cours'])
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-export function useTravauxParAppareil(codeAppareil: string, enabled = true) {
-  return useQuery({
-    queryKey: ['travaux-appareil', codeAppareil],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('travaux')
-        .select(`*, technicien:techniciens!travaux_technicien_id_fkey(prenom, nom)`)
-        .eq('code_appareil', codeAppareil)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: enabled && !!codeAppareil,
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-export function useTravauxNonPlanifies() {
-  return useQuery({
-    queryKey: ['travaux-non-planifies'],
-    queryFn: async () => {
-      const [{ data: travaux }, { data: events }] = await Promise.all([
-        supabase.from('travaux').select('*').in('statut', ['planifie', 'en_cours']),
-        supabase.from('planning_events').select('travaux_id').not('travaux_id', 'is', null),
-      ]);
-      const planifiesIds = new Set(events?.map(e => e.travaux_id) || []);
-      return (travaux || []).filter(t => !planifiesIds.has(t.id));
-    },
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-// =============================================
-// HOOK: DOCUMENTS GED
-// =============================================
-
-export function useDocuments(options?: {
-  codeAppareil?: string;
-  categorie?: string;
-  limit?: number;
-}) {
-  const { codeAppareil, categorie, limit = 100 } = options || {};
-
-  return useQuery({
-    queryKey: ['documents', { codeAppareil, categorie }],
-    queryFn: async () => {
-      let query = supabase
-        .from('documents')
-        .select('*, technicien:techniciens(prenom, nom)')
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-      if (codeAppareil) {
-        query = query.eq('code_appareil', codeAppareil);
-      }
-      if (categorie) {
-        query = query.eq('categorie', categorie);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []) as Document[];
-    },
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-export function useDocumentsAscenseur(codeAppareil: string, enabled = true) {
-  return useQuery({
-    queryKey: ['documents-ascenseur', codeAppareil],
-    queryFn: async () => {
-      // Documents liés directement
-      const { data: docsDirect } = await supabase
-        .from('documents')
-        .select('*, technicien:techniciens(prenom, nom)')
-        .eq('code_appareil', codeAppareil)
-        .order('created_at', { ascending: false });
-
-      // Documents mentionnant le code
-      const { data: docsIndirect } = await supabase
-        .from('documents')
-        .select('*, technicien:techniciens(prenom, nom)')
-        .or(`nom.ilike.%${codeAppareil}%,description.ilike.%${codeAppareil}%`)
-        .order('created_at', { ascending: false });
-
-      // Fusionner et dédupliquer
-      const allDocs = [...(docsDirect || []), ...(docsIndirect || [])];
-      return allDocs.filter((doc, index, self) =>
-        index === self.findIndex(d => d.id === doc.id)
-      ) as Document[];
-    },
-    enabled: enabled && !!codeAppareil,
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-export function useDocumentsExpiration() {
-  return useQuery({
-    queryKey: ['documents-expiration'],
-    queryFn: async () => {
-      const now = new Date().toISOString();
-      const in30Days = addDays(new Date(), 30).toISOString();
-
-      const [{ data: expired }, { data: expiring }] = await Promise.all([
-        supabase.from('documents').select('*').lt('date_expiration', now),
-        supabase.from('documents').select('*').gte('date_expiration', now).lte('date_expiration', in30Days),
-      ]);
-
-      return {
-        expired: expired || [],
-        expiring: expiring || [],
-        total: (expired?.length || 0) + (expiring?.length || 0),
-      };
-    },
-    ...CACHE_CONFIG.REALTIME,
-  });
-}
-
-// =============================================
-// HOOK: NOTES
-// =============================================
-
-export function useNotes(options?: {
-  codeAppareil?: string;
-  travauxId?: string;
-  partageOnly?: boolean;
-  limit?: number;
-}) {
-  const { codeAppareil, travauxId, partageOnly = true, limit = 50 } = options || {};
-
-  return useQuery({
-    queryKey: ['notes', { codeAppareil, travauxId, partageOnly }],
-    queryFn: async () => {
-      let allNotes: any[] = [];
-
-      if (codeAppareil) {
-        const { data } = await supabase
-          .from('notes')
-          .select('*, technicien:technicien_id(prenom, nom)')
-          .eq('partage', partageOnly)
-          .or(`code_ascenseur.eq.${codeAppareil},contenu.ilike.%${codeAppareil}%,titre.ilike.%${codeAppareil}%`)
-          .order('created_at', { ascending: false })
-          .limit(limit);
-        allNotes = [...allNotes, ...(data || [])];
-      }
-
-      if (travauxId) {
-        const { data } = await supabase
-          .from('notes')
-          .select('*, technicien:technicien_id(prenom, nom)')
-          .eq('travaux_id', travauxId)
-          .order('created_at', { ascending: false });
-        allNotes = [...allNotes, ...(data || [])];
-      }
-
-      // Dédupliquer
-      return allNotes.filter((note, index, self) =>
-        index === self.findIndex(n => n.id === note.id)
-      ).slice(0, limit) as Note[];
-    },
-    enabled: !!codeAppareil || !!travauxId,
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-export function useCreateNote() {
+// ============================================
+// HOOK TRAVAUX
+// ============================================
+export function useTravaux(filters?: { statut?: string; technicien_id?: string }) {
   const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (note: Partial<Note>) => {
-      const { data, error } = await supabase.from('notes').insert(note).select().single();
+
+  const query = useQuery({
+    queryKey: ['travaux', filters],
+    queryFn: async () => {
+      let q = supabase
+        .from('travaux')
+        .select(`
+          *,
+          client:clients(*),
+          ascenseur:ascenseurs(*),
+          technicien:techniciens(*)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (filters?.statut) q = q.eq('statut', filters.statut);
+      if (filters?.technicien_id) q = q.eq('technicien_id', filters.technicien_id);
+
+      const { data, error } = await q;
       if (error) throw error;
       return data;
     },
+  });
+
+  const updateTravaux = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Record<string, unknown> }) => {
+      const { error } = await supabase.from('travaux').update(updates).eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['travaux'] });
+      toast.success('Travaux mis à jour');
+    },
+    onError: (error) => {
+      toast.error('Erreur: ' + error.message);
     },
   });
+
+  return {
+    travaux: query.data || [],
+    loading: query.isLoading,
+    error: query.error,
+    refetch: query.refetch,
+    updateTravaux: updateTravaux.mutate,
+  };
 }
 
-// =============================================
-// HOOK: VEHICULES
-// =============================================
+// ============================================
+// HOOK ASCENSEURS
+// ============================================
+export function useAscenseurs(filters?: { secteur?: string; statut?: string }) {
+  const queryClient = useQueryClient();
 
-export function useVehicules() {
-  return useQuery({
-    queryKey: ['vehicules'],
+  const query = useQuery({
+    queryKey: ['ascenseurs', filters],
+    queryFn: async () => {
+      let q = supabase
+        .from('ascenseurs')
+        .select(`
+          *,
+          client:clients(*)
+        `)
+        .order('code');
+
+      if (filters?.secteur) q = q.eq('secteur', filters.secteur);
+      if (filters?.statut) q = q.eq('statut', filters.statut);
+
+      const { data, error } = await q;
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const updateAscenseur = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Record<string, unknown> }) => {
+      const { error } = await supabase.from('ascenseurs').update(updates).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ascenseurs'] });
+      toast.success('Ascenseur mis à jour');
+    },
+  });
+
+  return {
+    ascenseurs: query.data || [],
+    loading: query.isLoading,
+    error: query.error,
+    refetch: query.refetch,
+    updateAscenseur: updateAscenseur.mutate,
+  };
+}
+
+// ============================================
+// HOOK PANNES
+// ============================================
+export function usePannes(filters?: { statut?: string }) {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['pannes', filters],
+    queryFn: async () => {
+      let q = supabase
+        .from('pannes')
+        .select(`
+          *,
+          ascenseur:ascenseurs(*),
+          client:clients(*)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (filters?.statut) q = q.eq('statut', filters.statut);
+
+      const { data, error } = await q;
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const createPanne = useMutation({
+    mutationFn: async (panne: Record<string, unknown>) => {
+      const { error } = await supabase.from('pannes').insert(panne);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pannes'] });
+      queryClient.invalidateQueries({ queryKey: ['ascenseurs'] });
+      toast.success('Panne signalée');
+    },
+  });
+
+  const resoudrePanne = useMutation({
+    mutationFn: async ({ id, resolution }: { id: string; resolution: string }) => {
+      const { error } = await supabase
+        .from('pannes')
+        .update({ statut: 'resolue', resolution, date_resolution: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pannes'] });
+      queryClient.invalidateQueries({ queryKey: ['ascenseurs'] });
+      toast.success('Panne résolue');
+    },
+  });
+
+  return {
+    pannes: query.data || [],
+    loading: query.isLoading,
+    error: query.error,
+    refetch: query.refetch,
+    createPanne: createPanne.mutate,
+    resoudrePanne: resoudrePanne.mutate,
+  };
+}
+
+// ============================================
+// HOOK STOCK
+// ============================================
+export function useStock(vehiculeId?: string) {
+  const queryClient = useQueryClient();
+
+  const stockVehicule = useQuery({
+    queryKey: ['stock-vehicule', vehiculeId],
+    queryFn: async () => {
+      if (!vehiculeId) return [];
+      const { data, error } = await supabase
+        .from('stock_vehicule')
+        .select(`
+          *,
+          article:stock_articles(*)
+        `)
+        .eq('vehicule_id', vehiculeId);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!vehiculeId,
+  });
+
+  const stockDepot = useQuery({
+    queryKey: ['stock-depot'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('vehicules')
-        .select('*, technicien:techniciens(id, prenom, nom)')
-        .order('immatriculation');
+        .from('stock_articles')
+        .select('*')
+        .order('designation');
       if (error) throw error;
-      return (data || []) as Vehicule[];
+      return data;
     },
-    ...CACHE_CONFIG.STATIC,
   });
-}
 
-export function useVehiculeAlertes() {
-  return useQuery({
-    queryKey: ['vehicule-alertes'],
-    queryFn: async () => {
-      const { data: vehicules } = await supabase
-        .from('vehicules')
-        .select('*, technicien:techniciens(prenom, nom)');
-
-      const alertes: AlerteEntretien[] = [];
-
-      vehicules?.forEach(v => {
-        // CT
-        if (v.date_prochain_ct) {
-          const jours = differenceInDays(parseISO(v.date_prochain_ct), new Date());
-          if (jours <= 60) {
-            alertes.push({
-              id: `ct-${v.id}`,
-              type: 'vehicule',
-              code: v.immatriculation,
-              nom: `${v.marque} ${v.modele}`,
-              typeAlerte: 'ct',
-              dateEcheance: v.date_prochain_ct,
-              urgence: jours <= 0 ? 'critique' : jours <= 15 ? 'haute' : jours <= 30 ? 'moyenne' : 'basse',
-              details: v.technicien ? `${v.technicien.prenom} ${v.technicien.nom}` : undefined,
-            });
-          }
-        }
-        // Vidange
-        if (v.prochain_entretien_km && v.kilometrage) {
-          const km = v.prochain_entretien_km - v.kilometrage;
-          if (km <= 1000) {
-            alertes.push({
-              id: `vidange-${v.id}`,
-              type: 'vehicule',
-              code: v.immatriculation,
-              nom: `${v.marque} ${v.modele}`,
-              typeAlerte: 'vidange',
-              kmRestant: km,
-              urgence: km <= 0 ? 'critique' : km <= 200 ? 'haute' : km <= 500 ? 'moyenne' : 'basse',
-              details: `${v.kilometrage?.toLocaleString()} km`,
-            });
-          }
-        }
-      });
-
-      return alertes;
-    },
-    ...CACHE_CONFIG.REALTIME,
-  });
-}
-
-// =============================================
-// HOOK: ALERTES ENTRETIEN (Combiné)
-// =============================================
-
-export function useAlertesEntretien() {
-  return useQuery({
-    queryKey: ['alertes-entretien'],
-    queryFn: async () => {
-      const alertes: AlerteEntretien[] = [];
-
-      // Véhicules
-      const { data: vehicules } = await supabase
-        .from('vehicules')
-        .select('*, technicien:techniciens(prenom, nom)');
-
-      vehicules?.forEach(v => {
-        if (v.date_prochain_ct) {
-          const jours = differenceInDays(parseISO(v.date_prochain_ct), new Date());
-          if (jours <= 60) {
-            alertes.push({
-              id: `ct-${v.id}`, type: 'vehicule', code: v.immatriculation,
-              nom: `${v.marque} ${v.modele}`, typeAlerte: 'ct',
-              dateEcheance: v.date_prochain_ct,
-              urgence: jours <= 0 ? 'critique' : jours <= 15 ? 'haute' : jours <= 30 ? 'moyenne' : 'basse',
-            });
-          }
-        }
-        if (v.prochain_entretien_km && v.kilometrage) {
-          const km = v.prochain_entretien_km - v.kilometrage;
-          if (km <= 1000) {
-            alertes.push({
-              id: `vidange-${v.id}`, type: 'vehicule', code: v.immatriculation,
-              nom: `${v.marque} ${v.modele}`, typeAlerte: 'vidange',
-              kmRestant: km,
-              urgence: km <= 0 ? 'critique' : km <= 200 ? 'haute' : km <= 500 ? 'moyenne' : 'basse',
-            });
-          }
-        }
-      });
-
-      // Ascenseurs - visites en retard
-      const { data: visites } = await supabase
-        .from('parc_visites')
-        .select('code_appareil, date_visite')
-        .order('date_visite', { ascending: false });
-
-      const dernieres = new Map<string, string>();
-      visites?.forEach(v => {
-        if (!dernieres.has(v.code_appareil)) dernieres.set(v.code_appareil, v.date_visite);
-      });
-
-      const { data: ascenseurs } = await supabase
-        .from('parc_ascenseurs')
-        .select('code_appareil, adresse, ville')
-        .not('type_planning', 'is', null);
-
-      ascenseurs?.forEach(asc => {
-        const derniere = dernieres.get(asc.code_appareil);
-        if (derniere) {
-          const jours = differenceInDays(new Date(), parseISO(derniere));
-          if (jours >= 45) {
-            alertes.push({
-              id: `visite-${asc.code_appareil}`, type: 'ascenseur',
-              code: asc.code_appareil, nom: `${asc.adresse}, ${asc.ville}`,
-              typeAlerte: 'visite', dateEcheance: derniere,
-              urgence: jours >= 90 ? 'critique' : jours >= 60 ? 'haute' : 'moyenne',
-            });
-          }
-        }
-      });
-
-      const order = { critique: 0, haute: 1, moyenne: 2, basse: 3 };
-      return alertes.sort((a, b) => order[a.urgence] - order[b.urgence]);
-    },
-    ...CACHE_CONFIG.REALTIME,
-  });
-}
-
-// =============================================
-// HOOK: STOCK & APPROVISIONNEMENT
-// =============================================
-
-export function useStockArticles() {
-  return useQuery({
-    queryKey: ['stock-articles'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('stock_articles').select('*').order('designation');
+  const updateStock = useMutation({
+    mutationFn: async ({ id, quantite }: { id: string; quantite: number }) => {
+      const { error } = await supabase
+        .from('stock_vehicule')
+        .update({ quantite })
+        .eq('id', id);
       if (error) throw error;
-      return data || [];
     },
-    ...CACHE_CONFIG.DYNAMIC,
-  });
-}
-
-export function useStockAlertes() {
-  return useQuery({
-    queryKey: ['stock-alertes'],
-    queryFn: async () => {
-      const { data } = await supabase.from('stock_articles').select('*');
-      const articles = data || [];
-      return {
-        ruptures: articles.filter(a => a.quantite_stock === 0),
-        alertes: articles.filter(a => a.quantite_stock > 0 && a.quantite_stock <= (a.seuil_alerte || 5)),
-        total: articles.filter(a => a.quantite_stock <= (a.seuil_alerte || 5)),
-      };
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-vehicule'] });
+      toast.success('Stock mis à jour');
     },
-    ...CACHE_CONFIG.CRITICAL,
   });
-}
-
-export function useChaineApprovisionnement() {
-  return useQuery({
-    queryKey: ['chaine-approvisionnement'],
-    queryFn: async () => {
-      const [{ data: articles }, { data: travaux }, { data: commandes }] = await Promise.all([
-        supabase.from('stock_articles').select('*'),
-        supabase.from('travaux').select('id, code, titre, code_appareil, pieces, statut')
-          .in('statut', ['planifie', 'en_cours']).not('pieces', 'is', null),
-        supabase.from('commandes').select('*, fournisseur:fournisseurs(nom)')
-          .in('statut', ['en_attente', 'commandee', 'en_transit']),
-      ]);
-
-      const ruptures = articles?.filter(a => a.quantite_stock === 0) || [];
-      const alertes = articles?.filter(a => a.quantite_stock > 0 && a.quantite_stock <= (a.seuil_alerte || 5)) || [];
-
-      // Travaux bloqués par manque de stock
-      const travauxBloques = travaux?.filter(t => {
-        const pieces = t.pieces as any[];
-        return pieces?.some(p => {
-          const art = articles?.find(a => a.id === p.article_id);
-          return art && art.quantite_stock < (p.quantite || 1);
-        });
-      }) || [];
-
-      return {
-        articles: articles || [],
-        ruptures,
-        alertes,
-        travauxBloques,
-        commandes: commandes || [],
-        stats: {
-          totalArticles: articles?.length || 0,
-          ruptures: ruptures.length,
-          alertes: alertes.length,
-          travauxBloques: travauxBloques.length,
-          commandesEnCours: commandes?.length || 0,
-        },
-      };
-    },
-    ...CACHE_CONFIG.REALTIME,
-  });
-}
-
-// =============================================
-// HOOK: TECHNICIENS
-// =============================================
-
-export function useTechniciens(actifOnly = true) {
-  return useQuery({
-    queryKey: ['techniciens', { actifOnly }],
-    queryFn: async () => {
-      let query = supabase.from('techniciens').select('*').order('nom');
-      if (actifOnly) query = query.eq('actif', true);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
-    },
-    ...CACHE_CONFIG.STATIC,
-  });
-}
-
-// =============================================
-// HOOK: STATISTIQUES GLOBALES
-// =============================================
-
-export function useStatsGlobales() {
-  return useQuery({
-    queryKey: ['stats-globales'],
-    queryFn: async () => {
-      const [
-        { data: arrets }, { data: pannes }, { data: travaux },
-        { data: mes }, { data: stock },
-      ] = await Promise.all([
-        supabase.from('parc_ascenseurs').select('id').eq('en_arret', true),
-        supabase.from('parc_pannes').select('id').is('date_fin_panne', null),
-        supabase.from('travaux').select('statut').in('statut', ['planifie', 'en_cours']),
-        supabase.from('mise_en_service').select('statut').in('statut', ['planifie', 'en_cours']),
-        supabase.from('stock_articles').select('quantite_stock, seuil_alerte'),
-      ]);
-
-      return {
-        ascenseursEnArret: arrets?.length || 0,
-        pannesActives: pannes?.length || 0,
-        travauxEnCours: travaux?.length || 0,
-        mesEnCours: mes?.length || 0,
-        stockAlertes: (stock || []).filter(a => a.quantite_stock <= (a.seuil_alerte || 5)).length,
-      };
-    },
-    ...CACHE_CONFIG.REALTIME,
-  });
-}
-
-// =============================================
-// HOOK: INVALIDATION
-// =============================================
-
-export function useInvalidateAll() {
-  const queryClient = useQueryClient();
 
   return {
-    invalidateTravaux: useCallback(() => {
-      queryClient.invalidateQueries({ queryKey: ['travaux'] });
-      queryClient.invalidateQueries({ queryKey: ['travaux-actifs'] });
-      queryClient.invalidateQueries({ queryKey: ['stats-globales'] });
-    }, [queryClient]),
+    stockVehicule: stockVehicule.data || [],
+    stockDepot: stockDepot.data || [],
+    loading: stockVehicule.isLoading || stockDepot.isLoading,
+    error: stockVehicule.error || stockDepot.error,
+    refetch: () => {
+      stockVehicule.refetch();
+      stockDepot.refetch();
+    },
+    updateStock: updateStock.mutate,
+  };
+}
 
-    invalidateStock: useCallback(() => {
-      queryClient.invalidateQueries({ queryKey: ['stock'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-alertes'] });
-      queryClient.invalidateQueries({ queryKey: ['chaine-approvisionnement'] });
-    }, [queryClient]),
+// ============================================
+// HOOK NOTES
+// ============================================
+export function useNotes(technicienId?: string) {
+  const queryClient = useQueryClient();
 
-    invalidatePannes: useCallback(() => {
-      queryClient.invalidateQueries({ queryKey: ['pannes'] });
-      queryClient.invalidateQueries({ queryKey: ['pannes-actives'] });
-    }, [queryClient]),
+  const query = useQuery({
+    queryKey: ['notes', technicienId],
+    queryFn: async () => {
+      let q = supabase
+        .from('notes')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    invalidateDocuments: useCallback(() => {
-      queryClient.invalidateQueries({ queryKey: ['documents'] });
-    }, [queryClient]),
+      if (technicienId) q = q.eq('technicien_id', technicienId);
 
-    invalidateNotes: useCallback(() => {
+      const { data, error } = await q;
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const createNote = useMutation({
+    mutationFn: async (note: Record<string, unknown>) => {
+      const { error } = await supabase.from('notes').insert(note);
+      if (error) throw error;
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
-    }, [queryClient]),
+      toast.success('Note créée');
+    },
+  });
 
-    invalidateAll: useCallback(() => {
-      queryClient.invalidateQueries();
-    }, [queryClient]),
+  const updateNote = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Record<string, unknown> }) => {
+      const { error } = await supabase.from('notes').update(updates).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      toast.success('Note mise à jour');
+    },
+  });
+
+  const deleteNote = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('notes').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      toast.success('Note supprimée');
+    },
+  });
+
+  return {
+    notes: query.data || [],
+    loading: query.isLoading,
+    error: query.error,
+    refetch: query.refetch,
+    createNote: createNote.mutate,
+    updateNote: updateNote.mutate,
+    deleteNote: deleteNote.mutate,
   };
 }
 
-// =============================================
-// HOOK: PREFETCH
-// =============================================
-
-export function usePrefetch() {
+// ============================================
+// HOOK CHAT
+// ============================================
+export function useChat(channelId: string) {
   const queryClient = useQueryClient();
 
+  const messages = useQuery({
+    queryKey: ['chat-messages', channelId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select(`
+          *,
+          sender:techniciens(*)
+        `)
+        .eq('channel_id', channelId)
+        .order('created_at', { ascending: true })
+        .limit(100);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const sendMessage = useMutation({
+    mutationFn: async ({ content, senderId }: { content: string; senderId: string }) => {
+      const { error } = await supabase.from('chat_messages').insert({
+        channel_id: channelId,
+        sender_id: senderId,
+        content,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chat-messages', channelId] });
+    },
+  });
+
   return {
-    prefetchAscenseur: useCallback((codeAppareil: string) => {
-      queryClient.prefetchQuery({
-        queryKey: ['pannes-appareil', codeAppareil],
-        queryFn: async () => {
-          const { data } = await supabase.from('parc_pannes').select('*')
-            .eq('code_appareil', codeAppareil).order('date_appel', { ascending: false });
-          return data || [];
-        },
-      });
-      queryClient.prefetchQuery({
-        queryKey: ['travaux-appareil', codeAppareil],
-        queryFn: async () => {
-          const { data } = await supabase.from('travaux').select('*').eq('code_appareil', codeAppareil);
-          return data || [];
-        },
-      });
-      queryClient.prefetchQuery({
-        queryKey: ['documents-ascenseur', codeAppareil],
-        queryFn: async () => {
-          const { data } = await supabase.from('documents').select('*').eq('code_appareil', codeAppareil);
-          return data || [];
-        },
-      });
-    }, [queryClient]),
+    messages: messages.data || [],
+    loading: messages.isLoading,
+    error: messages.error,
+    refetch: messages.refetch,
+    sendMessage: sendMessage.mutate,
   };
+}
+
+// ============================================
+// HOOK TECHNICIEN COURANT
+// ============================================
+export function useCurrentTechnicien() {
+  const [technicien, setTechnicien] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTechnicien = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from('techniciens')
+          .select('*, vehicule:vehicules(*)')
+          .eq('id', user.id)
+          .single();
+        setTechnicien(data);
+      }
+      setLoading(false);
+    };
+    fetchTechnicien();
+  }, []);
+
+  return { technicien, loading };
+}
+
+// ============================================
+// HOOK DASHBOARD STATS
+// ============================================
+export function useDashboardStats(technicienId?: string) {
+  return useQuery({
+    queryKey: ['dashboard-stats', technicienId],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Travaux du jour
+      const { data: travaux } = await supabase
+        .from('travaux')
+        .select('statut', { count: 'exact' })
+        .eq('technicien_id', technicienId)
+        .gte('date_debut', today);
+
+      // Pannes actives
+      const { count: pannesActives } = await supabase
+        .from('pannes')
+        .select('*', { count: 'exact', head: true })
+        .neq('statut', 'resolue');
+
+      // Ascenseurs en panne
+      const { count: ascenseursEnPanne } = await supabase
+        .from('ascenseurs')
+        .select('*', { count: 'exact', head: true })
+        .eq('statut', 'en_panne');
+
+      // Stock alertes
+      const { data: stockAlertes } = await supabase
+        .from('stock_vehicule')
+        .select('id')
+        .lte('quantite', 'seuil_alerte');
+
+      return {
+        travauxJour: travaux?.length || 0,
+        pannesActives: pannesActives || 0,
+        ascenseursEnPanne: ascenseursEnPanne || 0,
+        stockAlertes: stockAlertes?.length || 0,
+      };
+    },
+    enabled: !!technicienId,
+    refetchInterval: 30000, // Rafraîchir toutes les 30s
+  });
 }

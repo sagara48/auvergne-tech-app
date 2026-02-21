@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Plus, Search, X, Trash2, Package, CheckCircle2, Circle, 
@@ -6,7 +6,7 @@ import {
   AlertOctagon, MessageSquare, Clock, Route, AlertTriangle, Image
 } from 'lucide-react';
 import { Button, Card, CardBody, Badge, Input, Select } from '@/components/ui';
-import { getStockArticles, createStockMouvement, getTournees } from '@/services/api';
+import { getAscenseurs, getStockArticles, createStockMouvement, getTournees } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { usePanierStore } from '@/stores/panierStore';
 import type { Travaux, StatutTravaux, Priorite, StockArticle, Tournee } from '@/types';
@@ -130,14 +130,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
   const [showPieceForm, setShowPieceForm] = useState(false);
   const [pieceMode, setPieceMode] = useState<'stock' | 'manuel'>('stock');
   const [pieceSearch, setPieceSearch] = useState('');
-  const [ascenseurSearch, setAscenseurSearch] = useState('');
   const [newPiece, setNewPiece] = useState({ designation: '', reference: '', quantite: 1, source: 'stock' as 'stock' | 'commande' });
-
-  // États pour l'autocomplete ascenseur
-  const [selectedAscenseur, setSelectedAscenseur] = useState<any>(null);
-  const [showAscenseurResults, setShowAscenseurResults] = useState(false);
-  const [isSearchingAscenseurs, setIsSearchingAscenseurs] = useState(false);
-  const [ascenseurResults, setAscenseurResults] = useState<any[]>([]);
 
   // Sections dépliables
   const [showTaches, setShowTaches] = useState(true);
@@ -152,67 +145,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
     },
   });
 
-  // Recherche ascenseur côté serveur (debounced)
-  useEffect(() => {
-    if (ascenseurSearch.length < 2) {
-      setAscenseurResults([]);
-      return;
-    }
-
-    setIsSearchingAscenseurs(true);
-    
-    const timeoutId = setTimeout(async () => {
-      try {
-        const searchTerm = ascenseurSearch.toLowerCase();
-        const { data, error } = await supabase
-          .from('parc_ascenseurs')
-          .select('id_wsoucont, code_appareil, adresse, ville, secteur, ordre2, type_planning')
-          .or(`code_appareil.ilike.%${searchTerm}%,adresse.ilike.%${searchTerm}%,ville.ilike.%${searchTerm}%`)
-          .order('code_appareil')
-          .limit(20);
-        
-        if (error) {
-          console.warn('Erreur recherche ascenseur:', error.message);
-          setAscenseurResults([]);
-        } else {
-          setAscenseurResults(data || []);
-        }
-      } catch (err) {
-        console.error('Exception recherche ascenseur:', err);
-        setAscenseurResults([]);
-      } finally {
-        setIsSearchingAscenseurs(false);
-      }
-    }, 300); // Debounce 300ms
-
-    return () => clearTimeout(timeoutId);
-  }, [ascenseurSearch]);
-
-  // Charger l'ascenseur initial si on édite un travail existant
-  useEffect(() => {
-    if (travaux?.ascenseur_id && !selectedAscenseur) {
-      // Chercher l'ascenseur par son code
-      const loadInitialAscenseur = async () => {
-        const { data } = await supabase
-          .from('parc_ascenseurs')
-          .select('id_wsoucont, code_appareil, adresse, ville, secteur, ordre2, type_planning')
-          .eq('code_appareil', travaux.ascenseur_id)
-          .maybeSingle();
-        
-        if (data) {
-          setSelectedAscenseur(data);
-        }
-      };
-      loadInitialAscenseur();
-    }
-  }, [travaux?.ascenseur_id]);
-
-  // Fermer le dropdown quand on clique ailleurs
-  useEffect(() => {
-    const handleClickOutside = () => setShowAscenseurResults(false);
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, []);
+  const { data: ascenseurs } = useQuery({ queryKey: ['ascenseurs'], queryFn: getAscenseurs });
 
   const { data: techniciens } = useQuery({
     queryKey: ['techniciens'],
@@ -233,27 +166,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
   });
 
   const techs = techniciens?.filter(t => t.role?.code === 'technicien' || t.role?.code === 'chef_equipe') || [];
-
-  // Effet: auto-sélection de la tournée quand un ascenseur est sélectionné
-  useEffect(() => {
-    if (form.ascenseur_id && selectedAscenseur && tournees) {
-      if (selectedAscenseur.secteur && selectedAscenseur.ordre2) {
-        // Chercher une tournée qui correspond au secteur
-        const tourneeMatch = tournees.find((t: any) => {
-          // Correspondance par secteur
-          if (t.secteur === selectedAscenseur.secteur) return true;
-          // Ou par code contenant le secteur
-          const codeMatch = t.code?.match(/S(\d+)/);
-          if (codeMatch && parseInt(codeMatch[1]) === selectedAscenseur.secteur) return true;
-          return false;
-        });
-        
-        if (tourneeMatch && !form.tournee_id) {
-          setForm(prev => ({ ...prev, tournee_id: tourneeMatch.id }));
-        }
-      }
-    }
-  }, [form.ascenseur_id, selectedAscenseur, tournees]);
+  const filteredAscenseurs = form.client_id ? ascenseurs?.filter(a => a.client_id === form.client_id) : ascenseurs;
 
   // Filtrer les articles pour la recherche
   const filteredArticles = stockArticles?.filter(a => 
@@ -431,22 +344,14 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
 
     const piecesUpdated = [...pieces];
 
-    // form.ascenseur_id contient maintenant directement le code_appareil
-    const codeAppareil = form.ascenseur_id;
-
     for (const piece of piecesAConsommer) {
       try {
-        // Utiliser la bonne signature avec code_appareil pour traçabilité
+        // Utiliser la bonne signature: (articleId, type, quantite, motif)
         await createStockMouvement(
           piece.article_id!,
           'sortie',
           piece.quantite,
-          `Travaux: ${form.titre}`,
-          {
-            code_appareil: codeAppareil,
-            reference_doc: travaux?.code || form.titre,
-            technicien_id: form.technicien_id || undefined,
-          }
+          `Travaux: ${form.titre}`
         );
         
         // Marquer comme consommée
@@ -468,16 +373,9 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
       queryClient.invalidateQueries({ queryKey: ['stock-mouvements'] });
     }
 
-    // Préparer les données à sauvegarder
-    // Exclure ascenseur_id car il contient le code_appareil (pas un UUID)
-    // Exclure aussi client_id s'il est vide
-    const { ascenseur_id, client_id, technicien_id, tournee_id, ...formClean } = form;
-
-    // Construire l'objet final en excluant les champs vides
-    const dataToSave: any = {
-      ...formClean,
-      code_appareil: ascenseur_id || null,
-      devis_montant: form.devis_montant ? parseFloat(form.devis_montant as string) : null,
+    onSave({
+      ...form,
+      devis_montant: form.devis_montant ? parseFloat(form.devis_montant as string) : undefined,
       date_butoir: form.date_butoir || null,
       taches: taches.map(t => ({
         id: t.id,
@@ -497,14 +395,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
         consommee: p.consommee,
       })),
       progression: calculerProgression(),
-    };
-
-    // Ajouter les FK seulement si elles sont remplies (UUIDs valides)
-    if (client_id && client_id.length > 10) dataToSave.client_id = client_id;
-    if (technicien_id && technicien_id.length > 10) dataToSave.technicien_id = technicien_id;
-    if (tournee_id && tournee_id.length > 10) dataToSave.tournee_id = tournee_id;
-
-    onSave(dataToSave);
+    });
   };
 
   const getStatutIcon = (statut: TacheForm['statut']) => {
@@ -560,111 +451,20 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Ascenseur (Parc)</label>
-                
-                {/* Ascenseur sélectionné */}
-                {form.ascenseur_id && selectedAscenseur && (
-                  <div className="flex items-center justify-between p-2 mb-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-                    <div>
-                      <p className="text-sm font-mono font-bold text-purple-400">{selectedAscenseur.code_appareil}</p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {selectedAscenseur.adresse}, {selectedAscenseur.ville}
-                        {selectedAscenseur.ordre2 && (
-                          <span className="ml-2 text-lime-400">S{selectedAscenseur.secteur} T{selectedAscenseur.ordre2}</span>
-                        )}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setForm(prev => ({ ...prev, ascenseur_id: '', tournee_id: '' }));
-                        setSelectedAscenseur(null);
-                      }}
-                      className="p-1 hover:bg-[var(--bg-tertiary)] rounded"
-                    >
-                      <X className="w-4 h-4 text-[var(--text-muted)]" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Champ de recherche */}
-                {!form.ascenseur_id && (
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                    <input
-                      type="text"
-                      placeholder="Tapez au moins 2 caractères pour rechercher..."
-                      value={ascenseurSearch}
-                      onChange={e => {
-                        setAscenseurSearch(e.target.value);
-                        setShowAscenseurResults(true);
-                      }}
-                      onFocus={() => setShowAscenseurResults(true)}
-                      className="w-full pl-9 pr-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] text-sm focus:outline-none focus:border-purple-500"
-                    />
-                    
-                    {/* Dropdown résultats */}
-                    {showAscenseurResults && ascenseurSearch.length >= 2 && (
-                      <div className="absolute z-50 w-full mt-1 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded-xl shadow-xl max-h-64 overflow-auto">
-                        {isSearchingAscenseurs ? (
-                          <div className="p-4 text-center text-[var(--text-muted)]">
-                            <div className="animate-spin w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-2" />
-                            Recherche...
-                          </div>
-                        ) : ascenseurResults.length === 0 ? (
-                          <div className="p-4 text-center text-[var(--text-muted)]">
-                            Aucun résultat pour "{ascenseurSearch}"
-                          </div>
-                        ) : (
-                          <>
-                            {ascenseurResults.map((a: any) => (
-                              <button
-                                key={a.id_wsoucont || a.code_appareil}
-                                type="button"
-                                onClick={() => {
-                                  setForm(prev => ({ ...prev, ascenseur_id: a.code_appareil, tournee_id: '' }));
-                                  setSelectedAscenseur(a);
-                                  setAscenseurSearch('');
-                                  setShowAscenseurResults(false);
-                                }}
-                                className="w-full px-3 py-2 text-left hover:bg-[var(--bg-secondary)] border-b border-[var(--border-primary)] last:border-b-0"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <p className="text-sm font-mono font-semibold text-[var(--text-primary)]">
-                                      {a.code_appareil}
-                                    </p>
-                                    <p className="text-xs text-[var(--text-muted)]">
-                                      {a.adresse}, {a.ville}
-                                    </p>
-                                  </div>
-                                  {a.ordre2 && (
-                                    <span className="text-[10px] bg-lime-500/20 text-lime-400 px-1.5 py-0.5 rounded">
-                                      S{a.secteur} T{a.ordre2}
-                                    </span>
-                                  )}
-                                </div>
-                              </button>
-                            ))}
-                            {ascenseurResults.length >= 20 && (
-                              <div className="px-3 py-2 text-xs text-center text-[var(--text-muted)] bg-[var(--bg-secondary)]">
-                                Affinez votre recherche pour voir plus de résultats
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {ascenseurSearch.length > 0 && ascenseurSearch.length < 2 && !form.ascenseur_id && (
-                  <p className="text-xs text-[var(--text-muted)] mt-1">
-                    Tapez au moins 2 caractères...
-                  </p>
-                )}
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Client</label>
+                <Select value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value, ascenseur_id: '' })}>
+                  <option value="">Sélectionner...</option>
+                  {clients?.map(c => <option key={c.id} value={c.id}>{c.raison_sociale}</option>)}
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm text-[var(--text-tertiary)] mb-1 block">Ascenseur</label>
+                <Select value={form.ascenseur_id} onChange={e => setForm({ ...form, ascenseur_id: e.target.value })}>
+                  <option value="">Sélectionner...</option>
+                  {filteredAscenseurs?.map(a => <option key={a.id} value={a.id}>{a.code} - {a.adresse}</option>)}
+                </Select>
               </div>
             </div>
 
@@ -680,11 +480,6 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
                 <label className="text-sm text-[var(--text-tertiary)] mb-1 block flex items-center gap-2">
                   <Route className="w-4 h-4 text-green-400" />
                   Tournée d'entretien
-                  {selectedAscenseur?.ordre2 && (
-                    <span className="text-[10px] bg-lime-500/20 text-lime-400 px-1.5 py-0.5 rounded">
-                      S{selectedAscenseur.secteur} T{selectedAscenseur.ordre2}
-                    </span>
-                  )}
                 </label>
                 <Select value={form.tournee_id} onChange={e => setForm({ ...form, tournee_id: e.target.value })}>
                   <option value="">Aucune tournée</option>

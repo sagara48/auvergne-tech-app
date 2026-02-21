@@ -63,7 +63,7 @@ export async function getTravaux(includeArchived = false): Promise<Travaux[]> {
   try {
     const { data, error } = await supabase
       .from('travaux')
-      .select('*, code_appareil, client:clients(*), technicien:techniciens!travaux_technicien_id_fkey(*), ascenseur:ascenseurs(*)')
+      .select('*, client:clients(*), technicien:techniciens!travaux_technicien_id_fkey(*), ascenseur:ascenseurs(*)')
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -79,32 +79,13 @@ export async function getTravaux(includeArchived = false): Promise<Travaux[]> {
 
 export async function createTravaux(travaux: Partial<Travaux>): Promise<Travaux> {
   const code = `TRV-${String(Date.now()).slice(-6)}`;
-  
-  // Nettoyer les champs UUID vides (sinon erreur Postgres)
-  const cleanData: any = { ...travaux, code };
-  const uuidFields = ['client_id', 'ascenseur_id', 'technicien_id', 'tournee_id'];
-  uuidFields.forEach(field => {
-    if (cleanData[field] === '' || cleanData[field] === null || cleanData[field] === undefined) {
-      delete cleanData[field];
-    }
-  });
-  
-  const { data, error } = await supabase.from('travaux').insert(cleanData).select().single();
+  const { data, error } = await supabase.from('travaux').insert({ ...travaux, code }).select().single();
   if (error) throw error;
   return data;
 }
 
 export async function updateTravaux(id: string, data: Partial<Travaux>): Promise<Travaux> {
-  // Nettoyer les champs UUID vides
-  const cleanData: any = { ...data };
-  const uuidFields = ['client_id', 'ascenseur_id', 'technicien_id', 'tournee_id'];
-  uuidFields.forEach(field => {
-    if (cleanData[field] === '') {
-      cleanData[field] = null;
-    }
-  });
-  
-  const { data: result, error } = await supabase.from('travaux').update(cleanData).eq('id', id).select().single();
+  const { data: result, error } = await supabase.from('travaux').update(data).eq('id', id).select().single();
   if (error) throw error;
   return result;
 }
@@ -176,35 +157,13 @@ export async function deleteStockArticle(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function createStockMouvement(
-  articleId: string, 
-  type: string, 
-  quantite: number, 
-  motif?: string,
-  options?: {
-    code_appareil?: string;
-    reference_doc?: string;
-    technicien_id?: string;
-    vehicule_id?: string;
-  }
-) {
+export async function createStockMouvement(articleId: string, type: string, quantite: number, motif?: string) {
   const article = await supabase.from('stock_articles').select('quantite_stock').eq('id', articleId).single();
   if (article.error) throw article.error;
   
   const newQty = type === 'entree' ? article.data.quantite_stock + quantite : article.data.quantite_stock - quantite;
   
-  await supabase.from('stock_mouvements').insert({ 
-    article_id: articleId, 
-    type_mouvement: type, 
-    quantite, 
-    motif, 
-    quantite_avant: article.data.quantite_stock, 
-    quantite_apres: newQty,
-    code_appareil: options?.code_appareil,
-    reference_doc: options?.reference_doc,
-    technicien_id: options?.technicien_id,
-    vehicule_id: options?.vehicule_id,
-  });
+  await supabase.from('stock_mouvements').insert({ article_id: articleId, type_mouvement: type, quantite, motif, quantite_avant: article.data.quantite_stock, quantite_apres: newQty });
   await supabase.from('stock_articles').update({ quantite_stock: newQty }).eq('id', articleId);
 }
 

@@ -45,36 +45,9 @@ import {
   ClockWidget,
   QuickLinksWidget,
   ChecklistWidget,
-  TechnicienDashboardWidget,
-  AlertesStockReapproWidget,
-  SuiviVehiculeWidget,
-  PlanningTravauxWidget,
-  PiecesRemplaceesWidget,
-  TravauxBloquesStockWidget,
-  TravauxParTourneeWidget,
-  AnalysePredictiveWidget,
-  TravauxParSecteurWidget,
-  StockAlertesPreventivesWidget,
-  TravauxAPlanifierWidget,
 } from './widgets';
-// Synergies widgets
-import { 
-  AstreintePannesWidget, 
-  ChargeTechWidget, 
-  ChaineApproWidget,
-  GEDWidget,
-  AlertesEntretienWidget,
-  StockTourneeWidget,
-  RecurrencePannesWidget,
-  AgePiecesWidget,
-  PrevisionConsoWidget,
-  FeedbackTerrainWidget,
-  DicteeVocaleWidget,
-  ScanNFCWidget,
-  ModeHorsLigneWidget,
-  AbsencesWidget,
-} from '@/components/integrations';
 import { NotificationsWidget } from '@/components/notifications';
+import { SynergyPanel } from './SynergyPanel';
 import toast from 'react-hot-toast';
 
 // ID utilisateur actuel (à remplacer par auth)
@@ -111,39 +84,6 @@ const WIDGET_COMPONENTS: Record<string, React.FC<{ onRemove?: () => void }>> = {
   'clock': ClockWidget,
   'quick-links': QuickLinksWidget,
   'checklist': ChecklistWidget,
-  // Nouveaux widgets synergies
-  'technicien-dashboard': TechnicienDashboardWidget,
-  'alertes-stock-reappro': AlertesStockReapproWidget,
-  'suivi-vehicule': SuiviVehiculeWidget,
-  'planning-travaux': PlanningTravauxWidget,
-  'pieces-remplacees': PiecesRemplaceesWidget,
-  // Widgets synergies modules
-  'travaux-bloques-stock': TravauxBloquesStockWidget,
-  'travaux-par-tournee': TravauxParTourneeWidget,
-  'analyse-predictive': AnalysePredictiveWidget,
-  // Nouvelles synergies avancées
-  'travaux-par-secteur': TravauxParSecteurWidget,
-  'stock-alertes-preventives': StockAlertesPreventivesWidget,
-  'travaux-a-planifier': TravauxAPlanifierWidget,
-  // Synergies avancées v2
-  'astreinte-pannes': AstreintePannesWidget,
-  'charge-techniciens': ChargeTechWidget,
-  'chaine-appro': ChaineApproWidget,
-  // Synergies V3
-  'ged-ascenseurs': GEDWidget,
-  'alertes-entretien-v3': AlertesEntretienWidget,
-  // Synergies V4
-  'stock-tournee': StockTourneeWidget,
-  'recurrence-pannes': RecurrencePannesWidget,
-  // Synergies V5
-  'age-pieces': AgePiecesWidget,
-  'prevision-conso': PrevisionConsoWidget,
-  'feedback-terrain': FeedbackTerrainWidget,
-  // Synergies V6
-  'dictee-vocale': DicteeVocaleWidget,
-  'scan-nfc': ScanNFCWidget,
-  'mode-hors-ligne': ModeHorsLigneWidget,
-  'absences-reaffectation': AbsencesWidget,
 };
 
 // Modal pour ajouter des widgets
@@ -450,6 +390,9 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Panneau de synergies inter-modules */}
+      <SynergyPanel />
 
       {/* Grille de widgets */}
       <div id="dashboard-container" className="relative">

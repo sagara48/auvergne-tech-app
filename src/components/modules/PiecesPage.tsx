@@ -1,16 +1,14 @@
-import React, { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Search, Camera, Upload, ExternalLink, Package, Cpu, DoorOpen, 
   Cog, Shield, Cable, Box, CircleDot, History, Plus, X, Loader2,
   Sparkles, Eye, Bookmark, BookmarkCheck, ChevronRight, Image,
   Building2, Filter, RefreshCw, Trash2, Download, Copy, Check,
-  AlertCircle, Info, Tag, Clock, Wrench, FileText, Heart, ShoppingCart
+  AlertCircle, Info, Tag, Clock, Wrench, FileText
 } from 'lucide-react';
-import { MonCatalogue } from './MonCatalogue';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
-import { usePanierStore } from '@/stores/panierStore';
 import {
   getFournisseurs,
   getCategoriesPieces,
@@ -23,7 +21,7 @@ import {
   supprimerPiecePersonnelle,
   getUrlRechercheFournisseur,
   uploadPhotoPiece,
-  compressImageForAnalysis,
+  fileToBase64,
   MARQUES_ASCENSEURS,
   TYPES_PIECES,
   type AnalysePhotoResult,
@@ -47,255 +45,6 @@ const CATEGORY_ICONS: Record<string, any> = {
   'CABLAGE': Cable,
   'DIVERS': Package,
 };
-
-// Fonction pour générer l'URL vers le site fournisseur
-function getUrlPieceFournisseur(fournisseur: string | undefined, reference: string): string | null {
-  if (!fournisseur || !reference) return null;
-  
-  const ref = encodeURIComponent(reference);
-  
-  switch (fournisseur.toUpperCase()) {
-    case 'SODIMAS':
-      return `https://my.sodimas.com/fr/recherche?search=${ref}`;
-    case 'HAUER':
-      return `https://www.hfrepartition.com/catalogsearch/result/?q=${ref}`;
-    case 'MGTI':
-      return `https://www.mgti.fr/?s=${ref}&post_type=product`;
-    case 'MP':
-      return `https://www.mp-servicenter.com/portal/repuestos-ascensores-mp?search=${ref}`;
-    default:
-      return `https://www.google.com/search?q=${ref}+${encodeURIComponent(fournisseur)}+ascenseur`;
-  }
-}
-
-// Modal détail pièce catalogue
-function DetailPieceModal({
-  piece,
-  onClose,
-}: {
-  piece: PieceCatalogue;
-  onClose: () => void;
-}) {
-  const urlFournisseur = getUrlPieceFournisseur(piece.fournisseur_code, piece.reference);
-
-  // Couleur badge fournisseur
-  const getFournisseurColor = (f: string | undefined) => {
-    switch (f?.toUpperCase()) {
-      case 'HAUER': return 'purple';
-      case 'SODIMAS': return 'blue';
-      case 'MGTI': return 'green';
-      case 'MP': return 'orange';
-      default: return 'gray';
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto" onClick={onClose}>
-      <Card className="w-full max-w-3xl my-4" onClick={e => e.stopPropagation()}>
-        <CardBody>
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Package className="w-6 h-6 text-purple-400" />
-              Détail de la pièce
-            </h2>
-            <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Colonne gauche - Image */}
-            <div className="space-y-4">
-              <div className="aspect-square bg-[var(--bg-tertiary)] rounded-xl flex items-center justify-center overflow-hidden relative">
-                {piece.photo_url ? (
-                  <img
-                    src={piece.photo_url}
-                    alt={piece.designation}
-                    className="max-w-[90%] max-h-[90%] object-contain"
-                    onError={e => (e.currentTarget.style.display = 'none')}
-                  />
-                ) : (
-                  <div className="text-center">
-                    <Package className="w-16 h-16 text-[var(--text-muted)] mx-auto" />
-                    <p className="text-sm text-[var(--text-muted)] mt-2">Pas d'image</p>
-                  </div>
-                )}
-                
-                {/* Badge source */}
-                <div className="absolute top-2 right-2">
-                  <Badge variant="blue" className="text-xs">
-                    📚 Catalogue
-                  </Badge>
-                </div>
-              </div>
-              
-              {/* Bouton principal accès site fournisseur */}
-              {urlFournisseur && (
-                <a
-                  href={urlFournisseur}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full p-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-semibold rounded-xl hover:opacity-90 transition-opacity"
-                >
-                  <ExternalLink className="w-5 h-5" />
-                  Voir sur {piece.fournisseur_code}
-                </a>
-              )}
-              
-              {/* Liens rapides vers autres fournisseurs */}
-              <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
-                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2 flex items-center gap-1">
-                  <Search className="w-3 h-3" />
-                  Rechercher ailleurs
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {['SODIMAS', 'HAUER', 'MGTI', 'MP'].map(f => {
-                    const url = getUrlPieceFournisseur(f, piece.reference);
-                    const isActive = f === piece.fournisseur_code?.toUpperCase();
-                    return (
-                      <a
-                        key={f}
-                        href={url || '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
-                          isActive 
-                            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
-                            : 'bg-[var(--bg-elevated)] hover:bg-[var(--bg-card)] text-[var(--text-secondary)]'
-                        }`}
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        {f}
-                      </a>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Colonne droite - Infos */}
-            <div className="space-y-4">
-              {/* Référence et désignation */}
-              <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
-                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Référence</p>
-                <div className="flex items-center gap-2">
-                  <p className="font-mono text-2xl font-bold text-purple-400 flex-1">{piece.reference}</p>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(piece.reference);
-                      toast.success('Référence copiée !');
-                    }}
-                    className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors"
-                    title="Copier la référence"
-                  >
-                    <Copy className="w-5 h-5 text-purple-400" />
-                  </button>
-                </div>
-              </div>
-              
-              <div>
-                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Désignation</p>
-                <p className="text-lg text-[var(--text-primary)]">{piece.designation}</p>
-              </div>
-
-              {/* Description si disponible */}
-              {piece.description && (
-                <div>
-                  <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Description</p>
-                  <p className="text-sm text-[var(--text-secondary)]">{piece.description}</p>
-                </div>
-              )}
-
-              {/* Badges */}
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={getFournisseurColor(piece.fournisseur_code) as any}>
-                  {piece.fournisseur_code || 'Non spécifié'}
-                </Badge>
-                {piece.marque_compatible && (
-                  <Badge variant="cyan">{piece.marque_compatible}</Badge>
-                )}
-                {piece.categorie_code && (
-                  <Badge variant="amber">{piece.categorie_code.replace(/_/g, ' ')}</Badge>
-                )}
-              </div>
-
-              {/* Prix */}
-              {piece.prix_ht && (
-                <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
-                  <p className="text-xs text-green-400 uppercase tracking-wide mb-1">Prix indicatif HT</p>
-                  <p className="text-2xl font-bold text-green-400">{piece.prix_ht.toFixed(2)} €</p>
-                </div>
-              )}
-
-              {/* Informations techniques */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                  <p className="text-xs text-[var(--text-muted)]">Fournisseur</p>
-                  <p className="font-semibold">{piece.fournisseur_code || '-'}</p>
-                </div>
-                <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                  <p className="text-xs text-[var(--text-muted)]">Marque compatible</p>
-                  <p className="font-semibold">{piece.marque_compatible || '-'}</p>
-                </div>
-              </div>
-
-              {/* Caractéristiques techniques si disponibles */}
-              {piece.caracteristiques && Object.keys(piece.caracteristiques).length > 0 && (
-                <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
-                  <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2">Caractéristiques</p>
-                  <div className="space-y-1">
-                    {Object.entries(piece.caracteristiques).map(([key, value]) => (
-                      <div key={key} className="flex justify-between text-sm">
-                        <span className="text-[var(--text-secondary)]">{key}</span>
-                        <span className="font-medium">{String(value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--border-primary)]">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                usePanierStore.getState().addItem({
-                  reference: piece.reference,
-                  designation: piece.designation,
-                  quantite: 1,
-                  fournisseur: piece.fournisseur_code,
-                });
-                toast.success(`${piece.reference} ajouté au panier`);
-              }}
-              className="bg-green-500/10 hover:bg-green-500/20 text-green-400 border-green-500/30"
-            >
-              <ShoppingCart className="w-4 h-4" />
-              Ajouter au panier
-            </Button>
-            {urlFournisseur && (
-              <a
-                href={urlFournisseur}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="secondary">
-                  <ExternalLink className="w-4 h-4" />
-                  Ouvrir sur {piece.fournisseur_code}
-                </Button>
-              </a>
-            )}
-            <Button variant="primary" onClick={onClose}>
-              Fermer
-            </Button>
-          </div>
-        </CardBody>
-      </Card>
-    </div>
-  );
-}
 
 // Modal d'analyse photo
 function AnalysePhotoModal({
@@ -334,8 +83,8 @@ function AnalysePhotoModal({
 
     setIsAnalysing(true);
     try {
-      // Compresser l'image avant envoi (max 1024px, 85% qualité)
-      const base64 = await compressImageForAnalysis(photo);
+      // Convertir en base64
+      const base64 = await fileToBase64(photo);
       
       // Analyser avec Claude Vision
       const result = await analyserPhotoPiece(base64, {
@@ -739,7 +488,6 @@ function AjoutPieceModal({
                   <option value="SODIMAS">Sodimas</option>
                   <option value="HAUER">Hauer</option>
                   <option value="MGTI">MGTI</option>
-                  <option value="MP">MP Servicenter</option>
                   <option value="AUTRE">Autre</option>
                 </Select>
               </div>
@@ -786,7 +534,6 @@ export function PiecesPage() {
   const [pieceAEditer, setPieceAEditer] = useState<Partial<PiecePersonnelle> | null>(null);
   const [filterFournisseur, setFilterFournisseur] = useState('');
   const [filterMarque, setFilterMarque] = useState('');
-  const [pieceDetail, setPieceDetail] = useState<PieceCatalogue | null>(null);
 
   // Queries
   const { data: fournisseurs } = useQuery({ queryKey: ['fournisseurs'], queryFn: getFournisseurs });
@@ -900,11 +647,11 @@ export function PiecesPage() {
           onClick={() => setActiveTab('catalogue')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === 'catalogue' 
-              ? 'bg-pink-500/20 text-pink-300' 
+              ? 'bg-green-500/20 text-green-300' 
               : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
           }`}
         >
-          <Heart className="w-4 h-4 inline mr-2" />
+          <BookmarkCheck className="w-4 h-4 inline mr-2" />
           Mon catalogue
           {piecesPerso && piecesPerso.length > 0 && (
             <Badge variant="green" className="ml-2">{piecesPerso.length}</Badge>
@@ -961,9 +708,9 @@ export function PiecesPage() {
             </Card>
 
             {/* Liens rapides fournisseurs */}
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
               <span className="text-sm text-[var(--text-muted)]">Rechercher sur :</span>
-              {['SODIMAS', 'HAUER', 'MGTI', 'MP'].map(code => (
+              {['SODIMAS', 'HAUER', 'MGTI'].map(code => (
                 <Button
                   key={code}
                   variant="secondary"
@@ -988,79 +735,29 @@ export function PiecesPage() {
 
             {search.length >= 2 && resultatsRecherche && resultatsRecherche.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {resultatsRecherche.map(piece => {
-                  const urlFournisseur = getUrlPieceFournisseur(piece.fournisseur_code, piece.reference);
-                  return (
-                    <Card 
-                      key={piece.id} 
-                      className="hover:border-purple-500/50 transition-colors cursor-pointer group"
-                      onClick={() => setPieceDetail(piece)}
-                    >
-                      <CardBody>
-                        <div className="flex gap-3">
-                          {piece.photo_url ? (
-                            <img src={piece.photo_url} alt={piece.designation} className="w-20 h-20 object-cover rounded-lg bg-[var(--bg-tertiary)]" />
-                          ) : (
-                            <div className="w-20 h-20 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
-                              <Package className="w-8 h-8 text-[var(--text-muted)]" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="font-mono text-sm text-purple-400">{piece.reference}</p>
-                            <p className="font-medium truncate">{piece.designation}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              {piece.marque_compatible && <Badge variant="blue">{piece.marque_compatible}</Badge>}
-                              {piece.fournisseur_code && <Badge variant="gray">{piece.fournisseur_code}</Badge>}
-                            </div>
-                            {piece.prix_ht && (
-                              <p className="text-sm text-green-400 font-semibold mt-1">{piece.prix_ht.toFixed(2)} € HT</p>
-                            )}
+                {resultatsRecherche.map(piece => (
+                  <Card key={piece.id} className="hover:border-purple-500/50 transition-colors">
+                    <CardBody>
+                      <div className="flex gap-3">
+                        {piece.photo_url ? (
+                          <img src={piece.photo_url} alt={piece.designation} className="w-20 h-20 object-cover rounded-lg bg-[var(--bg-tertiary)]" />
+                        ) : (
+                          <div className="w-20 h-20 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                            <Package className="w-8 h-8 text-[var(--text-muted)]" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-mono text-sm text-purple-400">{piece.reference}</p>
+                          <p className="font-medium truncate">{piece.designation}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            {piece.marque_compatible && <Badge variant="blue">{piece.marque_compatible}</Badge>}
+                            {piece.fournisseur_code && <Badge variant="gray">{piece.fournisseur_code}</Badge>}
                           </div>
                         </div>
-                        {/* Actions */}
-                        <div className="flex gap-2 mt-3 pt-3 border-t border-[var(--border-primary)]">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPieceDetail(piece);
-                            }}
-                            className="flex-1 py-2 px-3 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                          >
-                            <Eye className="w-3 h-3" />
-                            Détails
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              usePanierStore.getState().addItem({
-                                reference: piece.reference,
-                                designation: piece.designation,
-                                quantite: 1,
-                                fournisseur: piece.fournisseur_code,
-                              });
-                              toast.success(`${piece.reference} ajouté au panier`);
-                            }}
-                            className="flex-1 py-2 px-3 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                          >
-                            <ShoppingCart className="w-3 h-3" />
-                            Panier
-                          </button>
-                          {urlFournisseur && (
-                            <a
-                              href={urlFournisseur}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              className="py-2 px-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                      </CardBody>
-                    </Card>
-                  );
-                })}
+                      </div>
+                    </CardBody>
+                  </Card>
+                ))}
               </div>
             )}
 
@@ -1098,9 +795,76 @@ export function PiecesPage() {
           </div>
         )}
 
-        {/* Onglet Catalogue personnel - Mon Catalogue */}
+        {/* Onglet Catalogue personnel */}
         {activeTab === 'catalogue' && (
-          <MonCatalogue />
+          <div className="space-y-4">
+            {piecesPerso && piecesPerso.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {piecesPerso.map(piece => (
+                  <Card key={piece.id} className="group">
+                    <CardBody>
+                      <div className="flex gap-3">
+                        {piece.photo_url ? (
+                          <img src={piece.photo_url} alt={piece.designation} className="w-20 h-20 object-cover rounded-lg bg-[var(--bg-tertiary)]" />
+                        ) : (
+                          <div className="w-20 h-20 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
+                            <Package className="w-8 h-8 text-[var(--text-muted)]" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-mono text-sm text-green-400">{piece.reference}</p>
+                          <p className="font-medium truncate">{piece.designation}</p>
+                          {piece.fournisseur_prefere && (
+                            <Badge variant="gray" className="mt-1">{piece.fournisseur_prefere}</Badge>
+                          )}
+                          {piece.prix_achat && (
+                            <p className="text-sm text-[var(--text-muted)] mt-1">{piece.prix_achat} € HT</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (confirm('Supprimer cette pièce ?')) {
+                              supprimerPieceMutation.mutate(piece.id);
+                            }
+                          }}
+                          className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
+                      {piece.tags && piece.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {piece.tags.map((tag, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs text-[var(--text-muted)]">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </CardBody>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardBody className="text-center py-12">
+                  <BookmarkCheck className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-3" />
+                  <p className="text-[var(--text-secondary)]">Votre catalogue personnel est vide</p>
+                  <p className="text-sm text-[var(--text-muted)] mt-1">
+                    Ajoutez des pièces pour les retrouver facilement
+                  </p>
+                  <Button
+                    variant="secondary"
+                    className="mt-4"
+                    onClick={() => { setPieceAEditer(null); setShowAjoutModal(true); }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Ajouter une pièce
+                  </Button>
+                </CardBody>
+              </Card>
+            )}
+          </div>
         )}
 
         {/* Onglet Historique */}
@@ -1191,13 +955,6 @@ export function PiecesPage() {
           onClose={() => { setShowAjoutModal(false); setPieceAEditer(null); }}
           onSave={data => ajouterPieceMutation.mutate(data)}
           initialData={pieceAEditer || undefined}
-        />
-      )}
-
-      {pieceDetail && (
-        <DetailPieceModal
-          piece={pieceDetail}
-          onClose={() => setPieceDetail(null)}
         />
       )}
     </div>
