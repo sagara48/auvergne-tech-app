@@ -55,25 +55,37 @@ export interface Annotation {
   fleche?: { x2: number; y2: number };
 }
 
-export interface PieceConfig {
-  // Identité DB
-  id?: string;
-  created_at?: string;
-  updated_at?: string;
-  technicien_id?: string;
-  travaux_id?: string; // lien travaux
+// Feature 29: Suivi fabrication
+export type StatutFabrication = 'brouillon' | 'valide' | 'en_fabrication' | 'livre' | 'monte';
 
+export const STATUTS_FABRICATION: { id: StatutFabrication; nom: string; couleur: string; icon: string }[] = [
+  { id: 'brouillon', nom: 'Brouillon', couleur: '#6B7280', icon: '✏️' },
+  { id: 'valide', nom: 'Validé', couleur: '#3B82F6', icon: '✅' },
+  { id: 'en_fabrication', nom: 'En fabrication', couleur: '#F59E0B', icon: '🔧' },
+  { id: 'livre', nom: 'Livré', couleur: '#8B5CF6', icon: '📦' },
+  { id: 'monte', nom: 'Monté', couleur: '#059669', icon: '🏗️' },
+];
+
+// Feature 27: Gabarits de perçage normés
+export interface GabaritPercage {
+  id: string; nom: string; categorie: string;
+  description: string;
+  generate: (params: { cx: number; cy: number; [k: string]: number }) => Trou[];
+  params: { key: string; label: string; defaut: number }[];
+}
+
+export interface PieceConfig {
+  id?: string; created_at?: string; updated_at?: string;
+  technicien_id?: string; travaux_id?: string;
+  // Feature 29
+  statut: StatutFabrication;
+  statut_historique?: { statut: StatutFabrication; date: string; par?: string }[];
   // Matière
   matiere: Matiere; epaisseur: number; finition: Finition;
-  // Forme
   formeBase: FormeBase; largeur: number; hauteur: number;
   brancheL?: number; profondeurU?: number; decalageZ?: number;
-  // Opérations
   plis: Pli[]; trous: Trou[]; encoches: Encoche[];
-  chanfreins: Chanfrein[];
-  marquages: Marquage[];
-  annotations: Annotation[];
-  // Meta
+  chanfreins: Chanfrein[]; marquages: Marquage[]; annotations: Annotation[];
   nom: string; reference: string; quantite: number; remarques: string;
 }
 
@@ -575,6 +587,7 @@ export function createDefaultPiece(): PieceConfig {
     matiere: 'acier', epaisseur: 2, finition: 'brut', formeBase: 'rectangle',
     largeur: 200, hauteur: 100, plis: [], trous: [], encoches: [],
     chanfreins: [], marquages: [], annotations: [],
+    statut: 'brouillon', statut_historique: [{ statut: 'brouillon', date: new Date().toISOString() }],
     nom: 'Nouvelle pièce', reference: `AT-${Date.now().toString(36).toUpperCase().slice(-6)}`,
     quantite: 1, remarques: '',
   };
@@ -584,6 +597,7 @@ export function pieceFromTemplate(tpl: PieceTemplate): PieceConfig {
   return {
     ...tpl.piece,
     chanfreins: [], marquages: [], annotations: [],
+    statut: 'brouillon', statut_historique: [{ statut: 'brouillon', date: new Date().toISOString() }],
     nom: tpl.nom,
     reference: `AT-${Date.now().toString(36).toUpperCase().slice(-6)}`,
     quantite: 1, remarques: '',
@@ -591,6 +605,188 @@ export function pieceFromTemplate(tpl: PieceTemplate): PieceConfig {
     trous: tpl.piece.trous.map(t => ({ ...t, id: uid() })),
     encoches: tpl.piece.encoches.map(e => ({ ...e, id: uid() })),
   };
+}
+
+// ═══════════════════════════════════════════════════
+// GABARITS DE PERÇAGE NORMÉS (Feature 27)
+// ═══════════════════════════════════════════════════
+
+export const GABARITS_PERCAGE: GabaritPercage[] = [
+  {
+    id: 'rect-4', nom: '4 trous rectangle', categorie: 'Standard',
+    description: 'Entraxe rectangulaire paramétrable',
+    params: [{ key: 'cx', label: 'Centre X', defaut: 100 }, { key: 'cy', label: 'Centre Y', defaut: 50 },
+      { key: 'ex', label: 'Entraxe X', defaut: 120 }, { key: 'ey', label: 'Entraxe Y', defaut: 60 }, { key: 'd', label: '∅', defaut: 10 }],
+    generate: (p) => {
+      const hx = p.ex / 2, hy = p.ey / 2;
+      return [
+        { id: uid(), x: p.cx - hx, y: p.cy - hy, type: 'rond', diametre: p.d },
+        { id: uid(), x: p.cx + hx, y: p.cy - hy, type: 'rond', diametre: p.d },
+        { id: uid(), x: p.cx - hx, y: p.cy + hy, type: 'rond', diametre: p.d },
+        { id: uid(), x: p.cx + hx, y: p.cy + hy, type: 'rond', diametre: p.d },
+      ] as Trou[];
+    },
+  },
+  {
+    id: 'circ-n', nom: 'Circulaire N trous', categorie: 'Standard',
+    description: 'N trous sur un diamètre',
+    params: [{ key: 'cx', label: 'Centre X', defaut: 100 }, { key: 'cy', label: 'Centre Y', defaut: 50 },
+      { key: 'r', label: 'Rayon cercle', defaut: 30 }, { key: 'n', label: 'Nombre', defaut: 6 }, { key: 'd', label: '∅', defaut: 8 }],
+    generate: (p) => Array.from({ length: p.n }, (_, i) => {
+      const a = (2 * Math.PI * i) / p.n - Math.PI / 2;
+      return { id: uid(), x: Math.round((p.cx + p.r * Math.cos(a)) * 10) / 10, y: Math.round((p.cy + p.r * Math.sin(a)) * 10) / 10, type: 'rond' as TypeTrou, diametre: p.d };
+    }),
+  },
+  {
+    id: 'ligne-n', nom: 'Ligne N trous', categorie: 'Standard',
+    description: 'N trous alignés avec pas régulier',
+    params: [{ key: 'cx', label: 'X départ', defaut: 20 }, { key: 'cy', label: 'Y', defaut: 50 },
+      { key: 'pas', label: 'Pas', defaut: 40 }, { key: 'n', label: 'Nombre', defaut: 4 }, { key: 'd', label: '∅', defaut: 10 }],
+    generate: (p) => Array.from({ length: p.n }, (_, i) => ({
+      id: uid(), x: p.cx + p.pas * i, y: p.cy, type: 'rond' as TypeTrou, diametre: p.d,
+    })),
+  },
+  {
+    id: 'din-rail', nom: 'Rail DIN 35mm', categorie: 'Ascenseur',
+    description: 'Fixation rail DIN standard',
+    params: [{ key: 'cx', label: 'Centre X', defaut: 100 }, { key: 'cy', label: 'Centre Y', defaut: 50 }, { key: 'd', label: '∅', defaut: 6 }],
+    generate: (p) => [
+      { id: uid(), x: p.cx - 12.5, y: p.cy, type: 'oblong' as TypeTrou, diametre: p.d, longueurOblong: 10 },
+      { id: uid(), x: p.cx + 12.5, y: p.cy, type: 'oblong' as TypeTrou, diametre: p.d, longueurOblong: 10 },
+    ],
+  },
+  {
+    id: 'otis-4', nom: 'Fixation Otis 4 pts', categorie: 'Ascenseur',
+    description: 'Entraxe standard Otis 160×100',
+    params: [{ key: 'cx', label: 'Centre X', defaut: 100 }, { key: 'cy', label: 'Centre Y', defaut: 50 }, { key: 'd', label: '∅', defaut: 12 }],
+    generate: (p) => [
+      { id: uid(), x: p.cx - 80, y: p.cy - 50, type: 'rond' as TypeTrou, diametre: p.d },
+      { id: uid(), x: p.cx + 80, y: p.cy - 50, type: 'rond' as TypeTrou, diametre: p.d },
+      { id: uid(), x: p.cx - 80, y: p.cy + 50, type: 'rond' as TypeTrou, diametre: p.d },
+      { id: uid(), x: p.cx + 80, y: p.cy + 50, type: 'rond' as TypeTrou, diametre: p.d },
+    ],
+  },
+  {
+    id: 'schindler-3', nom: 'Fixation Schindler 3 pts', categorie: 'Ascenseur',
+    description: 'Triangle Schindler 120mm',
+    params: [{ key: 'cx', label: 'Centre X', defaut: 100 }, { key: 'cy', label: 'Centre Y', defaut: 50 }, { key: 'd', label: '∅', defaut: 10 }],
+    generate: (p) => [
+      { id: uid(), x: p.cx, y: p.cy - 40, type: 'rond' as TypeTrou, diametre: p.d },
+      { id: uid(), x: p.cx - 35, y: p.cy + 20, type: 'rond' as TypeTrou, diametre: p.d },
+      { id: uid(), x: p.cx + 35, y: p.cy + 20, type: 'rond' as TypeTrou, diametre: p.d },
+    ],
+  },
+  {
+    id: 'kone-oblongs', nom: 'Fixation Kone oblongs', categorie: 'Ascenseur',
+    description: 'Réglage Kone avec oblongs',
+    params: [{ key: 'cx', label: 'Centre X', defaut: 100 }, { key: 'cy', label: 'Centre Y', defaut: 50 }, { key: 'd', label: '∅', defaut: 10 }],
+    generate: (p) => [
+      { id: uid(), x: p.cx - 60, y: p.cy, type: 'oblong' as TypeTrou, diametre: p.d, longueurOblong: 18 },
+      { id: uid(), x: p.cx + 60, y: p.cy, type: 'oblong' as TypeTrou, diametre: p.d, longueurOblong: 18 },
+    ],
+  },
+];
+
+// ═══════════════════════════════════════════════════
+// GÉNÉRATION 3D MESH (vertices + faces pour Three.js)
+// ═══════════════════════════════════════════════════
+
+export interface Mesh3D {
+  vertices: number[]; // [x,y,z, x,y,z, ...]
+  indices: number[];  // triangle indices
+  normals: number[];
+}
+
+/**
+ * Génère un mesh 3D extrudé de la pièce avec plis
+ * Projection segments plats + extrusion épaisseur
+ */
+export function genererMesh3D(p: PieceConfig): Mesh3D {
+  const ep = p.epaisseur;
+  const plis = [...p.plis].sort((a, b) => a.position - b.position);
+  const vertices: number[] = [];
+  const indices: number[] = [];
+  const normals: number[] = [];
+
+  // Calculer les segments 3D après pliage
+  type Seg = { x1: number; z1: number; x2: number; z2: number };
+  const segs: Seg[] = [];
+  let pX = 0, pZ = 0, dX = 1, dZ = 0, last = 0;
+
+  const addSeg = (fx: number, fz: number, tx: number, tz: number) => {
+    segs.push({ x1: fx, z1: fz, x2: tx, z2: tz });
+  };
+
+  if (plis.length === 0) {
+    addSeg(0, 0, p.largeur, 0);
+  } else {
+    plis.forEach(pli => {
+      const len = pli.position - last;
+      const nx = pX + dX * len, nz = pZ + dZ * len;
+      addSeg(pX, pZ, nx, nz);
+      pX = nx; pZ = nz; last = pli.position;
+      const rad = (pli.angle * Math.PI / 180) * (pli.direction === 'haut' ? -1 : 1);
+      const ndX = dX * Math.cos(rad) - dZ * Math.sin(rad);
+      const ndZ = dX * Math.sin(rad) + dZ * Math.cos(rad);
+      dX = ndX; dZ = ndZ;
+    });
+    const lLen = p.largeur - last;
+    addSeg(pX, pZ, pX + dX * lLen, pZ + dZ * lLen);
+  }
+
+  // Pour chaque segment, créer un quad extrudé (face avant, arrière, dessus, dessous)
+  const h = p.hauteur;
+  let vi = 0;
+
+  segs.forEach(seg => {
+    // 8 vertices du segment (boîte)
+    // Face avant (y=0)
+    const v = [
+      seg.x1, 0, seg.z1,           // 0: avant-gauche-bas
+      seg.x2, 0, seg.z2,           // 1: avant-droit-bas
+      seg.x2, 0, seg.z2 + ep,      // 2: avant-droit-haut (épaisseur)
+      seg.x1, 0, seg.z1 + ep,      // 3: avant-gauche-haut
+      seg.x1, h, seg.z1,           // 4: arrière-gauche-bas
+      seg.x2, h, seg.z2,           // 5: arrière-droit-bas
+      seg.x2, h, seg.z2 + ep,      // 6: arrière-droit-haut
+      seg.x1, h, seg.z1 + ep,      // 7: arrière-gauche-haut
+    ];
+    v.forEach(c => vertices.push(c));
+
+    // 6 faces (2 triangles each)
+    const o = vi;
+    // Dessus
+    indices.push(o + 3, o + 2, o + 6, o + 3, o + 6, o + 7);
+    // Dessous
+    indices.push(o + 0, o + 5, o + 1, o + 0, o + 4, o + 5);
+    // Avant
+    indices.push(o + 0, o + 1, o + 2, o + 0, o + 2, o + 3);
+    // Arrière
+    indices.push(o + 4, o + 6, o + 5, o + 4, o + 7, o + 6);
+
+    vi += 8;
+  });
+
+  // Normals approximatives (flat shading)
+  for (let i = 0; i < vertices.length / 3; i++) {
+    normals.push(0, 0, 1); // Simplified
+  }
+
+  return { vertices, indices, normals };
+}
+
+/**
+ * Feature 31: Génère les données pour vue éclatée multi-pièces
+ */
+export function genererVueEclatee(pieces: PieceConfig[], espacement: number = 30): {
+  piece: PieceConfig; offsetX: number; offsetY: number; offsetZ: number;
+}[] {
+  return pieces.map((p, i) => ({
+    piece: p,
+    offsetX: 0,
+    offsetY: 0,
+    offsetZ: i * (p.epaisseur + espacement),
+  }));
 }
 
 // ═══════════════════════════════════════════════════
