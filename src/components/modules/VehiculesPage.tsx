@@ -1502,6 +1502,59 @@ export function VehiculesPage() {
         ))}
       </div>
 
+      {/* ═══ SYNERGIES VÉHICULES ═══ */}
+      {/* Alertes échéances proches */}
+      {(() => {
+        if (!vehicules) return null;
+        const alertes: { vehicule: any; type: string; urgence: string; detail: string }[] = [];
+        vehicules.forEach((v: any) => {
+          // CT
+          if (v.date_ct) {
+            const days = differenceInDays(new Date(v.date_ct), new Date());
+            if (days < 0) alertes.push({ vehicule: v, type: 'CT expiré', urgence: 'haute', detail: `Expiré depuis ${Math.abs(days)}j` });
+            else if (days <= 30) alertes.push({ vehicule: v, type: 'CT proche', urgence: days <= 14 ? 'haute' : 'moyenne', detail: `Dans ${days} jours (${format(new Date(v.date_ct), 'dd/MM')})` });
+          }
+          // Kilométrage entretien
+          if (v.km_prochain_entretien && v.kilometrage) {
+            const kmRest = v.km_prochain_entretien - v.kilometrage;
+            if (kmRest <= 0) alertes.push({ vehicule: v, type: 'Entretien dépassé', urgence: 'haute', detail: `${Math.abs(kmRest)} km de dépassement` });
+            else if (kmRest <= 2000) alertes.push({ vehicule: v, type: 'Entretien proche', urgence: 'moyenne', detail: `Dans ~${kmRest} km` });
+          }
+          // Assurance
+          if (v.date_assurance) {
+            const days = differenceInDays(new Date(v.date_assurance), new Date());
+            if (days < 0) alertes.push({ vehicule: v, type: 'Assurance expirée', urgence: 'haute', detail: `Expirée depuis ${Math.abs(days)}j` });
+            else if (days <= 30) alertes.push({ vehicule: v, type: 'Assurance', urgence: 'moyenne', detail: `Renouvellement dans ${days}j` });
+          }
+        });
+
+        if (alertes.length === 0) return null;
+        const hautes = alertes.filter(a => a.urgence === 'haute');
+
+        return (
+          <Card className={`overflow-hidden ${hautes.length > 0 ? 'border-red-500/30' : 'border-amber-500/20'}`}>
+            <div className={`px-4 py-3 flex items-center justify-between ${hautes.length > 0 ? 'bg-gradient-to-r from-red-500/10 to-amber-500/5' : 'bg-gradient-to-r from-amber-500/10 to-yellow-500/5'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl ${hautes.length > 0 ? 'bg-red-500/20' : 'bg-amber-500/20'} flex items-center justify-center`}>
+                  <AlertTriangle className={`w-5 h-5 ${hautes.length > 0 ? 'text-red-400' : 'text-amber-400'}`} />
+                </div>
+                <div>
+                  <div className={`text-sm font-bold ${hautes.length > 0 ? 'text-red-400' : 'text-amber-400'}`}>
+                    {hautes.length > 0 ? '🚨' : '⚠️'} {alertes.length} échéance{alertes.length > 1 ? 's' : ''} véhicule{alertes.length > 1 ? 's' : ''}
+                  </div>
+                  <div className="text-xs text-[var(--text-tertiary)] mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5">
+                    {alertes.slice(0, 4).map((a, i) => (
+                      <span key={i}>{a.vehicule.immatriculation} — {a.type} ({a.detail})</span>
+                    ))}
+                    {alertes.length > 4 && <span className="text-[var(--text-muted)]">+{alertes.length - 4} autres</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* Actions */}
       <div className="flex justify-end">
         <Button variant="primary" onClick={() => setShowForm(true)}>

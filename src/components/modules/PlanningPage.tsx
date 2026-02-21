@@ -908,11 +908,28 @@ export function PlanningPage() {
               const isToday = format(jour, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
               return <div key={i} className={`p-3 text-center border-b border-r last:border-r-0 sticky top-0 z-10 ${isToday ? 'bg-blue-500/20' : 'bg-[var(--bg-tertiary)]'}`}><div className="text-xs text-[var(--text-tertiary)] uppercase">{format(jour, 'EEE', { locale: fr })}</div><div className={`text-lg font-bold ${isToday ? 'text-blue-400' : 'text-[var(--text-primary)]'}`}>{format(jour, 'd')}</div></div>;
             })}
-            {techs.map(tech => (
+            {techs.map(tech => {
+              // Calcul charge semaine
+              const weekEvents = jours.reduce((acc, jour) => acc + getEventsForCell(tech.id, jour).length, 0);
+              const weekConges = jours.filter(jour => isEnConge(tech.id, jour)).length;
+              const joursDispos = 5 - weekConges;
+              const chargePercent = joursDispos > 0 ? Math.min(100, (weekEvents / (joursDispos * 3)) * 100) : 0;
+              const chargeColor = chargePercent >= 80 ? 'bg-red-500' : chargePercent >= 50 ? 'bg-amber-500' : 'bg-green-500';
+              const chargeLabel = chargePercent >= 80 ? '🔴' : chargePercent >= 50 ? '🟡' : '🟢';
+
+              return (
               <>
-                <div key={`tech-${tech.id}`} className="p-3 bg-[var(--bg-tertiary)]/50 border-b border-r flex items-center gap-3 sticky left-0 z-[5]">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">{tech.avatar_initiales}</div>
-                  <div><div className="text-sm font-medium text-[var(--text-primary)]">{tech.prenom} {tech.nom?.charAt(0)}.</div><div className="text-xs text-[var(--text-muted)]">{tech.secteur || ''}</div></div>
+                <div key={`tech-${tech.id}`} className="p-2 bg-[var(--bg-tertiary)]/50 border-b border-r flex items-center gap-2 sticky left-0 z-[5]">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold flex-shrink-0">{tech.avatar_initiales}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-[var(--text-primary)]">{tech.prenom} {tech.nom?.charAt(0)}.</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="w-14 h-1.5 rounded-full bg-[var(--bg-elevated)] overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${chargeColor}`} style={{ width: `${chargePercent}%` }} />
+                      </div>
+                      <span className="text-[9px] text-[var(--text-muted)]">{weekEvents} interv.</span>
+                    </div>
+                  </div>
                 </div>
                 {jours.map((jour, jIdx) => {
                   const cellId = `cell-|${tech.id}|${format(jour, 'yyyy-MM-dd')}`;
@@ -929,7 +946,7 @@ export function PlanningPage() {
                   );
                 })}
               </>
-            ))}
+            ); })}
             {techs.length === 0 && <div className="col-span-6 p-8 text-center text-[var(--text-muted)]">Aucun technicien</div>}
           </div>
         </Card>

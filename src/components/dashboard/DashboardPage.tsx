@@ -45,6 +45,9 @@ import {
   ClockWidget,
   QuickLinksWidget,
   ChecklistWidget,
+  MyDayWidget,
+  TeamWeatherWidget,
+  SupplyChainWidget,
 } from './widgets';
 import { NotificationsWidget } from '@/components/notifications';
 import { SynergyPanel } from './SynergyPanel';
@@ -84,6 +87,9 @@ const WIDGET_COMPONENTS: Record<string, React.FC<{ onRemove?: () => void }>> = {
   'clock': ClockWidget,
   'quick-links': QuickLinksWidget,
   'checklist': ChecklistWidget,
+  'my-day': MyDayWidget,
+  'team-weather': TeamWeatherWidget,
+  'supply-chain': SupplyChainWidget,
 };
 
 // Modal pour ajouter des widgets

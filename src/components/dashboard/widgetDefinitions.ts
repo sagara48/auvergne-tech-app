@@ -333,18 +333,47 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     defaultSize: 'medium',
     minW: 2, minH: 2, defaultW: 2, defaultH: 2,
   },
+  // === SYNERGIES & INTELLIGENCE ===
+  {
+    id: 'my-day',
+    name: 'Ma journée',
+    description: 'Résumé chronologique avec pièces et notes',
+    category: 'planning',
+    icon: Calendar,
+    defaultSize: 'large',
+    minW: 2, minH: 2, defaultW: 3, defaultH: 3,
+  },
+  {
+    id: 'team-weather',
+    name: 'Météo équipe',
+    description: 'Disponibilités, charges, astreintes',
+    category: 'stats',
+    icon: Users,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 2,
+  },
+  {
+    id: 'supply-chain',
+    name: 'Chaîne appro',
+    description: 'Travaux bloqués, commandes en transit, stock critique',
+    category: 'stock',
+    icon: Truck,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 2,
+  },
 ];
 
 // Layout par défaut pour les nouveaux utilisateurs
 export const DEFAULT_LAYOUT: WidgetInstance[] = [
   { i: 'w1', type: 'stats-counters', x: 0, y: 0, w: 4, h: 1 },
-  { i: 'w2', type: 'planning-today', x: 0, y: 1, w: 2, h: 3 },
-  { i: 'w3', type: 'travaux-mine', x: 2, y: 1, w: 2, h: 3 },
-  { i: 'w4', type: 'travaux-urgent', x: 4, y: 0, w: 2, h: 2 },
-  { i: 'w5', type: 'hours-week', x: 4, y: 2, w: 1, h: 1 },
-  { i: 'w6', type: 'chat-unread', x: 5, y: 2, w: 1, h: 1 },
-  { i: 'w7', type: 'chart-activity', x: 0, y: 4, w: 4, h: 2 },
-  { i: 'w8', type: 'checklist', x: 4, y: 3, w: 2, h: 2 },
+  { i: 'w9', type: 'my-day', x: 0, y: 1, w: 3, h: 3 },
+  { i: 'w10', type: 'team-weather', x: 3, y: 1, w: 2, h: 2 },
+  { i: 'w4', type: 'travaux-urgent', x: 4, y: 0, w: 2, h: 1 },
+  { i: 'w11', type: 'supply-chain', x: 5, y: 1, w: 1, h: 2 },
+  { i: 'w3', type: 'travaux-mine', x: 0, y: 4, w: 2, h: 3 },
+  { i: 'w7', type: 'chart-activity', x: 2, y: 4, w: 4, h: 2 },
+  { i: 'w8', type: 'checklist', x: 3, y: 3, w: 2, h: 2 },
+  { i: 'w5', type: 'hours-week', x: 5, y: 3, w: 1, h: 1 },
 ];
 
 export function getWidgetDefinition(type: string): WidgetDefinition | undefined {

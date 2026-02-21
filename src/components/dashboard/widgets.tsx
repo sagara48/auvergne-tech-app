@@ -1449,3 +1449,336 @@ export function ChecklistWidget({ onRemove }: { onRemove?: () => void }) {
     </WidgetWrapper>
   );
 }
+
+// ============================================
+// WIDGET MA JOURNÉE - Résumé chronologique
+// ============================================
+export function MyDayWidget({ onRemove }: { onRemove?: () => void }) {
+  const { setModuleActif } = useAppStore();
+  const today = format(new Date(), 'yyyy-MM-dd');
+  
+  const { data: events } = useQuery({
+    queryKey: ['planning-today-detail', today],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('planning_events')
+        .select('*, technicien:technicien_id(prenom, nom), travaux:travaux_id(code, statut, ascenseur:ascenseur_id(code_appareil, adresse))')
+        .eq('technicien_id', CURRENT_USER_ID)
+        .gte('date_debut', today + 'T00:00:00')
+        .lte('date_debut', today + 'T23:59:59')
+        .order('date_debut');
+      return data || [];
+    },
+  });
+
+  const { data: stockVehicule } = useQuery({
+    queryKey: ['stock-vehicule-precheck'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('stock_vehicule')
+        .select('*, article:article_id(designation, quantite_min)')
+        .eq('technicien_id', CURRENT_USER_ID);
+      return data || [];
+    },
+  });
+
+  const lowStockItems = stockVehicule?.filter((s: any) => 
+    s.article?.quantite_min && s.quantite <= s.article.quantite_min
+  ) || [];
+
+  return (
+    <WidgetWrapper title="Ma journée" icon={Calendar} color="#3b82f6" onRemove={onRemove}>
+      <div className="h-full flex flex-col gap-2">
+        {/* Pré-check stock véhicule */}
+        {lowStockItems.length > 0 && (
+          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <div className="flex items-center gap-1.5 mb-1">
+              <AlertTriangle className="w-3 h-3 text-amber-400" />
+              <span className="text-[10px] font-bold text-amber-400">PRÉ-CHECK VÉHICULE</span>
+            </div>
+            {lowStockItems.slice(0, 3).map((item: any, i: number) => (
+              <div key={i} className="text-[10px] text-[var(--text-secondary)] py-0.5">
+                ⚠️ {item.article?.designation || '?'} — {item.quantite} restant(s)
+              </div>
+            ))}
+            <button 
+              onClick={() => setModuleActif('stock')}
+              className="text-[10px] text-amber-400 hover:underline mt-1"
+            >
+              Voir le stock →
+            </button>
+          </div>
+        )}
+
+        {/* Timeline */}
+        <div className="flex-1 overflow-auto space-y-1.5">
+          {events?.map((evt: any, i: number) => {
+            const heure = format(parseISO(evt.date_debut), 'HH:mm');
+            const isPast = isBefore(parseISO(evt.date_fin), new Date());
+            const isNow = isBefore(parseISO(evt.date_debut), new Date()) && !isPast;
+            const typeColors: Record<string, string> = {
+              travaux: '#a855f7', mise_service: '#f97316', tournee: '#3b82f6', manuel: '#6366f1',
+            };
+            const color = typeColors[evt.type_event] || '#6366f1';
+
+            return (
+              <div 
+                key={evt.id}
+                className={`flex gap-2.5 p-2 rounded-lg border transition-colors cursor-pointer hover:bg-[var(--bg-tertiary)] ${
+                  isNow ? 'border-blue-500/50 bg-blue-500/5' : isPast ? 'opacity-50 border-transparent' : 'border-[var(--border-secondary)]'
+                }`}
+                onClick={() => evt.type_event === 'travaux' ? setModuleActif('travaux') : setModuleActif('planning')}
+              >
+                {/* Timeline dot */}
+                <div className="flex flex-col items-center">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                  {i < (events?.length || 0) - 1 && <div className="w-px flex-1 bg-[var(--border-primary)] mt-1" />}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono font-bold text-[var(--text-primary)]">{heure}</span>
+                    {isNow && <span className="text-[9px] font-bold text-blue-400 bg-blue-500/20 px-1.5 rounded">EN COURS</span>}
+                    {isPast && <Check className="w-3 h-3 text-green-400" />}
+                  </div>
+                  <div className="text-xs font-semibold text-[var(--text-primary)] truncate">{evt.titre}</div>
+                  {evt.travaux?.ascenseur && (
+                    <div className="text-[10px] text-[var(--text-tertiary)] truncate">
+                      📍 {evt.travaux.ascenseur.adresse} — {evt.travaux.ascenseur.code_appareil}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {!events?.length && (
+            <div className="text-center py-6 text-[var(--text-muted)] text-xs">
+              Aucune intervention prévue aujourd'hui
+            </div>
+          )}
+        </div>
+
+        {/* Stats du jour */}
+        <div className="flex gap-2 pt-1 border-t border-[var(--border-secondary)]">
+          <div className="flex-1 text-center">
+            <div className="text-lg font-bold text-[var(--text-primary)]">{events?.length || 0}</div>
+            <div className="text-[9px] text-[var(--text-muted)]">interventions</div>
+          </div>
+          <div className="flex-1 text-center">
+            <div className="text-lg font-bold text-green-400">{events?.filter((e: any) => isBefore(parseISO(e.date_fin), new Date())).length || 0}</div>
+            <div className="text-[9px] text-[var(--text-muted)]">terminées</div>
+          </div>
+          <div className="flex-1 text-center">
+            <div className="text-lg font-bold text-amber-400">{lowStockItems.length}</div>
+            <div className="text-[9px] text-[var(--text-muted)]">alertes stock</div>
+          </div>
+        </div>
+      </div>
+    </WidgetWrapper>
+  );
+}
+
+// ============================================
+// WIDGET MÉTÉO ÉQUIPE - Charge & disponibilité
+// ============================================
+export function TeamWeatherWidget({ onRemove }: { onRemove?: () => void }) {
+  const today = format(new Date(), 'yyyy-MM-dd');
+
+  const { data: techniciens } = useQuery({
+    queryKey: ['techniciens-team'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('techniciens')
+        .select('*, role:role_id(code)')
+        .order('prenom');
+      return (data || []).filter((t: any) => t.role?.code === 'technicien' || t.role?.code === 'chef_equipe');
+    },
+  });
+
+  const { data: allEvents } = useQuery({
+    queryKey: ['planning-team-today', today],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('planning_events')
+        .select('technicien_id, type_event')
+        .gte('date_debut', today + 'T00:00:00')
+        .lte('date_debut', today + 'T23:59:59');
+      return data || [];
+    },
+  });
+
+  const { data: conges } = useQuery({
+    queryKey: ['conges-team-today', today],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('planning_conges')
+        .select('technicien_id, type')
+        .lte('date_debut', today)
+        .gte('date_fin', today);
+      return data || [];
+    },
+  });
+
+  const techData = techniciens?.map((t: any) => {
+    const evts = allEvents?.filter((e: any) => e.technicien_id === t.id) || [];
+    const conge = conges?.find((c: any) => c.technicien_id === t.id);
+    const charge = evts.length;
+    return { ...t, charge, conge, status: conge ? 'conge' : charge >= 4 ? 'surcharge' : charge === 0 ? 'libre' : 'normal' };
+  }) || [];
+
+  const dispo = techData.filter(t => t.status !== 'conge').length;
+  const surcharges = techData.filter(t => t.status === 'surcharge').length;
+
+  return (
+    <WidgetWrapper title="Météo équipe" icon={Clock} color="#14b8a6" onRemove={onRemove}>
+      <div className="h-full flex flex-col gap-2">
+        {/* Stats résumé */}
+        <div className="flex gap-2">
+          <div className="flex-1 p-2 rounded-lg bg-green-500/10 text-center">
+            <div className="text-xl font-bold text-green-400">{dispo}</div>
+            <div className="text-[9px] text-[var(--text-muted)]">disponibles</div>
+          </div>
+          <div className="flex-1 p-2 rounded-lg bg-amber-500/10 text-center">
+            <div className="text-xl font-bold text-amber-400">{surcharges}</div>
+            <div className="text-[9px] text-[var(--text-muted)]">surchargés</div>
+          </div>
+          <div className="flex-1 p-2 rounded-lg bg-blue-500/10 text-center">
+            <div className="text-xl font-bold text-blue-400">{techData.filter(t => t.status === 'conge').length}</div>
+            <div className="text-[9px] text-[var(--text-muted)]">en congé</div>
+          </div>
+        </div>
+
+        {/* Liste techniciens */}
+        <div className="flex-1 overflow-auto space-y-1">
+          {techData.map((t: any) => {
+            const statusColors: Record<string, { bg: string; text: string; label: string }> = {
+              conge: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: '🏖️ Congé' },
+              surcharge: { bg: 'bg-red-500/20', text: 'text-red-400', label: '🔴 Surchargé' },
+              libre: { bg: 'bg-green-500/20', text: 'text-green-400', label: '🟢 Libre' },
+              normal: { bg: 'bg-[var(--bg-tertiary)]', text: 'text-[var(--text-secondary)]', label: `${t.charge} interv.` },
+            };
+            const s = statusColors[t.status] || statusColors.normal;
+
+            return (
+              <div key={t.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-[var(--bg-tertiary)]">
+                <div className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[9px] font-bold text-white">
+                  {t.avatar_initiales || (t.prenom?.charAt(0) || '') + (t.nom?.charAt(0) || '')}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-medium text-[var(--text-primary)] truncate">{t.prenom} {t.nom?.charAt(0)}.</div>
+                </div>
+                {/* Charge bar */}
+                {t.status !== 'conge' && (
+                  <div className="w-16 h-1.5 rounded-full bg-[var(--bg-elevated)] overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all ${t.charge >= 4 ? 'bg-red-500' : t.charge >= 2 ? 'bg-amber-500' : 'bg-green-500'}`}
+                      style={{ width: `${Math.min(100, (t.charge / 5) * 100)}%` }}
+                    />
+                  </div>
+                )}
+                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${s.bg} ${s.text}`}>
+                  {s.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </WidgetWrapper>
+  );
+}
+
+// ============================================
+// WIDGET CHAÎNE APPROVISIONNEMENT
+// ============================================
+export function SupplyChainWidget({ onRemove }: { onRemove?: () => void }) {
+  const { setModuleActif } = useAppStore();
+
+  const { data: travauxBloque } = useQuery({
+    queryKey: ['travaux-bloques-widget'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('travaux')
+        .select('id, code, statut, titre')
+        .eq('statut', 'en_attente_pieces')
+        .order('date_creation', { ascending: false })
+        .limit(5);
+      return data || [];
+    },
+  });
+
+  const { data: commandesTransit } = useQuery({
+    queryKey: ['commandes-transit-widget'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('commandes')
+        .select('id, code, statut, fournisseur')
+        .in('statut', ['commandee', 'expediee'])
+        .limit(5);
+      return data || [];
+    },
+  });
+
+  const { data: stockCritique } = useQuery({
+    queryKey: ['stock-critique-widget'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('stock_global')
+        .select('*, article:article_id(designation)')
+        .lte('quantite', supabase.rpc ? 0 : 5)
+        .limit(5);
+      return data || [];
+    },
+  });
+
+  return (
+    <WidgetWrapper title="Chaîne appro" icon={Package} color="#ef4444" onRemove={onRemove}>
+      <div className="h-full flex flex-col gap-3">
+        {/* Travaux bloqués */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider">⛔ Travaux bloqués</span>
+            <span className="text-[10px] text-[var(--text-muted)]">{travauxBloque?.length || 0}</span>
+          </div>
+          {travauxBloque?.slice(0, 3).map((t: any) => (
+            <div key={t.id} className="text-[10px] text-[var(--text-secondary)] py-0.5 flex items-center gap-1">
+              <div className="w-1 h-1 rounded-full bg-red-500" />
+              <span className="font-mono">{t.code}</span> — {t.titre?.substring(0, 30) || '?'}
+            </div>
+          )) || null}
+          {(travauxBloque?.length || 0) === 0 && <div className="text-[10px] text-green-400">✓ Aucun travail bloqué</div>}
+        </div>
+
+        {/* Commandes en transit */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">📦 En transit</span>
+            <span className="text-[10px] text-[var(--text-muted)]">{commandesTransit?.length || 0}</span>
+          </div>
+          {commandesTransit?.slice(0, 3).map((c: any) => (
+            <div key={c.id} className="text-[10px] text-[var(--text-secondary)] py-0.5 flex items-center gap-1">
+              <div className="w-1 h-1 rounded-full bg-amber-500" />
+              <span className="font-mono">{c.code}</span> — {c.fournisseur || '?'} ({c.statut === 'expediee' ? '🚚' : '⏳'})
+            </div>
+          )) || null}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-auto flex gap-2">
+          <button 
+            onClick={() => setModuleActif('stock')}
+            className="flex-1 text-[10px] font-semibold py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+          >
+            Stock
+          </button>
+          <button 
+            onClick={() => setModuleActif('commandes')}
+            className="flex-1 text-[10px] font-semibold py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
+          >
+            Commandes
+          </button>
+        </div>
+      </div>
+    </WidgetWrapper>
+  );
+}

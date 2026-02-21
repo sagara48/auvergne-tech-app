@@ -9,10 +9,12 @@ import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
 import { 
   getStockArticles, createStockMouvement, getStockGlobal, getTransferts, validerTransfert, 
   getStockMouvementsFiltered, getStockMouvementsByArticle, createStockArticle, updateStockArticle,
-  deleteStockArticle, getStockCategories, createStockCategorie, updateStockCategorie, deleteStockCategorie
+  deleteStockArticle, getStockCategories, createStockCategorie, updateStockCategorie, deleteStockCategorie,
+  getTravauxEnAttentePieces
 } from '@/services/api';
 import { STATUT_TRANSFERT_CONFIG } from '@/types';
 import { AddToPanierModal } from '@/components/Panier';
+import { useAppStore } from '@/stores/appStore';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -521,6 +523,8 @@ export function StockPage() {
     queryFn: () => getStockMouvementsFiltered(mouvDateDebut, mouvDateFin) 
   });
   const { data: categories } = useQuery({ queryKey: ['stock-categories'], queryFn: getStockCategories });
+  const { data: travauxBloques } = useQuery({ queryKey: ['travaux-attente-pieces'], queryFn: getTravauxEnAttentePieces });
+  const { setModuleActif } = useAppStore();
 
   const mouvementMutation = useMutation({
     mutationFn: ({ articleId, type, quantite }: { articleId: string; type: string; quantite: number }) =>
@@ -624,6 +628,68 @@ export function StockPage() {
           </CardBody>
         </Card>
       </div>
+
+      {/* ═══ SYNERGIES STOCK ═══ */}
+      {/* Bandeau travaux bloqués */}
+      {travauxBloques && travauxBloques.length > 0 && (
+        <Card className="overflow-hidden border-red-500/30">
+          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-red-500/10 to-amber-500/5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-red-400">
+                  ⛔ {travauxBloques.length} travaux bloqués — pièces manquantes
+                </div>
+                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                  {travauxBloques.slice(0, 3).map((t: any) => t.code || 'T-?').join(', ')}
+                  {travauxBloques.length > 3 ? ` +${travauxBloques.length - 3} autres` : ''}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="danger" size="sm" onClick={() => setModuleActif('commandes')}>
+                <ShoppingCart className="w-3.5 h-3.5" /> Commander
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setModuleActif('travaux')}>
+                Voir travaux
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Prévision consommation */}
+      {articles && articles.length > 0 && (() => {
+        const critiques = articles.filter((a: any) => a.quantite !== undefined && a.quantite_min !== undefined && a.quantite <= a.quantite_min * 1.5 && a.quantite > 0);
+        if (critiques.length === 0) return null;
+        return (
+          <Card className="overflow-hidden">
+            <div className="px-4 py-2.5 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center gap-2">
+              <TrendingDown className="w-4 h-4 text-amber-400" />
+              <span className="text-sm font-semibold text-[var(--text-primary)]">Prévision consommation — articles à surveiller</span>
+            </div>
+            <CardBody className="py-2">
+              <div className="grid grid-cols-3 gap-2">
+                {critiques.slice(0, 6).map((a: any) => {
+                  const ratio = a.quantite_min > 0 ? a.quantite / a.quantite_min : 1;
+                  const color = ratio <= 0.5 ? 'red' : ratio <= 1 ? 'amber' : 'green';
+                  return (
+                    <div key={a.id} className="flex items-center gap-2 p-2 rounded-lg bg-[var(--bg-tertiary)]">
+                      <div className={`w-2 h-2 rounded-full bg-${color}-500`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-[var(--text-primary)] truncate">{a.designation || '?'}</div>
+                        <div className="text-[10px] text-[var(--text-muted)]">{a.quantite}/{a.quantite_min} — {ratio <= 0.5 ? 'Commandez vite' : 'À surveiller'}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardBody>
+          </Card>
+        );
+      })()}
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-[var(--border-primary)] pb-2">
