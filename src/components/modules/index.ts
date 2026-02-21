@@ -17,4 +17,5 @@ export { AdminPage } from './AdminPage';
 export { PiecesPage } from './PiecesPage';
 export { FicheAscenseurNFC } from './FicheAscenseurNFC';
 export { StockMouvements } from './StockMouvements';
+export { default as AtelierToleriePage } from './AtelierToleriePage';
 

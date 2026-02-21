@@ -27,6 +27,7 @@ import {
   Wrench,
   Route,
   Search,
+  Scissors,
 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { NotificationCenter } from '@/components/notifications';
@@ -60,6 +61,7 @@ const NAV_GROUPS = [
       { id: 'travaux', name: 'Travaux', icon: Hammer },
       { id: 'miseservice', name: 'Mise en service', icon: FileCheck },
       { id: 'tournees', name: 'Tournées', icon: Route },
+      { id: 'tolerie', name: 'Atelier Tôlerie', icon: Scissors },
     ],
   },
   {

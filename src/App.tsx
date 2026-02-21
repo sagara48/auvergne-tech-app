@@ -23,6 +23,7 @@ import {
   NFCPage,
   AdminPage,
   PiecesPage,
+  AtelierToleriePage,
 } from '@/components/modules';
 import { useAppStore } from '@/stores/appStore';
 import { useRealtimeSubscriptions } from '@/hooks/useRealtimeSubscriptions';
@@ -85,6 +86,8 @@ function AppContent() {
         return <NFCPage />;
       case 'pieces':
         return <PiecesPage />;
+      case 'tolerie':
+        return <AtelierToleriePage />;
       case 'admin':
         return <AdminPage />;
       default:
