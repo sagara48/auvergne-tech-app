@@ -2384,7 +2384,7 @@ export async function getCommande(id: string): Promise<Commande | null> {
 
 export async function createCommande(commande: Partial<Commande>): Promise<Commande> {
   const code = `CMD-${String(Date.now()).slice(-6)}`;
-  console.log('createCommande - données envoyées:', { ...commande, code });
+//   console.log('createCommande - données envoyées:', { ...commande, code });
   
   const { data, error } = await supabase
     .from('commandes')

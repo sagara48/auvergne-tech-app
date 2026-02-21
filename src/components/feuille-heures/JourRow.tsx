@@ -115,7 +115,7 @@ export function JourRow({
     <div
       className={cn(
         'bg-[var(--bg-secondary)] border rounded-2xl overflow-hidden transition-all duration-200',
-        estAujourdhui ? 'border-blue-500 shadow-lg shadow-blue-500/20' : 'border-[var(--border-primary)]',
+        estAujourdhui ? 'border-blue-500 shadow-md' : 'border-[var(--border-primary)]',
         !isTravail && 'opacity-70'
       )}
     >

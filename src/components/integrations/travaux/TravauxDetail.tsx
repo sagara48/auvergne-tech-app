@@ -263,7 +263,7 @@ export function TravauxDetail({ travauxId, onClose }: TravauxDetailProps) {
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
-      <div className="p-4 border-b bg-gradient-to-r from-[#B91C1C] to-[#DC4444] text-white">
+      <div className="p-4 border-b bg-[#B91C1C] text-white">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">

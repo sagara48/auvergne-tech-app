@@ -12,13 +12,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', children, ...props }, ref) => {
     const variants = {
-      primary: 'bg-gradient-to-r from-[#B91C1C] to-[#DC4444] text-white hover:shadow-lg hover:shadow-blue-500/25',
+      primary: 'bg-[#B91C1C] text-white hover:bg-[#991B1B] hover:shadow-lg',
       secondary: cn(
         'border transition-theme',
         'bg-[var(--bg-tertiary)] border-[var(--border-primary)] text-[var(--text-secondary)]',
         'hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
       ),
-      success: 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:shadow-lg hover:shadow-green-500/25',
+      success: 'bg-[#059669] text-white hover:bg-[#047857] hover:shadow-lg',
       danger: 'bg-red-500/20 text-red-400 hover:bg-red-500/30',
       ghost: cn(
         'transition-theme',
@@ -36,7 +36,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-200',
+          'inline-flex items-center justify-center gap-2 font-semibold rounded-[10px] transition-all duration-200',
           variants[variant],
           sizes[size],
           'disabled:opacity-50 disabled:cursor-not-allowed',
@@ -64,7 +64,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       <input
         ref={ref}
         className={cn(
-          'w-full px-3 py-2 rounded-lg text-sm transition-theme',
+          'w-full px-3 py-2 rounded-[10px] text-sm transition-theme',
           'bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)]',
           'placeholder:text-[var(--text-tertiary)]',
           'focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]',
@@ -89,7 +89,7 @@ export const TimeInput = forwardRef<HTMLInputElement, InputProps>(
         ref={ref}
         type="time"
         className={cn(
-          'px-2 py-2 rounded-lg text-sm text-center font-mono transition-theme',
+          'px-2 py-2 rounded-[10px] text-sm text-center font-mono transition-theme',
           'bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)]',
           'focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]',
           'disabled:opacity-30 disabled:cursor-not-allowed',
@@ -115,7 +115,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       <select
         ref={ref}
         className={cn(
-          'w-full px-3 py-2 rounded-lg text-sm transition-theme',
+          'w-full px-3 py-2 rounded-[10px] text-sm transition-theme',
           'bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)]',
           'focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]',
           'disabled:opacity-50 disabled:cursor-not-allowed',
@@ -144,7 +144,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         ref={ref}
         className={cn(
-          'w-full px-3 py-2 rounded-lg text-sm transition-theme resize-none',
+          'w-full px-3 py-2 rounded-[10px] text-sm transition-theme resize-none',
           'bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)]',
           'placeholder:text-[var(--text-tertiary)]',
           'focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]',
@@ -171,8 +171,9 @@ export function Card({ className, children, onClick, style }: CardProps & { onCl
   return (
     <div
       className={cn(
-        'rounded-2xl overflow-hidden transition-theme',
+        'rounded-2xl overflow-hidden transition-all duration-200',
         'bg-[var(--bg-secondary)] border border-[var(--border-secondary)]',
+        'hover:shadow-md',
         className
       )}
       onClick={onClick}
@@ -269,7 +270,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center rounded-lg transition-all',
+          'inline-flex items-center justify-center rounded-[10px] transition-all',
           variants[variant],
           sizes[size],
           className
@@ -297,11 +298,11 @@ export function ProgressBar({ value, max = 100, variant = 'blue', className }: P
   const percentage = Math.min(100, (value / max) * 100);
   
   const variants = {
-    blue: 'bg-gradient-to-r from-blue-500 to-blue-400',
-    green: 'bg-gradient-to-r from-green-500 to-green-400',
-    amber: 'bg-gradient-to-r from-amber-500 to-amber-400',
-    purple: 'bg-gradient-to-r from-[#B91C1C] to-[#DC4444]',
-    orange: 'bg-gradient-to-r from-orange-500 to-orange-400',
+    blue: 'bg-blue-500',
+    green: 'bg-[#059669]',
+    amber: 'bg-amber-500',
+    purple: 'bg-[#B91C1C]',
+    orange: 'bg-orange-500',
   };
 
   return (
@@ -321,7 +322,7 @@ export function Skeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'animate-pulse rounded-lg bg-[var(--bg-tertiary)]',
+        'animate-pulse rounded-[10px] bg-[var(--bg-tertiary)]',
         className
       )}
     />

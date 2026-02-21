@@ -321,7 +321,7 @@ export function SynergyPanel() {
       {/* Header cliquable */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-5 py-3 border-b border-[var(--border-primary)] bg-gradient-to-r from-amber-500/5 to-orange-500/5 hover:from-amber-500/8 hover:to-orange-500/8 transition-colors"
+        className="w-full flex items-center justify-between px-5 py-3 border-b border-[var(--border-primary)] bg-amber-500/5 hover:bg-amber-500/8 transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">

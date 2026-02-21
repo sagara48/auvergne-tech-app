@@ -31,7 +31,7 @@ function formatMessageDate(dateStr: string): string {
 function Avatar({ user, size = 'md' }: { user?: Partial<Technicien>; size?: 'sm' | 'md' | 'lg' }) {
   const sizeClasses = { sm: 'w-6 h-6 text-[10px]', md: 'w-8 h-8 text-xs', lg: 'w-10 h-10 text-sm' };
   return (
-    <div className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center font-bold text-[var(--text-primary)] flex-shrink-0`}>
+    <div className={`${sizeClasses[size]} rounded-full bg-[#B91C1C] flex items-center justify-center font-bold text-[var(--text-primary)] flex-shrink-0`}>
       {user?.avatar_initiales || user?.prenom?.[0] || '?'}
     </div>
   );

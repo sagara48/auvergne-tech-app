@@ -36,7 +36,7 @@ export function AstreintesList({
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-[var(--bg-tertiary)]/30 border-b border-[var(--border-primary)]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-[#FEF2F2]0 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-pink-500 flex items-center justify-center">
             <Moon className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -50,7 +50,7 @@ export function AstreintesList({
       </div>
 
       {/* Règles */}
-      <div className="px-4 py-3 bg-gradient-to-r from-pink-500/5 to-[#B91C1C]/05 border-b border-[var(--border-primary)]">
+      <div className="px-4 py-3 bg-pink-500/5 border-b border-[var(--border-primary)]">
         <div className="flex items-center gap-2 text-xs">
           <AlertCircle className="w-4 h-4 text-pink-400" />
           <span className="text-[var(--text-muted)]">

@@ -855,7 +855,7 @@ export function PlanningPage() {
         
         {/* Encart Astreinte en cours */}
         {astreinteEnCours && (
-          <div className="mb-4 p-4 bg-gradient-to-r from-red-500/20 to-orange-500/10 border border-red-500/30 rounded-xl flex items-center justify-between">
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-red-500/30 flex items-center justify-center animate-pulse">
                 <Phone className="w-6 h-6 text-red-400" />
@@ -920,7 +920,7 @@ export function PlanningPage() {
               return (
               <>
                 <div key={`tech-${tech.id}`} className="p-2 bg-[var(--bg-tertiary)]/50 border-b border-r flex items-center gap-2 sticky left-0 z-[5]">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center text-xs font-bold flex-shrink-0">{tech.avatar_initiales}</div>
+                  <div className="w-8 h-8 rounded-lg bg-[#B91C1C] flex items-center justify-center text-xs font-bold flex-shrink-0">{tech.avatar_initiales}</div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-[var(--text-primary)]">{tech.prenom} {tech.nom?.charAt(0)}.</div>
                     <div className="flex items-center gap-1.5 mt-0.5">

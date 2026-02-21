@@ -116,7 +116,7 @@ export function SidebarResume({
       {/* Profil */}
       <Card>
         <CardBody className="text-center">
-          <div className="w-16 h-16 mx-auto bg-gradient-to-br from-[#B91C1C] to-[#DC4444] rounded-2xl flex items-center justify-center text-2xl font-bold text-[var(--text-primary)] mb-4">
+          <div className="w-16 h-16 mx-auto bg-[#B91C1C] rounded-2xl flex items-center justify-center text-2xl font-bold text-[var(--text-primary)] mb-4">
             {technicien?.avatar_initiales || 'NB'}
           </div>
           <h3 className="text-lg font-bold text-[var(--text-primary)]">
@@ -169,7 +169,7 @@ export function SidebarResume({
 
           <div className="grid grid-cols-2 gap-3">
             {/* Congés */}
-            <div className="bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-xl p-4 text-center border border-cyan-500/30">
+            <div className="bg-blue-500/10 rounded-xl p-4 text-center border border-blue-500/20">
               <Palmtree className="w-5 h-5 mx-auto text-cyan-400 mb-2" />
               <div className="text-2xl font-extrabold text-cyan-400 font-mono">
                 {soldes?.conges_solde?.toFixed(1) || '0'}
@@ -181,7 +181,7 @@ export function SidebarResume({
             </div>
 
             {/* RTT */}
-            <div className="bg-gradient-to-br from-emerald-500/20 to-green-500/20 rounded-xl p-4 text-center border border-emerald-500/30">
+            <div className="bg-emerald-500/10 rounded-xl p-4 text-center border border-emerald-500/20">
               <Clock className="w-5 h-5 mx-auto text-emerald-400 mb-2" />
               <div className="text-2xl font-extrabold text-emerald-400 font-mono">
                 {soldes?.rtt_solde?.toFixed(1) || '0'}h

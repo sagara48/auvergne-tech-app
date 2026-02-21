@@ -185,7 +185,7 @@ async function getStockVehiculeTechnicien(): Promise<{
     // Vérifier si admin
     const isAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
 
-    console.log('FicheNFC - User admin check:', { 
+//     console.log('FicheNFC - User admin check:', { 
       userId: user.id, 
       email: user.email, 
       isAdmin, 
@@ -206,7 +206,7 @@ async function getStockVehiculeTechnicien(): Promise<{
         `)
         .order('immatriculation');
       
-      console.log('FicheNFC - Véhicules chargés:', vehiculesData?.length, error);
+//       console.log('FicheNFC - Véhicules chargés:', vehiculesData?.length, error);
 
       // Récupérer les noms des techniciens
       const technicienIds = (vehiculesData || [])
@@ -283,7 +283,7 @@ async function getStockVehiculeTechnicien(): Promise<{
 
 // Récupérer le stock d'un véhicule spécifique
 async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]> {
-  console.log('getStockVehiculeById appelé avec:', vehiculeId);
+//   console.log('getStockVehiculeById appelé avec:', vehiculeId);
   try {
     const { data: stock, error } = await supabase
       .from('stock_vehicule')
@@ -300,7 +300,7 @@ async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]>
       console.error('ERREUR stock_vehicule:', error.message, error.code, error.details, error.hint);
       
       // Essayer une requête plus simple si la jointure pose problème
-      console.log('Tentative requête simplifiée...');
+//       console.log('Tentative requête simplifiée...');
       const { data: stockSimple, error: errorSimple } = await supabase
         .from('stock_vehicule')
         .select('id, article_id, quantite')
@@ -312,7 +312,7 @@ async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]>
         return [];
       }
       
-      console.log('Stock simplifié récupéré:', stockSimple?.length, 'articles');
+//       console.log('Stock simplifié récupéré:', stockSimple?.length, 'articles');
       
       // Récupérer les articles séparément si on a des résultats
       if (stockSimple && stockSimple.length > 0) {
@@ -336,14 +336,14 @@ async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]>
           categorie: undefined,
         }));
         
-        console.log('Articles formatés (méthode alternative):', formattedArticles.length);
+//         console.log('Articles formatés (méthode alternative):', formattedArticles.length);
         return formattedArticles;
       }
       
       return [];
     }
 
-    console.log('Stock véhicule récupéré:', stock?.length, 'articles');
+//     console.log('Stock véhicule récupéré:', stock?.length, 'articles');
 
     const articles = (stock || []).map((s: any) => ({
       id: s.id,
@@ -354,7 +354,7 @@ async function getStockVehiculeById(vehiculeId: string): Promise<ArticleStock[]>
       categorie: s.article?.categorie?.nom,
     }));
 
-    console.log('Articles formatés:', articles.length);
+//     console.log('Articles formatés:', articles.length);
     return articles;
   } catch (error) {
     console.error('Erreur récupération stock véhicule:', error);
@@ -469,7 +469,7 @@ async function enregistrerPiecesRemplacees(
   });
   
   if (interventionError) {
-    console.log('Note: Table interventions_rapides peut ne pas exister:', interventionError.message);
+//     console.log('Note: Table interventions_rapides peut ne pas exister:', interventionError.message);
   }
 
   // 3. Mettre à jour le dernier passage
@@ -660,11 +660,11 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
   // Charger le stock quand l'admin sélectionne un véhicule
   useEffect(() => {
     async function loadAdminStock() {
-      console.log('useEffect loadAdminStock:', { isAdmin: stockVehicule?.isAdmin, selectedVehiculeId });
+//       console.log('useEffect loadAdminStock:', { isAdmin: stockVehicule?.isAdmin, selectedVehiculeId });
       if (stockVehicule?.isAdmin && selectedVehiculeId) {
         setLoadingAdminStock(true);
         const articles = await getStockVehiculeById(selectedVehiculeId);
-        console.log('Articles chargés pour admin:', articles.length);
+//         console.log('Articles chargés pour admin:', articles.length);
         setArticlesAdmin(articles);
         setPiecesRemplacees([]); // Reset les pièces sélectionnées
         setLoadingAdminStock(false);

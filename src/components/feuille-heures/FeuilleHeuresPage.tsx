@@ -186,7 +186,7 @@ export function FeuilleHeuresPage() {
 
               {/* Info semaine */}
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center">
+                <div className="w-14 h-14 rounded-xl bg-[#B91C1C] flex items-center justify-center">
                   <Calendar className="w-7 h-7 text-white" />
                 </div>
                 <div>

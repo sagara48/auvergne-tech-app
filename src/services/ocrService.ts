@@ -50,12 +50,12 @@ async function initTesseract(config: OCRConfig = { language: 'fra' }): Promise<v
         logger: (m: any) => {
           if (m.status === 'recognizing text') {
             // Progression disponible via m.progress (0-1)
-            console.log(`OCR: ${Math.round(m.progress * 100)}%`);
+//             console.log(`OCR: ${Math.round(m.progress * 100)}%`);
           }
         }
       });
       
-      console.log('Tesseract initialisé avec succès');
+//       console.log('Tesseract initialisé avec succès');
     } catch (error) {
       console.error('Erreur initialisation Tesseract:', error);
       throw error;

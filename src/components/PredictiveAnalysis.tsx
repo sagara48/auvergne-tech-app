@@ -68,7 +68,7 @@ export function PredictiveAnalysisDashboard({ onSelectAscenseur, secteurs }: Pre
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-[#B91C1C] flex items-center justify-center">
             <Brain className="w-6 h-6 text-white" />
           </div>
           <div>
@@ -90,7 +90,7 @@ export function PredictiveAnalysisDashboard({ onSelectAscenseur, secteurs }: Pre
 
       {/* KPIs globaux */}
       <div className="grid grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-[#B91C1C]/20 to-indigo-500/10 border-[#B91C1C]/30">
+        <Card className="bg-[#B91C1C]/10 border-[#B91C1C]/20">
           <CardBody className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -119,7 +119,7 @@ export function PredictiveAnalysisDashboard({ onSelectAscenseur, secteurs }: Pre
           </CardBody>
         </Card>
 
-        <Card className="bg-gradient-to-br from-red-500/20 to-red-600/10 border-red-500/30">
+        <Card className="bg-red-500/10 border-red-500/20">
           <CardBody className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -131,7 +131,7 @@ export function PredictiveAnalysisDashboard({ onSelectAscenseur, secteurs }: Pre
           </CardBody>
         </Card>
 
-        <Card className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 border-orange-500/30">
+        <Card className="bg-orange-500/10 border-orange-500/20">
           <CardBody className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -143,7 +143,7 @@ export function PredictiveAnalysisDashboard({ onSelectAscenseur, secteurs }: Pre
           </CardBody>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-500/20 to-green-600/10 border-green-500/30">
+        <Card className="bg-green-500/10 border-green-500/20">
           <CardBody className="p-4">
             <div className="flex items-center justify-between">
               <div>

@@ -308,7 +308,7 @@ export function NFCScanButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center z-40"
+      className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-500 text-white shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center z-40"
       title="Scanner NFC"
     >
       <Nfc className="w-6 h-6" />

@@ -94,7 +94,7 @@ export function FicheAscenseurIntegree({ ascenseurId }: FicheAscenseurIntegreePr
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header avec infos principales */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
+      <div className="bg-blue-600 text-white p-6">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3 mb-2">

@@ -239,7 +239,7 @@ export async function geocodeAscenseur(ascenseur: any): Promise<GeocodingResult 
   
   // Si pas de ville, on ne peut pas géocoder
   if (!ville) {
-    console.log(`✗ Pas de ville: ${ascenseur.code_appareil}`);
+//     console.log(`✗ Pas de ville: ${ascenseur.code_appareil}`);
     return null;
   }
   
@@ -307,7 +307,7 @@ export async function geocodeAscenseur(ascenseur: any): Promise<GeocodingResult 
     
     if (result && result.score >= strategy.minScore) {
       result.strategy = strategy.name;
-      console.log(`✓ Géocodé [${strategy.name}]: ${ascenseur.code_appareil} (score: ${(result.score * 100).toFixed(0)}%)`);
+//       console.log(`✓ Géocodé [${strategy.name}]: ${ascenseur.code_appareil} (score: ${(result.score * 100).toFixed(0)}%)`);
       return result;
     }
     
@@ -321,7 +321,7 @@ export async function geocodeAscenseur(ascenseur: any): Promise<GeocodingResult 
     const nominatimResult = await geocodeWithNominatim(adresse, ville, codePostal);
     if (nominatimResult) {
       nominatimResult.strategy = 'nominatim';
-      console.log(`✓ Géocodé [nominatim]: ${ascenseur.code_appareil}`);
+//       console.log(`✓ Géocodé [nominatim]: ${ascenseur.code_appareil}`);
       return nominatimResult;
     }
   }
@@ -332,23 +332,23 @@ export async function geocodeAscenseur(ascenseur: any): Promise<GeocodingResult 
     const nominatimStreet = await geocodeWithNominatim(street, ville, codePostal);
     if (nominatimStreet) {
       nominatimStreet.strategy = 'nominatim_rue';
-      console.log(`✓ Géocodé [nominatim_rue]: ${ascenseur.code_appareil}`);
+//       console.log(`✓ Géocodé [nominatim_rue]: ${ascenseur.code_appareil}`);
       return nominatimStreet;
     }
   }
   
   // FALLBACK FINAL: Centre-ville (position approximative mais mieux que rien)
-  console.log(`⚠ Fallback centre-ville pour: ${ascenseur.code_appareil}`);
+//   console.log(`⚠ Fallback centre-ville pour: ${ascenseur.code_appareil}`);
   const centreVille = await geocodeWithAPI(ville, codePostal);
   if (centreVille) {
     centreVille.strategy = 'centre_ville';
     centreVille.score = 0.2; // Score bas pour indiquer approximation
     centreVille.type = 'municipality';
-    console.log(`✓ Géocodé [centre_ville]: ${ascenseur.code_appareil} -> ${ville}`);
+//     console.log(`✓ Géocodé [centre_ville]: ${ascenseur.code_appareil} -> ${ville}`);
     return centreVille;
   }
   
-  console.log(`✗ Échec total: ${ascenseur.code_appareil} - ${adresse}, ${ville}`);
+//   console.log(`✗ Échec total: ${ascenseur.code_appareil} - ${adresse}, ${ville}`);
   return null;
 }
 
@@ -479,7 +479,7 @@ export async function geocodeAndUpdateAll(
   failures: Array<{ id: number; code: string; adresse: string; ville: string; error: string }>;
 }> {
   // Récupérer TOUS les ascenseurs avec pagination (Supabase limite à 1000)
-  console.log('Récupération de tous les ascenseurs...');
+//   console.log('Récupération de tous les ascenseurs...');
   const allAscenseurs: any[] = [];
   let from = 0;
   const batchSize = 1000;
@@ -497,7 +497,7 @@ export async function geocodeAndUpdateAll(
     
     if (data && data.length > 0) {
       allAscenseurs.push(...data);
-      console.log(`Récupéré ${allAscenseurs.length} ascenseurs...`);
+//       console.log(`Récupéré ${allAscenseurs.length} ascenseurs...`);
       from += batchSize;
       if (data.length < batchSize) break; // Plus de données
     } else {
@@ -505,7 +505,7 @@ export async function geocodeAndUpdateAll(
     }
   }
   
-  console.log(`Total ascenseurs récupérés: ${allAscenseurs.length}`);
+//   console.log(`Total ascenseurs récupérés: ${allAscenseurs.length}`);
   
   if (allAscenseurs.length === 0) {
     return { total: 0, success: 0, failed: 0, skipped: 0, failures: [] };
@@ -518,11 +518,11 @@ export async function geocodeAndUpdateAll(
   if (forceAll) {
     toGeocode = allAscenseurs;
     skipped = 0;
-    console.log(`Géocodage FORCÉ de ${toGeocode.length} ascenseurs`);
+//     console.log(`Géocodage FORCÉ de ${toGeocode.length} ascenseurs`);
   } else {
     toGeocode = allAscenseurs.filter((a: any) => !a.latitude || !a.longitude);
     skipped = allAscenseurs.length - toGeocode.length;
-    console.log(`Géocodage de ${toGeocode.length} ascenseurs (${skipped} déjà géocodés)`);
+//     console.log(`Géocodage de ${toGeocode.length} ascenseurs (${skipped} déjà géocodés)`);
   }
   
   if (toGeocode.length === 0) {
@@ -556,7 +556,7 @@ export async function geocodeAndUpdateAll(
     }
   }
   
-  console.log(`Géocodage terminé: ${updated} mis à jour, ${failed} échecs`);
+//   console.log(`Géocodage terminé: ${updated} mis à jour, ${failed} échecs`);
   
   return {
     total: toGeocode.length,

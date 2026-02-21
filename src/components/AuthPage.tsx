@@ -143,7 +143,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
       <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#B91C1C] to-[#DC4444] rounded-2xl shadow-lg shadow-[#B91C1C]/25 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#B91C1C] rounded-2xl shadow-lg shadow-[#B91C1C]/25 mb-4">
             <Building2 className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white">AuvergneTech</h1>
@@ -159,7 +159,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 onClick={() => { setMode('login'); setError(null); setMessage(null); }}
                 className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all ${
                   mode === 'login'
-                    ? 'bg-gradient-to-r from-[#B91C1C] to-[#DC4444] text-white shadow-lg'
+                    ? 'bg-[#B91C1C] text-white shadow-lg'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -169,7 +169,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 onClick={() => { setMode('register'); setError(null); setMessage(null); }}
                 className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all ${
                   mode === 'register'
-                    ? 'bg-gradient-to-r from-[#B91C1C] to-[#DC4444] text-white shadow-lg'
+                    ? 'bg-[#B91C1C] text-white shadow-lg'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -248,7 +248,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-[#B91C1C] to-[#DC4444] hover:from-[#991B1B] hover:to-[#B91C1C] text-white font-medium rounded-xl shadow-lg shadow-[#B91C1C]/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 bg-[#B91C1C] hover:bg-[#991B1B] text-white font-medium rounded-xl shadow-lg shadow-[#B91C1C]/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -327,7 +327,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-[#B91C1C] to-[#DC4444] hover:from-[#991B1B] hover:to-[#B91C1C] text-white font-medium rounded-xl shadow-lg shadow-[#B91C1C]/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 bg-[#B91C1C] hover:bg-[#991B1B] text-white font-medium rounded-xl shadow-lg shadow-[#B91C1C]/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -371,7 +371,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-[#B91C1C] to-[#DC4444] hover:from-[#991B1B] hover:to-[#B91C1C] text-white font-medium rounded-xl shadow-lg shadow-[#B91C1C]/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 bg-[#B91C1C] hover:bg-[#991B1B] text-white font-medium rounded-xl shadow-lg shadow-[#B91C1C]/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>

@@ -205,7 +205,7 @@ function AnalysePhotoModal({
             {/* Bouton analyser */}
             <Button
               variant="primary"
-              className="w-full bg-gradient-to-r from-[#B91C1C] to-[#DC4444]"
+              className="w-full bg-[#B91C1C]"
               onClick={handleAnalyser}
               disabled={!photo || isAnalysing}
             >
@@ -600,7 +600,7 @@ export function PiecesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-[#B91C1C] flex items-center justify-center">
             <Package className="w-6 h-6 text-white" />
           </div>
           <div>
@@ -614,7 +614,7 @@ export function PiecesPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="primary"
-            className="bg-gradient-to-r from-[#B91C1C] to-[#DC4444]"
+            className="bg-[#B91C1C]"
             onClick={() => setShowPhotoModal(true)}
           >
             <Camera className="w-5 h-5" />
@@ -783,7 +783,7 @@ export function PiecesPage() {
                   </p>
                   <Button
                     variant="primary"
-                    className="bg-gradient-to-r from-[#B91C1C] to-[#DC4444]"
+                    className="bg-[#B91C1C]"
                     onClick={() => setShowPhotoModal(true)}
                   >
                     <Camera className="w-5 h-5" />

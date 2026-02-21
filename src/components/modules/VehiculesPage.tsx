@@ -1533,7 +1533,7 @@ export function VehiculesPage() {
 
         return (
           <Card className={`overflow-hidden ${hautes.length > 0 ? 'border-red-500/30' : 'border-amber-500/20'}`}>
-            <div className={`px-4 py-3 flex items-center justify-between ${hautes.length > 0 ? 'bg-gradient-to-r from-red-500/10 to-amber-500/5' : 'bg-gradient-to-r from-amber-500/10 to-yellow-500/5'}`}>
+            <div className={`px-4 py-3 flex items-center justify-between ${hautes.length > 0 ? 'bg-red-500/5' : 'bg-amber-500/5'}`}>
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl ${hautes.length > 0 ? 'bg-red-500/20' : 'bg-amber-500/20'} flex items-center justify-center`}>
                   <AlertTriangle className={`w-5 h-5 ${hautes.length > 0 ? 'text-red-400' : 'text-amber-400'}`} />

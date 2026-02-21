@@ -1356,7 +1356,7 @@ function GroupeCommandeModal({ onClose, onCreate }: {
             {/* Step 1: Analyse */}
             {step === 'analyse' && (
               <div className="space-y-3">
-                <div className="p-4 rounded-xl bg-gradient-to-r from-[#B91C1C]/10 to-blue-500/5 border border-[#B91C1C]/20">
+                <div className="p-4 rounded-xl bg-[#B91C1C]/8 border border-[#B91C1C]/20">
                   <div className="text-sm font-bold text-[var(--text-primary)] mb-1">📊 Analyse des besoins</div>
                   <div className="text-xs text-[var(--text-tertiary)]">
                     {besoins.length} travaux nécessitent des pièces. En regroupant vos commandes, vous optimisez les frais de port et réduisez les délais.

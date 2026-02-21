@@ -347,7 +347,7 @@ export async function analyserParcComplet(secteurs?: number[]): Promise<AnalyseG
     }
     
     if (!ascenseurs || ascenseurs.length === 0) {
-      console.log('Aucun ascenseur trouvé pour l\'analyse');
+//       console.log('Aucun ascenseur trouvé pour l\'analyse');
       return {
         scoreGlobal: 0,
         ascenseursACritiquer: 0,
@@ -381,7 +381,7 @@ export async function analyserParcComplet(secteurs?: number[]): Promise<AnalyseG
       };
     }
     
-    console.log(`Analyse prédictive: ${ascenseurs.length} ascenseurs, ${pannes?.length || 0} pannes (90j)`);
+//     console.log(`Analyse prédictive: ${ascenseurs.length} ascenseurs, ${pannes?.length || 0} pannes (90j)`);
     
     // Grouper les pannes par ascenseur
     const pannesParAscenseur: Record<string, any[]> = {};

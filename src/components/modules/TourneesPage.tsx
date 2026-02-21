@@ -115,7 +115,7 @@ function PrechargementPanel({ tournee, ascenseurs, travaux, stockGlobal }: {
     <Card className={manquantes.length > 0 ? 'border-amber-500/30' : 'border-green-500/20'}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3 flex items-center justify-between bg-gradient-to-r from-lime-500/5 to-green-500/5 hover:from-lime-500/10 hover:to-green-500/10 transition-colors"
+        className="w-full px-4 py-3 flex items-center justify-between bg-green-500/5 hover:bg-green-500/10 transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-lime-500/20 flex items-center justify-center">
@@ -353,7 +353,7 @@ function GPSRouteOptimizer({ tournee, ascenseurs }: { tournee: Tournee; ascenseu
 
   return (
     <Card className="border-blue-500/20">
-      <div className="px-4 py-3 flex items-center justify-between bg-gradient-to-r from-blue-500/5 to-cyan-500/5 border-b border-[var(--border-secondary)]">
+      <div className="px-4 py-3 flex items-center justify-between bg-blue-500/5 border-b border-[var(--border-secondary)]">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
             <Navigation className="w-4 h-4 text-blue-400" />

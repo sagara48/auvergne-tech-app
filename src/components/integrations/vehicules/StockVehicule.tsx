@@ -352,7 +352,7 @@ export function StockVehicule() {
       {selectedVehicule && (
         <div className="flex-1 flex flex-col bg-white">
           {/* Header véhicule */}
-          <div className="p-4 border-b bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+          <div className="p-4 border-b bg-blue-600 text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">

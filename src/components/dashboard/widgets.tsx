@@ -1661,7 +1661,7 @@ export function TeamWeatherWidget({ onRemove }: { onRemove?: () => void }) {
 
             return (
               <div key={t.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-[var(--bg-tertiary)]">
-                <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center text-[9px] font-bold text-white">
+                <div className="w-6 h-6 rounded-md bg-[#B91C1C] flex items-center justify-center text-[9px] font-bold text-white">
                   {t.avatar_initiales || (t.prenom?.charAt(0) || '') + (t.nom?.charAt(0) || '')}
                 </div>
                 <div className="flex-1 min-w-0">

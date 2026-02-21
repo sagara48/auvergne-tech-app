@@ -408,8 +408,8 @@ export function DashboardPage() {
               className="w-full h-full"
               style={{
                 backgroundImage: `
-                  linear-gradient(to right, rgba(139, 92, 246, 0.1) 1px, transparent 1px),
-                  linear-gradient(to bottom, rgba(139, 92, 246, 0.1) 1px, transparent 1px)
+                  linear-gradient(to right, rgba(185, 28, 28, 0.06) 1px, transparent 1px),
+                  linear-gradient(to bottom, rgba(185, 28, 28, 0.06) 1px, transparent 1px)
                 `,
                 backgroundSize: `${(containerWidth - 48) / 6}px 100px`,
               }}

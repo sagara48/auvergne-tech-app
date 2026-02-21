@@ -450,7 +450,7 @@ function ChecklistModal({ appareil, onClose, onSave }: { appareil: any; onClose:
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1"><span className="text-sm">Progression</span><span className="text-sm font-bold text-orange-400">{progress}%</span></div>
-                <div className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-amber-400" style={{ width: `${progress}%` }} /></div>
+                <div className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden"><div className="h-full bg-orange-500" style={{ width: `${progress}%` }} /></div>
               </div>
               <div className="flex gap-2">
                 <Badge variant="green">C: {stats.conforme}</Badge>
@@ -545,7 +545,7 @@ function ChecklistModal({ appareil, onClose, onSave }: { appareil: any; onClose:
 
             {/* Section Essais en charge - Tableau */}
             <div className="mb-4">
-              <button onClick={() => setShowEssaisEnCharge(!showEssaisEnCharge)} className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-orange-500/20 to-amber-500/20 border border-orange-500/30 rounded-lg hover:from-orange-500/30 hover:to-amber-500/30">
+              <button onClick={() => setShowEssaisEnCharge(!showEssaisEnCharge)} className="w-full flex items-center justify-between p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg hover:bg-orange-500/15">
                 <div className="flex items-center gap-2">
                   <Gauge className="w-5 h-5 text-orange-400" />
                   <span className="font-semibold text-orange-400">Essais en charge</span>

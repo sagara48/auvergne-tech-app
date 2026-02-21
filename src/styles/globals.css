@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 /* ==========================================
    VARIABLES CSS POUR LES THEMES
@@ -65,9 +65,9 @@
   --accent-bg: rgba(185, 28, 28, 0.06);
   --accent-bg-hover: rgba(185, 28, 28, 0.12);
   
-  --shadow-sm: 0 1px 3px 0 rgba(100, 70, 160, 0.04);
-  --shadow-md: 0 2px 8px rgba(100, 70, 160, 0.05);
-  --shadow-lg: 0 8px 24px rgba(100, 70, 160, 0.08);
+  --shadow-sm: 0 1px 3px rgba(100, 70, 160, 0.03), 0 1px 2px rgba(100, 70, 160, 0.02);
+  --shadow-md: 0 4px 12px rgba(100, 70, 160, 0.06), 0 1px 3px rgba(100, 70, 160, 0.03);
+  --shadow-lg: 0 8px 24px rgba(100, 70, 160, 0.08), 0 2px 6px rgba(100, 70, 160, 0.04);
 }
 
 /* ==========================================
@@ -81,7 +81,7 @@
 }
 
 html {
-  font-family: 'DM Sans', system-ui, sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
 }
 
 body {
@@ -92,70 +92,6 @@ body {
   overflow: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
-
-/* ==========================================
-   CLASSES UTILITAIRES THEME
-   ========================================== */
-
-/* Backgrounds */
-.theme-bg-primary { background-color: var(--bg-primary); }
-.theme-bg-secondary { background-color: var(--bg-secondary); }
-.theme-bg-tertiary { background-color: var(--bg-tertiary); }
-.theme-bg-elevated { background-color: var(--bg-elevated); }
-.theme-bg-hover:hover { background-color: var(--bg-hover); }
-
-/* Textes */
-.theme-text-primary { color: var(--text-primary); }
-.theme-text-secondary { color: var(--text-secondary); }
-.theme-text-tertiary { color: var(--text-tertiary); }
-.theme-text-muted { color: var(--text-muted); }
-
-/* Bordures */
-.theme-border { border-color: var(--border-primary); }
-.theme-border-secondary { border-color: var(--border-secondary); }
-
-/* Automatisation des couleurs de texte principales */
-.dark .text-white { color: #F0EDF5; }
-.light .text-white { color: #1E1B2E; }
-
-.dark .text-dark-300 { color: #A49BB5; }
-.light .text-dark-300 { color: #585270; }
-
-.dark .text-dark-400 { color: #7A7190; }
-.light .text-dark-400 { color: #7A7190; }
-
-.dark .text-dark-500 { color: #5A5270; }
-.light .text-dark-500 { color: #9490A8; }
-
-/* Automatisation des backgrounds */
-.dark .bg-dark-900 { background-color: #0F0D14; }
-.light .bg-dark-900 { background-color: #F3F1F6; }
-
-.dark .bg-dark-800 { background-color: #161420; }
-.light .bg-dark-800 { background-color: #FFFFFF; }
-
-.dark .bg-dark-700 { background-color: #1E1B2A; }
-.light .bg-dark-700 { background-color: #EDE9F5; }
-
-.dark .bg-dark-600 { background-color: #2A2640; }
-.light .bg-dark-600 { background-color: #E4DFF0; }
-
-/* Automatisation des bordures */
-.dark .border-dark-600 { border-color: #2E2940; }
-.light .border-dark-600 { border-color: #E4DFF0; }
-
-.dark .border-dark-700 { border-color: #221F32; }
-.light .border-dark-700 { border-color: #ECE8F5; }
-
-/* Hovers */
-.dark .hover\:bg-dark-700:hover { background-color: #1E1B2A; }
-.light .hover\:bg-dark-700:hover { background-color: #E4DFF0; }
-
-.dark .hover\:bg-dark-600:hover { background-color: #2A2640; }
-.light .hover\:bg-dark-600:hover { background-color: #E4DFF0; }
-
-.dark .hover\:text-white:hover { color: #F0EDF5; }
-.light .hover\:text-white:hover { color: #1E1B2E; }
 
 /* ==========================================
    SCROLLBAR
@@ -215,49 +151,12 @@ input[type="time"]::-webkit-calendar-picker-indicator {
    ========================================== */
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.animate-slide-in {
-  animation: slideIn 0.3s ease-out;
-}
-
-/* ==========================================
-   EFFETS GLOW
-   ========================================== */
-
-.glow-blue {
-  box-shadow: 0 0 30px rgba(37, 99, 235, 0.3);
-}
-
-.glow-green {
-  box-shadow: 0 0 30px rgba(5, 150, 105, 0.3);
-}
-
-.glow-purple {
-  box-shadow: 0 0 30px rgba(185, 28, 28, 0.3);
 }
 
 /* ==========================================
@@ -265,10 +164,6 @@ input[type="time"]::-webkit-calendar-picker-indicator {
    ========================================== */
 
 @layer utilities {
-  .transition-base {
-    @apply transition-all duration-200 ease-in-out;
-  }
-  
   .transition-theme {
     transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
   }

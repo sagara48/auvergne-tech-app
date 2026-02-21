@@ -165,7 +165,7 @@ function CommentsSection({ noteId }: { noteId: string }) {
       <div className="space-y-3 max-h-48 overflow-y-auto mb-3">
         {commentaires?.map(c => (
           <div key={c.id} className="flex gap-2 group">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-[#B91C1C] flex items-center justify-center text-[10px] font-bold flex-shrink-0">
               {c.technicien?.avatar_initiales || '?'}
             </div>
             <div className="flex-1">
@@ -533,7 +533,7 @@ function PartageSection({ noteId }: { noteId: string }) {
       <div className="space-y-2">
         {partages?.map(partage => (
           <div key={partage.id} className="flex items-center gap-2 p-2 bg-[var(--bg-tertiary)] rounded-lg group">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center text-[10px] font-bold text-white">
+            <div className="w-7 h-7 rounded-full bg-[#B91C1C] flex items-center justify-center text-[10px] font-bold text-white">
               {partage.technicien?.avatar_initiales || '?'}
             </div>
             <div className="flex-1">

@@ -188,7 +188,7 @@ const getAscenseurs = async (secteur?: number, userSecteurs?: number[]) => {
       }
     }
     
-    console.log(`Ascenseurs récupérés: ${allAscenseurs.length}`);
+//     console.log(`Ascenseurs récupérés: ${allAscenseurs.length}`);
     return allAscenseurs;
   } catch (err) {
     console.error('Erreur getAscenseurs:', err);
@@ -225,7 +225,7 @@ const getAllAscenseursForEnrichment = async () => {
       }
     }
     
-    console.log(`Ascenseurs pour enrichissement: ${allAscenseurs.length} (chargés en ${Math.ceil(allAscenseurs.length / batchSize)} batches)`);
+//     console.log(`Ascenseurs pour enrichissement: ${allAscenseurs.length} (chargés en ${Math.ceil(allAscenseurs.length / batchSize)} batches)`);
     return allAscenseurs;
   } catch (err) {
     console.error('Erreur getAllAscenseursForEnrichment:', err);
@@ -281,14 +281,14 @@ const getPannesRecentes = async () => {
       }
     }
     
-    console.log(`Pannes récupérées: ${allPannes.length} (en ${Math.ceil(from / batchSize)} batches, max ${maxPannes})`);
+//     console.log(`Pannes récupérées: ${allPannes.length} (en ${Math.ceil(from / batchSize)} batches, max ${maxPannes})`);
     
     // Debug: afficher les dates des 5 premières pannes
     if (allPannes.length > 0) {
-      console.log('5 premières pannes (plus récentes):');
+//       console.log('5 premières pannes (plus récentes):');
       allPannes.slice(0, 5).forEach((p: any, i: number) => {
         const data = p.data_wpanne || {};
-        console.log(`  ${i+1}. date=${p.date_appel}, cause=${data.CAUSE}, motif=${String(p.motif || '').substring(0, 30)}...`);
+//         console.log(`  ${i+1}. date=${p.date_appel}, cause=${data.CAUSE}, motif=${String(p.motif || '').substring(0, 30)}...`);
       });
     }
     
@@ -583,7 +583,7 @@ function SyncModal({ onClose }: { onClose: () => void }) {
           <div className="p-4 border-b border-[var(--border-primary)]">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
                   <Cloud className="w-5 h-5 text-white" />
                 </div>
                 <div>
@@ -797,7 +797,7 @@ function SyncModal({ onClose }: { onClose: () => void }) {
                     </div>
                     <div className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden mb-3">
                       <div 
-                        className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300" 
+                        className="h-full bg-blue-500 transition-all duration-300" 
                         style={{ width: `${progress}%` }} 
                       />
                     </div>
@@ -1376,7 +1376,7 @@ function SignalerPiecesModal({
         const userIsAdmin = roleCode === 'admin' || roleCode === 'superadmin' || roleCode === 'administrateur';
         setIsAdmin(userIsAdmin);
         
-        console.log('User admin check:', { 
+//         console.log('User admin check:', { 
           userId: user.id, 
           email: user.email, 
           isAdmin: userIsAdmin, 
@@ -1397,7 +1397,7 @@ function SignalerPiecesModal({
             `)
             .order('immatriculation');
           
-          console.log('Véhicules chargés:', vehiculesData?.length, vehiculesError);
+//           console.log('Véhicules chargés:', vehiculesData?.length, vehiculesError);
 
           // Récupérer les noms des techniciens depuis la table techniciens
           const technicienIds = (vehiculesData || [])
@@ -1475,7 +1475,7 @@ function SignalerPiecesModal({
 
   // Charger le stock d'un véhicule spécifique
   const loadStockVehicule = async (vehId: string) => {
-    console.log('loadStockVehicule appelé avec:', vehId);
+//     console.log('loadStockVehicule appelé avec:', vehId);
     try {
       const { data: stock, error } = await supabase
         .from('stock_vehicule')
@@ -1492,7 +1492,7 @@ function SignalerPiecesModal({
         console.error('ERREUR stock_vehicule:', error.message, error.code, error.details, error.hint);
         
         // Essayer une requête plus simple si la jointure pose problème
-        console.log('Tentative requête simplifiée...');
+//         console.log('Tentative requête simplifiée...');
         const { data: stockSimple, error: errorSimple } = await supabase
           .from('stock_vehicule')
           .select('id, article_id, quantite')
@@ -1505,7 +1505,7 @@ function SignalerPiecesModal({
           return;
         }
         
-        console.log('Stock simplifié récupéré:', stockSimple?.length, 'articles');
+//         console.log('Stock simplifié récupéré:', stockSimple?.length, 'articles');
         
         // Récupérer les articles séparément si on a des résultats
         if (stockSimple && stockSimple.length > 0) {
@@ -1529,7 +1529,7 @@ function SignalerPiecesModal({
             categorie: undefined,
           }));
           
-          console.log('Articles formatés (méthode alternative):', formattedArticles.length);
+//           console.log('Articles formatés (méthode alternative):', formattedArticles.length);
           setStockVehicule(formattedArticles);
           setVehiculeId(vehId);
           setPiecesRemplacees([]);
@@ -1540,7 +1540,7 @@ function SignalerPiecesModal({
         return;
       }
 
-      console.log('Stock récupéré:', stock?.length, 'articles');
+//       console.log('Stock récupéré:', stock?.length, 'articles');
 
       const articles: ArticleStockVehicule[] = (stock || []).map((s: any) => ({
         id: s.id,
@@ -1551,7 +1551,7 @@ function SignalerPiecesModal({
         categorie: s.article?.categorie?.nom,
       }));
 
-      console.log('Articles formatés:', articles.length);
+//       console.log('Articles formatés:', articles.length);
       setStockVehicule(articles);
       setVehiculeId(vehId);
       setPiecesRemplacees([]);
@@ -1563,23 +1563,23 @@ function SignalerPiecesModal({
 
   // Quand l'admin sélectionne un technicien/véhicule
   const handleTechnicienChange = async (techId: string) => {
-    console.log('handleTechnicienChange appelé avec:', techId);
+//     console.log('handleTechnicienChange appelé avec:', techId);
     setSelectedTechnicienId(techId);
     
     if (techId) {
       // Cas 1: Véhicule non assigné (préfixé par "vehicule_")
       if (techId.startsWith('vehicule_')) {
         const realVehiculeId = techId.replace('vehicule_', '');
-        console.log('Véhicule non assigné, ID réel:', realVehiculeId);
+//         console.log('Véhicule non assigné, ID réel:', realVehiculeId);
         await loadStockVehicule(realVehiculeId);
       } else {
         // Cas 2: Technicien avec véhicule
         const technicien = techniciens.find(t => t.id === techId);
-        console.log('Technicien trouvé:', technicien);
+//         console.log('Technicien trouvé:', technicien);
         if (technicien?.vehicule_id) {
           await loadStockVehicule(technicien.vehicule_id);
         } else {
-          console.log('Pas de vehicule_id trouvé pour ce technicien');
+//           console.log('Pas de vehicule_id trouvé pour ce technicien');
           setStockVehicule([]);
           setVehiculeId(null);
         }
@@ -1707,7 +1707,7 @@ function SignalerPiecesModal({
       });
       
       if (interventionError) {
-        console.log('Note: Table interventions_rapides peut ne pas exister:', interventionError.message);
+//         console.log('Note: Table interventions_rapides peut ne pas exister:', interventionError.message);
       }
 
       toast.success(`${piecesRemplacees.length} pièce(s) enregistrée(s)`);
@@ -2106,8 +2106,8 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
   // Debug: afficher les champs disponibles
   if (allPannes && allPannes.length > 0) {
     const sample = allPannes[0];
-    console.log('=== DEBUG MODAL ASCENSEUR ===');
-    console.log('Champs disponibles:', Object.keys(sample));
+//     console.log('=== DEBUG MODAL ASCENSEUR ===');
+//     console.log('Champs disponibles:', Object.keys(sample));
     
     // Analyser toutes les causes et motifs
     const causeCounts: Record<string, number> = {};
@@ -2118,8 +2118,8 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
       causeCounts[cause] = (causeCounts[cause] || 0) + 1;
       motifCounts[motif] = (motifCounts[motif] || 0) + 1;
     });
-    console.log('Répartition causes:', causeCounts);
-    console.log('Répartition motifs (30 premiers chars):', motifCounts);
+//     console.log('Répartition causes:', causeCounts);
+//     console.log('Répartition motifs (30 premiers chars):', motifCounts);
   }
   
   // Séparer par type basé sur la CAUSE et MOTIF
@@ -2145,7 +2145,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
   }) || []);
   
   // Debug final
-  console.log(`Modal: ${allPannes?.length || 0} total → ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
+//   console.log(`Modal: ${allPannes?.length || 0} total → ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
   
   // Fonction pour formater une date YYYYMMDD (peut être string ou number)
   const formatDateYYYYMMDD = (dateVal: string | number | null) => {
@@ -3593,11 +3593,11 @@ export function ParcAscenseursPage() {
   // Enrichir les pannes avec les données des ascenseurs (utiliser TOUS les ascenseurs)
   const enrichedPannes = useMemo(() => {
     if (!pannesRecentes || !allAscenseurs) {
-      console.log('enrichedPannes: données manquantes', { pannes: pannesRecentes?.length, asc: allAscenseurs?.length });
+//       console.log('enrichedPannes: données manquantes', { pannes: pannesRecentes?.length, asc: allAscenseurs?.length });
       return [];
     }
     
-    console.log(`enrichedPannes: ${pannesRecentes.length} pannes à enrichir avec ${allAscenseurs.length} ascenseurs`);
+//     console.log(`enrichedPannes: ${pannesRecentes.length} pannes à enrichir avec ${allAscenseurs.length} ascenseurs`);
     
     // Créer un map des ascenseurs par id_wsoucont (essayer plusieurs types de clé)
     const ascenseursMapNum: Record<number, any> = {};
@@ -3612,8 +3612,8 @@ export function ParcAscenseursPage() {
     // Debug: afficher quelques id_wsoucont avec leurs types
     const sampleAsc = allAscenseurs.slice(0, 3);
     const samplePanne = pannesRecentes.slice(0, 3);
-    console.log('Sample ascenseurs:', sampleAsc.map((a: any) => ({ id: a.id_wsoucont, type: typeof a.id_wsoucont, code: a.code_appareil })));
-    console.log('Sample pannes:', samplePanne.map((p: any) => ({ id: p.id_wsoucont, type: typeof p.id_wsoucont, code: p.code_appareil })));
+//     console.log('Sample ascenseurs:', sampleAsc.map((a: any) => ({ id: a.id_wsoucont, type: typeof a.id_wsoucont, code: a.code_appareil })));
+//     console.log('Sample pannes:', samplePanne.map((p: any) => ({ id: p.id_wsoucont, type: typeof p.id_wsoucont, code: p.code_appareil })));
     
     let matchCount = 0;
     const result = pannesRecentes.map((panne: any) => {
@@ -3631,7 +3631,7 @@ export function ParcAscenseursPage() {
       };
     });
     
-    console.log(`enrichedPannes: ${matchCount}/${pannesRecentes.length} pannes ont trouvé leur ascenseur`);
+//     console.log(`enrichedPannes: ${matchCount}/${pannesRecentes.length} pannes ont trouvé leur ascenseur`);
     
     return result;
   }, [pannesRecentes, allAscenseurs]);
@@ -3670,8 +3670,8 @@ export function ParcAscenseursPage() {
         causeCounts[cause] = (causeCounts[cause] || 0) + 1;
         if (motifSample.length < 3 && p.motif) motifSample.push(String(p.motif).substring(0, 30));
       });
-      console.log('Répartition causes:', causeCounts);
-      if (motifSample.length > 0) console.log('Exemples motifs:', motifSample);
+//       console.log('Répartition causes:', causeCounts);
+//       if (motifSample.length > 0) console.log('Exemples motifs:', motifSample);
     }
     
     // Exclure visites (cause 99) et contrôles (motif commence par CONTROLE)
@@ -3683,7 +3683,7 @@ export function ParcAscenseursPage() {
       return !isVisite && !isControle;
     });
     
-    console.log(`Filtrage: ${enrichedPannes.length} → ${filtered.length} après exclusion visites/contrôles`);
+//     console.log(`Filtrage: ${enrichedPannes.length} → ${filtered.length} après exclusion visites/contrôles`);
     
     // Filtrer par secteurs autorisés si définis
     if (userSecteurs && userSecteurs.length > 0) {
@@ -3694,7 +3694,7 @@ export function ParcAscenseursPage() {
       } else {
         const avantFiltrage = filtered.length;
         filtered = filtered.filter((p: any) => p.secteur && userSecteurs.includes(p.secteur));
-        console.log(`Filtrage secteurs ${userSecteurs.join(',')}: ${avantFiltrage} → ${filtered.length}`);
+//         console.log(`Filtrage secteurs ${userSecteurs.join(',')}: ${avantFiltrage} → ${filtered.length}`);
       }
     }
     
@@ -3709,9 +3709,9 @@ export function ParcAscenseursPage() {
     
     if (sorted.length > 0) {
       const firstDate = getDateFromPanne(sorted[0]);
-      console.log(`vraisPannes: ${sorted.length} pannes (plus récente: ${firstDate?.toISOString().split('T')[0]})`);
+//       console.log(`vraisPannes: ${sorted.length} pannes (plus récente: ${firstDate?.toISOString().split('T')[0]})`);
     } else {
-      console.log('vraisPannes: 0 pannes après filtrage');
+//       console.log('vraisPannes: 0 pannes après filtrage');
     }
     
     return sorted;
@@ -3745,7 +3745,7 @@ export function ParcAscenseursPage() {
   // Compter les vraies pannes des 30 derniers jours
   const pannes30j = useMemo(() => {
     if (!vraisPannes || vraisPannes.length === 0) {
-      console.log('pannes30j: vraisPannes vide');
+//       console.log('pannes30j: vraisPannes vide');
       return 0;
     }
     
@@ -3776,7 +3776,7 @@ export function ParcAscenseursPage() {
       return dateAppel >= thirtyDaysAgo;
     }).length;
     
-    console.log(`pannes30j: ${count} pannes sur les 30 derniers jours (depuis ${thirtyDaysAgo.toISOString().split('T')[0]})`);
+//     console.log(`pannes30j: ${count} pannes sur les 30 derniers jours (depuis ${thirtyDaysAgo.toISOString().split('T')[0]})`);
     return count;
   }, [vraisPannes]);
   
@@ -4315,7 +4315,7 @@ export function ParcAscenseursPage() {
                 return hasOrdre && secteurAccessible && sousContrat;
               });
               
-              console.log(`Tournées: ${ascenseursAvecTournee.length} ascenseurs avec ordre2 sur ${ascenseurs?.length || 0} total`);
+//               console.log(`Tournées: ${ascenseursAvecTournee.length} ascenseurs avec ordre2 sur ${ascenseurs?.length || 0} total`);
               
               ascenseursAvecTournee.forEach((a: any) => {
                 const secteur = a.secteur || 0;
@@ -4414,19 +4414,19 @@ export function ParcAscenseursPage() {
                 <>
                   {/* Header avec stats globales */}
                   <div className="grid grid-cols-4 gap-4 mb-6">
-                    <Card className="bg-gradient-to-br from-lime-500/20 to-lime-600/10 border-lime-500/30">
+                    <Card className="bg-lime-500/10 border-lime-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-2xl font-bold text-lime-400">{secteursTriees.length}</p>
                         <p className="text-xs text-[var(--text-muted)]">Secteurs</p>
                       </CardBody>
                     </Card>
-                    <Card className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border-blue-500/30">
+                    <Card className="bg-blue-500/10 border-blue-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-2xl font-bold text-blue-400">{ascenseursAvecTournee.length}</p>
                         <p className="text-xs text-[var(--text-muted)]">Ascenseurs planifiés</p>
                       </CardBody>
                     </Card>
-                    <Card className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 border-orange-500/30">
+                    <Card className="bg-orange-500/10 border-orange-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-2xl font-bold text-orange-400">
                           {ascenseursAvecTournee.filter((a: any) => a.en_arret).length}
@@ -4434,7 +4434,7 @@ export function ParcAscenseursPage() {
                         <p className="text-xs text-[var(--text-muted)]">En arrêt</p>
                       </CardBody>
                     </Card>
-                    <Card className="bg-gradient-to-br from-[#B91C1C]/20 to-[#B91C1C]/10 border-[#B91C1C]/30">
+                    <Card className="bg-[#B91C1C]/10 border-[#B91C1C]/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-2xl font-bold text-[#B91C1C]">
                           {Math.round(ascenseursAvecTournee.length / secteursTriees.length)}
@@ -4673,7 +4673,7 @@ export function ParcAscenseursPage() {
                                       onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        console.log('Ouverture carte tournée', { secteur, ordre, ascenseurs: ascenseursOrdre.length });
+//                                         console.log('Ouverture carte tournée', { secteur, ordre, ascenseurs: ascenseursOrdre.length });
                                         setTourneeMapModal({ secteur, ordre, ascenseurs: ascenseursOrdre });
                                       }}
                                     >
@@ -4962,35 +4962,35 @@ export function ParcAscenseursPage() {
                   
                   {/* KPIs principaux */}
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    <Card className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border-blue-500/30">
+                    <Card className="bg-blue-500/10 border-blue-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-blue-400">{totalAscenseurs}</p>
                         <p className="text-sm text-[var(--text-muted)]">Ascenseurs</p>
                       </CardBody>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-green-500/20 to-green-600/10 border-green-500/30">
+                    <Card className="bg-green-500/10 border-green-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-green-400">{tauxDisponibilite}%</p>
                         <p className="text-sm text-[var(--text-muted)]">Disponibilité</p>
                       </CardBody>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-[#B91C1C]/20 to-[#B91C1C]/10 border-[#B91C1C]/30">
+                    <Card className="bg-[#B91C1C]/10 border-[#B91C1C]/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-[#B91C1C]">{totalPannesPeriode}</p>
                         <p className="text-sm text-[var(--text-muted)]">Pannes ({statsPeriod}m)</p>
                       </CardBody>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 border-orange-500/30">
+                    <Card className="bg-orange-500/10 border-orange-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-orange-400">{moyennePannesMois}</p>
                         <p className="text-sm text-[var(--text-muted)]">Moy/mois</p>
                       </CardBody>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-red-500/20 to-red-600/10 border-red-500/30">
+                    <Card className="bg-red-500/10 border-red-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-red-400">{ascenseursEnArret}</p>
                         <p className="text-sm text-[var(--text-muted)]">En arrêt</p>
@@ -5138,7 +5138,7 @@ export function ParcAscenseursPage() {
                               <span className="text-sm w-20">Secteur {secteur}</span>
                               <div className="flex-1 bg-[var(--bg-tertiary)] rounded-full h-4 overflow-hidden">
                                 <div 
-                                  className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full transition-all"
+                                  className="h-full bg-blue-500 rounded-full transition-all"
                                   style={{ width: `${(count / maxPannesSecteur) * 100}%` }}
                                 ></div>
                               </div>
@@ -5246,19 +5246,19 @@ export function ParcAscenseursPage() {
                 <>
                   {/* Stats rapides */}
                   <div className="grid grid-cols-3 gap-4">
-                    <Card className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border-emerald-500/30">
+                    <Card className="bg-emerald-500/10 border-emerald-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-emerald-400">{totalVilles}</p>
                         <p className="text-sm text-[var(--text-muted)]">Villes</p>
                       </CardBody>
                     </Card>
-                    <Card className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border-blue-500/30">
+                    <Card className="bg-blue-500/10 border-blue-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-blue-400">{totalAscenseurs}</p>
                         <p className="text-sm text-[var(--text-muted)]">Ascenseurs</p>
                       </CardBody>
                     </Card>
-                    <Card className="bg-gradient-to-br from-red-500/20 to-red-600/10 border-red-500/30">
+                    <Card className="bg-red-500/10 border-red-500/20">
                       <CardBody className="p-4 text-center">
                         <p className="text-3xl font-bold text-red-400">{ascenseursEnArret.length}</p>
                         <p className="text-sm text-[var(--text-muted)]">En arrêt</p>
@@ -6030,7 +6030,7 @@ export function ParcAscenseursPage() {
                   <div className="mb-4">
                     <div className="h-3 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-300"
+                        className="h-full bg-blue-500 transition-all duration-300"
                         style={{ width: `${geocodingProgress.total > 0 ? (geocodingProgress.current / geocodingProgress.total) * 100 : 0}%` }}
                       />
                     </div>
