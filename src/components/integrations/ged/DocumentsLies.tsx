@@ -312,10 +312,10 @@ export function DocumentsLies({ entiteType, entiteId, entiteNom, readOnly = fals
                       >
                         {/* Icône type */}
                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                          doc.categorie === 'photo' ? 'bg-purple-100' : 'bg-blue-100'
+                          doc.categorie === 'photo' ? 'bg-[#FEE2E2]' : 'bg-blue-100'
                         }`}>
                           {doc.categorie === 'photo' ? (
-                            <Image className="w-5 h-5 text-purple-600" />
+                            <Image className="w-5 h-5 text-[#B91C1C]" />
                           ) : (
                             <FileText className="w-5 h-5 text-blue-600" />
                           )}

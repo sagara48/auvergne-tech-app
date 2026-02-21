@@ -28,7 +28,7 @@ const STATUTS = [
   { value: 'monte', label: 'Monté', color: 'blue', bg: '#3B82F6' },
   { value: 'mes_ok_sans_reserves', label: 'MES OK', color: 'green', bg: '#10B981' },
   { value: 'mes_ok_avec_reserves', label: 'MES avec réserves', color: 'orange', bg: '#F97316' },
-  { value: 'levee_reserves', label: 'Levée réserves', color: 'purple', bg: '#8B5CF6' },
+  { value: 'levee_reserves', label: 'Levée réserves', color: 'purple', bg: '#B91C1C' },
   { value: 'termine', label: 'Terminé', color: 'teal', bg: '#14B8A6' },
 ];
 

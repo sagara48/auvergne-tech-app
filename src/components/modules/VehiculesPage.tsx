@@ -342,8 +342,8 @@ function VehiculeStock({ vehiculeId, vehicules }: { vehiculeId: string; vehicule
             <CardBody>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                    <Repeat className="w-5 h-5 text-purple-400" />
+                  <div className="w-10 h-10 rounded-xl bg-[#B91C1C]/20 flex items-center justify-center">
+                    <Repeat className="w-5 h-5 text-[#B91C1C]" />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-[var(--text-primary)]">Transfert entre véhicules</h3>
@@ -359,7 +359,7 @@ function VehiculeStock({ vehiculeId, vehicules }: { vehiculeId: string; vehicule
                 {/* Véhicule destination */}
                 <div>
                   <label className="text-sm text-[var(--text-secondary)] mb-1 block flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-purple-400" />
+                    <Truck className="w-4 h-4 text-[#B91C1C]" />
                     Véhicule destination
                   </label>
                   <Select value={vehiculeDestId} onChange={e => setVehiculeDestId(e.target.value)}>
@@ -420,13 +420,13 @@ function VehiculeStock({ vehiculeId, vehicules }: { vehiculeId: string; vehicule
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-2 text-purple-400">
+                      <div className="flex items-center gap-2 text-[#B91C1C]">
                         <ArrowRight className="w-6 h-6" />
                       </div>
                       
                       <div className="text-center">
-                        <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center mx-auto mb-2">
-                          <Car className="w-6 h-6 text-purple-400" />
+                        <div className="w-12 h-12 rounded-xl bg-[#B91C1C]/20 flex items-center justify-center mx-auto mb-2">
+                          <Car className="w-6 h-6 text-[#B91C1C]" />
                         </div>
                         <div className="text-sm font-medium text-[var(--text-primary)]">
                           {vehicules.find(v => v.id === vehiculeDestId)?.immatriculation}
@@ -1012,7 +1012,7 @@ function VehiculeReglages({ vehiculeId, vehiculeImmat }: { vehiculeId: string; v
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-4">
-        <Settings className="w-5 h-5 text-purple-400" />
+        <Settings className="w-5 h-5 text-[#B91C1C]" />
         <span className="font-semibold text-[var(--text-primary)]">Périodicités d'entretien</span>
         <span className="text-xs text-[var(--text-muted)]">pour {vehiculeImmat}</span>
       </div>
@@ -1034,7 +1034,7 @@ function VehiculeReglages({ vehiculeId, vehiculeImmat }: { vehiculeId: string; v
               key={type.id} 
               className={`p-4 rounded-xl border transition-all ${
                 isCustomized 
-                  ? 'bg-purple-500/10 border-purple-500/30' 
+                  ? 'bg-[#B91C1C]/10 border-[#B91C1C]/30' 
                   : 'bg-[var(--bg-tertiary)] border-transparent'
               } ${!isActive ? 'opacity-50' : ''}`}
             >
@@ -1090,7 +1090,7 @@ function VehiculeReglages({ vehiculeId, vehiculeImmat }: { vehiculeId: string; v
                         handleUpdate(type.id, 'periodicite_km', val);
                       }}
                       placeholder="km"
-                      className={`${isCustomized && custom?.periodicite_km !== type.periodicite_km ? 'border-purple-500' : ''}`}
+                      className={`${isCustomized && custom?.periodicite_km !== type.periodicite_km ? 'border-[#B91C1C]' : ''}`}
                       disabled={!isActive}
                     />
                     <span className="text-sm text-[var(--text-muted)]">km</span>
@@ -1112,7 +1112,7 @@ function VehiculeReglages({ vehiculeId, vehiculeImmat }: { vehiculeId: string; v
                         handleUpdate(type.id, 'periodicite_mois', val);
                       }}
                       placeholder="mois"
-                      className={`${isCustomized && custom?.periodicite_mois !== type.periodicite_mois ? 'border-purple-500' : ''}`}
+                      className={`${isCustomized && custom?.periodicite_mois !== type.periodicite_mois ? 'border-[#B91C1C]' : ''}`}
                       disabled={!isActive}
                     />
                     <span className="text-sm text-[var(--text-muted)]">mois</span>

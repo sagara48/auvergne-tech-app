@@ -28,14 +28,14 @@ const TYPE_CONFIG: Record<TypeDocument, { label: string; icon: any; color: strin
   rapport: { label: 'Rapport', icon: FileText, color: '#22c55e' },
   photo: { label: 'Photo', icon: Image, color: '#f59e0b' },
   facture: { label: 'Facture', icon: FileSpreadsheet, color: '#ef4444' },
-  devis: { label: 'Devis', icon: FileSpreadsheet, color: '#a855f7' },
+  devis: { label: 'Devis', icon: FileSpreadsheet, color: '#B91C1C' },
   plan: { label: 'Plan', icon: FileText, color: '#06b6d4' },
   certificat: { label: 'Certificat', icon: FileText, color: '#ec4899' },
   autre: { label: 'Autre', icon: File, color: '#71717a' },
 };
 
 const COULEURS_DOSSIER = [
-  '#3b82f6', '#22c55e', '#ef4444', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899', '#6366f1', '#71717a'
+  '#3b82f6', '#22c55e', '#ef4444', '#B91C1C', '#f59e0b', '#06b6d4', '#ec4899', '#6366f1', '#71717a'
 ];
 
 // Modal Dossier
@@ -379,8 +379,8 @@ function OCRModal({
           <div className="p-4 border-b border-[var(--border-primary)]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                  <Scan className="w-5 h-5 text-purple-400" />
+                <div className="w-10 h-10 rounded-lg bg-[#B91C1C]/20 flex items-center justify-center">
+                  <Scan className="w-5 h-5 text-[#B91C1C]" />
                 </div>
                 <div>
                   <h2 className="text-lg font-bold">Extraction OCR</h2>
@@ -422,7 +422,7 @@ function OCRModal({
                   <div className="mt-4 w-64 mx-auto">
                     <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-purple-500 transition-all duration-300"
+                        className="h-full bg-[#B91C1C] transition-all duration-300"
                         style={{ width: `${progress}%` }}
                       />
                     </div>
@@ -433,9 +433,9 @@ function OCRModal({
               <>
                 {/* Métadonnées détectées */}
                 {metadata && (metadata.type || metadata.date || metadata.montant || metadata.keywords?.length > 0) && (
-                  <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                  <div className="p-3 bg-[#B91C1C]/10 border border-[#B91C1C]/30 rounded-lg">
                     <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-purple-400" />
+                      <Sparkles className="w-4 h-4 text-[#B91C1C]" />
                       Métadonnées détectées
                     </h4>
                     <div className="flex flex-wrap gap-2 text-sm">
@@ -970,7 +970,7 @@ export function GEDPage() {
               onClick={() => setFullTextSearch(!fullTextSearch)}
               className={`p-2 rounded-lg border transition-colors ${
                 fullTextSearch 
-                  ? 'bg-purple-500/20 border-purple-500/50 text-purple-400' 
+                  ? 'bg-[#B91C1C]/20 border-[#B91C1C]/050 text-[#B91C1C]' 
                   : 'bg-[var(--bg-tertiary)] border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
               title="Recherche full-text (dans le contenu OCR)"
@@ -1183,10 +1183,10 @@ export function GEDPage() {
                         {(doc.type_document === 'photo' || doc.fichier_url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)) && (
                           <button 
                             onClick={(e) => { e.stopPropagation(); setOcrDocument(doc); }}
-                            className="p-1.5 bg-[var(--bg-tertiary)] rounded hover:bg-purple-500/20"
+                            className="p-1.5 bg-[var(--bg-tertiary)] rounded hover:bg-[#B91C1C]/20"
                             title="Extraire le texte (OCR)"
                           >
-                            <Scan className="w-3.5 h-3.5 text-purple-400" />
+                            <Scan className="w-3.5 h-3.5 text-[#B91C1C]" />
                           </button>
                         )}
                         {doc.fichier_url && (

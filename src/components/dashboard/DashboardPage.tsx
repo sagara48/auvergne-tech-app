@@ -119,7 +119,7 @@ function AddWidgetModal({
       <Card className="w-[700px] max-h-[80vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-primary)]">
           <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-            <Plus className="w-5 h-5 text-purple-400" />
+            <Plus className="w-5 h-5 text-[#B91C1C]" />
             Ajouter un widget
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
@@ -133,7 +133,7 @@ function AddWidgetModal({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher un widget..."
-            className="w-full px-4 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] placeholder-dark-500 focus:outline-none focus:border-purple-500"
+            className="w-full px-4 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] placeholder-dark-500 focus:outline-none focus:border-[#B91C1C]"
           />
         </div>
 
@@ -144,7 +144,7 @@ function AddWidgetModal({
               onClick={() => setSelectedCategory('all')}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 ${
                 selectedCategory === 'all' 
-                  ? 'bg-purple-500/20 text-purple-400' 
+                  ? 'bg-[#B91C1C]/20 text-[#B91C1C]' 
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
               }`}
             >
@@ -156,7 +156,7 @@ function AddWidgetModal({
                 onClick={() => setSelectedCategory(key as WidgetCategory)}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 flex items-center gap-2 ${
                   selectedCategory === key 
-                    ? 'bg-purple-500/20 text-purple-400' 
+                    ? 'bg-[#B91C1C]/20 text-[#B91C1C]' 
                     : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
                 }`}
               >
@@ -182,7 +182,7 @@ function AddWidgetModal({
                     className={`p-4 rounded-xl border text-left transition-all ${
                       isActive 
                         ? 'bg-[var(--bg-tertiary)]/50 border-[var(--border-primary)] opacity-50 cursor-not-allowed' 
-                        : 'bg-[var(--bg-tertiary)] border-[var(--border-primary)] hover:border-purple-500 hover:bg-[var(--bg-elevated)]'
+                        : 'bg-[var(--bg-tertiary)] border-[var(--border-primary)] hover:border-[#B91C1C] hover:bg-[var(--bg-elevated)]'
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -356,7 +356,7 @@ export function DashboardPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-2 border-[#B91C1C] border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -366,7 +366,7 @@ export function DashboardPage() {
       {/* Barre d'actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <LayoutDashboard className="w-5 h-5 text-purple-400" />
+          <LayoutDashboard className="w-5 h-5 text-[#B91C1C]" />
           <span className="text-lg font-bold text-[var(--text-primary)]">Mon tableau de bord</span>
           {isEditing && (
             <Badge variant="amber" className="ml-2">Mode édition</Badge>

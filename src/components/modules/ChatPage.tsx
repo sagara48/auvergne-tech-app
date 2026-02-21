@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   MessageCircle, Send, Hash, Users, Search, Plus, MoreVertical, 
   Paperclip, Image, Smile, AtSign, X, Check, Edit2, Trash2,
-  ChevronDown, Bell, BellOff, Settings, User, Hammer, FileCheck
+  ChevronDown, Bell, BellOff, Settings, User, Hammer, FileCheck, Building2
 } from 'lucide-react';
 import { Button, Card, CardBody, Badge, Input } from '@/components/ui';
 import { 
@@ -31,7 +31,7 @@ function formatMessageDate(dateStr: string): string {
 function Avatar({ user, size = 'md' }: { user?: Partial<Technicien>; size?: 'sm' | 'md' | 'lg' }) {
   const sizeClasses = { sm: 'w-6 h-6 text-[10px]', md: 'w-8 h-8 text-xs', lg: 'w-10 h-10 text-sm' };
   return (
-    <div className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center font-bold text-[var(--text-primary)] flex-shrink-0`}>
+    <div className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center font-bold text-[var(--text-primary)] flex-shrink-0`}>
       {user?.avatar_initiales || user?.prenom?.[0] || '?'}
     </div>
   );
@@ -103,7 +103,7 @@ function MessageBubble({
           <div
             className={`px-3 py-2 rounded-2xl ${
               isOwn 
-                ? 'bg-purple-600 text-[var(--text-primary)] rounded-br-md' 
+                ? 'bg-[#B91C1C] text-[var(--text-primary)] rounded-br-md' 
                 : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-bl-md'
             }`}
           >
@@ -163,27 +163,69 @@ function MessageInput({
   const [showMentions, setShowMentions] = useState(false);
   const [mentionSearch, setMentionSearch] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionType, setMentionType] = useState<'all' | 'tech' | 'ascenseur'>('all');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const filteredTechs = useMemo(() => {
-    if (!mentionSearch) return techniciens;
-    return techniciens.filter(t => 
-      t.prenom?.toLowerCase().includes(mentionSearch.toLowerCase()) ||
-      t.nom?.toLowerCase().includes(mentionSearch.toLowerCase())
-    );
-  }, [techniciens, mentionSearch]);
+  // Fetch ascenseurs for @mention
+  const { data: ascenseurs } = useQuery({
+    queryKey: ['chat-ascenseurs-mention'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('parc_ascenseurs')
+        .select('id, code_appareil, adresse, ville, statut')
+        .order('code_appareil')
+        .limit(200);
+      return data || [];
+    },
+    staleTime: 120000,
+  });
+
+  // Combine tech + ascenseur results
+  type MentionItem = { id: string; type: 'tech' | 'ascenseur'; label: string; subtitle: string; insertText: string; data?: any };
+  
+  const filteredMentions = useMemo((): MentionItem[] => {
+    const q = mentionSearch.toLowerCase();
+    const items: MentionItem[] = [];
+    
+    if (mentionType === 'all' || mentionType === 'tech') {
+      techniciens
+        .filter(t => !q || t.prenom?.toLowerCase().includes(q) || t.nom?.toLowerCase().includes(q))
+        .slice(0, 5)
+        .forEach(t => items.push({
+          id: t.id, type: 'tech', label: `${t.prenom} ${t.nom}`,
+          subtitle: t.role?.nom || 'Technicien', insertText: `@${t.prenom}`, data: t,
+        }));
+    }
+
+    if (mentionType === 'all' || mentionType === 'ascenseur') {
+      (ascenseurs || [])
+        .filter((a: any) => !q || a.code_appareil?.toLowerCase().includes(q) || a.adresse?.toLowerCase().includes(q) || a.ville?.toLowerCase().includes(q))
+        .slice(0, 5)
+        .forEach((a: any) => items.push({
+          id: a.id, type: 'ascenseur', label: a.code_appareil,
+          subtitle: `${a.adresse || ''} ${a.ville || ''}`.trim(),
+          insertText: `@${a.code_appareil}`, data: a,
+        }));
+    }
+
+    return items.slice(0, 8);
+  }, [techniciens, ascenseurs, mentionSearch, mentionType]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (showMentions) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setMentionIndex(i => Math.min(i + 1, filteredTechs.length - 1));
+        setMentionIndex(i => Math.min(i + 1, filteredMentions.length - 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setMentionIndex(i => Math.max(i - 1, 0));
-      } else if (e.key === 'Enter' && filteredTechs[mentionIndex]) {
+      } else if (e.key === 'Tab') {
         e.preventDefault();
-        insertMention(filteredTechs[mentionIndex]);
+        setMentionType(t => t === 'all' ? 'tech' : t === 'tech' ? 'ascenseur' : 'all');
+        setMentionIndex(0);
+      } else if (e.key === 'Enter' && filteredMentions[mentionIndex]) {
+        e.preventDefault();
+        insertMention(filteredMentions[mentionIndex]);
       } else if (e.key === 'Escape') {
         setShowMentions(false);
       }
@@ -197,7 +239,6 @@ function MessageInput({
     const value = e.target.value;
     setMessage(value);
     
-    // Détecter @mention
     const lastAtIndex = value.lastIndexOf('@');
     if (lastAtIndex !== -1) {
       const afterAt = value.substring(lastAtIndex + 1);
@@ -205,6 +246,7 @@ function MessageInput({
       if (spaceIndex === -1) {
         setShowMentions(true);
         setMentionSearch(afterAt);
+        setMentionType('all');
         setMentionIndex(0);
         return;
       }
@@ -212,9 +254,9 @@ function MessageInput({
     setShowMentions(false);
   };
 
-  const insertMention = (tech: Technicien) => {
+  const insertMention = (item: MentionItem) => {
     const lastAtIndex = message.lastIndexOf('@');
-    const newMessage = message.substring(0, lastAtIndex) + `@${tech.prenom} `;
+    const newMessage = message.substring(0, lastAtIndex) + item.insertText + ' ';
     setMessage(newMessage);
     setShowMentions(false);
     inputRef.current?.focus();
@@ -222,42 +264,71 @@ function MessageInput({
 
   const handleSend = () => {
     if (!message.trim()) return;
-    
-    // Extraire les mentions
     const mentionRegex = /@(\w+)/g;
     const mentions: string[] = [];
     let match;
     while ((match = mentionRegex.exec(message)) !== null) {
-      const tech = techniciens.find(t => 
-        t.prenom?.toLowerCase() === match[1].toLowerCase()
-      );
+      const tech = techniciens.find(t => t.prenom?.toLowerCase() === match[1].toLowerCase());
       if (tech) mentions.push(tech.id);
     }
-    
     onSend(message.trim(), mentions);
     setMessage('');
   };
 
   return (
     <div className="relative">
-      {/* Liste mentions */}
-      {showMentions && filteredTechs.length > 0 && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl shadow-xl max-h-48 overflow-y-auto">
-          {filteredTechs.slice(0, 6).map((tech, i) => (
-            <button
-              key={tech.id}
-              onClick={() => insertMention(tech)}
-              className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-[var(--bg-elevated)] ${
-                i === mentionIndex ? 'bg-[var(--bg-elevated)]' : ''
-              }`}
-            >
-              <Avatar user={tech} size="sm" />
-              <div className="text-left">
-                <div className="text-sm text-[var(--text-primary)]">{tech.prenom} {tech.nom}</div>
-                <div className="text-xs text-[var(--text-tertiary)]">{tech.role?.nom}</div>
-              </div>
-            </button>
-          ))}
+      {/* Liste mentions enrichie (tech + ascenseurs) */}
+      {showMentions && filteredMentions.length > 0 && (
+        <div className="absolute bottom-full left-0 right-0 mb-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl shadow-xl max-h-64 overflow-hidden">
+          {/* Tabs de filtrage */}
+          <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--border-secondary)]">
+            {[
+              { key: 'all' as const, label: 'Tout', icon: AtSign },
+              { key: 'tech' as const, label: 'Techniciens', icon: User },
+              { key: 'ascenseur' as const, label: 'Ascenseurs', icon: Building2 },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => { setMentionType(tab.key); setMentionIndex(0); }}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
+                  mentionType === tab.key ? 'bg-[#B91C1C]/20 text-[#B91C1C]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]'
+                }`}
+              >
+                <tab.icon className="w-3 h-3" />
+                {tab.label}
+              </button>
+            ))}
+            <span className="text-[9px] text-[var(--text-muted)] ml-auto font-mono">Tab ↹</span>
+          </div>
+          
+          <div className="max-h-48 overflow-y-auto">
+            {filteredMentions.map((item, i) => (
+              <button
+                key={`${item.type}-${item.id}`}
+                onClick={() => insertMention(item)}
+                className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-[var(--bg-elevated)] ${
+                  i === mentionIndex ? 'bg-[var(--bg-elevated)]' : ''
+                }`}
+              >
+                {item.type === 'tech' ? (
+                  <Avatar user={item.data} size="sm" />
+                ) : (
+                  <div className="w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                    <Building2 className="w-3.5 h-3.5 text-cyan-400" />
+                  </div>
+                )}
+                <div className="text-left flex-1 min-w-0">
+                  <div className="text-sm text-[var(--text-primary)] truncate">{item.label}</div>
+                  <div className="text-xs text-[var(--text-tertiary)] truncate">{item.subtitle}</div>
+                </div>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-md ${
+                  item.type === 'tech' ? 'bg-[#B91C1C]/20 text-[#B91C1C]' : 'bg-cyan-500/20 text-cyan-400'
+                }`}>
+                  {item.type === 'tech' ? 'Tech' : 'Asc'}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -281,8 +352,9 @@ function MessageInput({
           onClick={() => {
             setShowMentions(!showMentions);
             setMentionSearch('');
+            setMentionType('all');
           }}
-          className={`p-1.5 hover:bg-[var(--bg-elevated)] rounded-lg ${showMentions ? 'text-purple-400' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}
+          className={`p-1.5 hover:bg-[var(--bg-elevated)] rounded-lg ${showMentions ? 'text-[#B91C1C]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}
         >
           <AtSign className="w-5 h-5" />
         </button>
@@ -290,7 +362,7 @@ function MessageInput({
         <button
           onClick={handleSend}
           disabled={!message.trim()}
-          className="p-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[var(--text-primary)] transition-colors"
+          className="p-2 bg-[#B91C1C] hover:bg-[#B91C1C] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[var(--text-primary)] transition-colors"
         >
           <Send className="w-4 h-4" />
         </button>
@@ -298,7 +370,6 @@ function MessageInput({
     </div>
   );
 }
-
 // Composant Canal dans la sidebar
 function ChannelItem({ 
   channel, 
@@ -316,7 +387,7 @@ function ChannelItem({
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
         isActive 
-          ? 'bg-purple-500/20 text-purple-400' 
+          ? 'bg-[#B91C1C]/20 text-[#B91C1C]' 
           : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
       }`}
     >
@@ -470,7 +541,7 @@ export function ChatPage() {
           <div className="p-4 border-b border-[var(--border-primary)]">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <MessageCircle className="w-5 h-5 text-purple-400" />
+                <MessageCircle className="w-5 h-5 text-[#B91C1C]" />
                 Messages
               </h2>
               {totalUnread > 0 && (
@@ -712,7 +783,7 @@ export function ContextChat({
   return (
     <div className="border-t border-[var(--border-primary)] pt-4 mt-4">
       <div className="flex items-center gap-2 mb-3">
-        <MessageCircle className="w-4 h-4 text-purple-400" />
+        <MessageCircle className="w-4 h-4 text-[#B91C1C]" />
         <span className="text-sm font-semibold text-[var(--text-primary)]">Discussion</span>
         <Badge variant="purple" className="text-[10px]">{messages?.length || 0}</Badge>
       </div>
@@ -733,7 +804,7 @@ export function ContextChat({
                 </div>
                 <div className={`text-xs px-2 py-1 rounded-lg inline-block ${
                   msg.sender_id === CURRENT_USER_ID 
-                    ? 'bg-purple-600 text-[var(--text-primary)]' 
+                    ? 'bg-[#B91C1C] text-[var(--text-primary)]' 
                     : 'bg-[var(--bg-elevated)] text-[var(--text-primary)]'
                 }`}>
                   {msg.content}
@@ -753,7 +824,7 @@ export function ContextChat({
           onChange={e => setMessage(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && message.trim() && sendMutation.mutate()}
           placeholder="Ajouter un commentaire..."
-          className="flex-1 px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-sm text-[var(--text-primary)] placeholder-dark-500 focus:outline-none focus:border-purple-500"
+          className="flex-1 px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-sm text-[var(--text-primary)] placeholder-dark-500 focus:outline-none focus:border-[#B91C1C]"
         />
         <Button 
           variant="primary" 

@@ -157,7 +157,7 @@ export function JourRow({
               jour.type_jour === 'conge' && 'bg-cyan-500/20 border-cyan-500/40 text-cyan-400',
               jour.type_jour === 'rtt' && 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400',
               jour.type_jour === 'maladie' && 'bg-red-500/20 border-red-500/40 text-red-400',
-              jour.type_jour === 'ferie' && 'bg-purple-500/20 border-purple-500/40 text-purple-400',
+              jour.type_jour === 'ferie' && 'bg-[#B91C1C]/20 border-[#B91C1C]/40 text-[#B91C1C]',
               jour.type_jour === 'formation' && 'bg-amber-500/20 border-amber-500/40 text-amber-400',
             )}
           >
@@ -186,9 +186,9 @@ export function JourRow({
           </div>
           
           {isTravail && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-purple-500/10 rounded-xl">
-              <Car className="w-4 h-4 text-purple-400" />
-              <span className="text-lg font-bold text-purple-400 font-mono">
+            <div className="flex items-center gap-2 px-3 py-2 bg-[#B91C1C]/10 rounded-xl">
+              <Car className="w-4 h-4 text-[#B91C1C]" />
+              <span className="text-lg font-bold text-[#B91C1C] font-mono">
                 {jour.heures_trajet?.toFixed(1) || '0.0'}h
               </span>
               <span className="text-xs text-[var(--text-muted)]">trajet</span>
@@ -249,12 +249,12 @@ export function JourRow({
 
               {/* Flèche trajet matin */}
               <div className="flex flex-col items-center gap-1 px-2">
-                <div className="flex items-center gap-1 text-purple-400">
+                <div className="flex items-center gap-1 text-[#B91C1C]">
                   <Car className="w-4 h-4" />
                   <ArrowRight className="w-4 h-4" />
                 </div>
                 {trajetMatin && (
-                  <span className="text-xs font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">
+                  <span className="text-xs font-mono text-[#B91C1C] bg-[#B91C1C]/10 px-2 py-0.5 rounded">
                     {trajetMatin}
                   </span>
                 )}
@@ -329,12 +329,12 @@ export function JourRow({
 
               {/* Flèche trajet soir */}
               <div className="flex flex-col items-center gap-1 px-2">
-                <div className="flex items-center gap-1 text-purple-400">
+                <div className="flex items-center gap-1 text-[#B91C1C]">
                   <Car className="w-4 h-4" />
                   <ArrowRight className="w-4 h-4" />
                 </div>
                 {trajetSoir && (
-                  <span className="text-xs font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">
+                  <span className="text-xs font-mono text-[#B91C1C] bg-[#B91C1C]/10 px-2 py-0.5 rounded">
                     {trajetSoir}
                   </span>
                 )}
@@ -435,7 +435,7 @@ export function JourRow({
                       </div>
 
                       <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--bg-tertiary)] rounded-lg">
-                        <Car className="w-3.5 h-3.5 text-purple-400" />
+                        <Car className="w-3.5 h-3.5 text-[#B91C1C]" />
                         <input
                           type="time"
                           value={tache.temps_trajet?.slice(0, 5) || ''}

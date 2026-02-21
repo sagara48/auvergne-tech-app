@@ -135,7 +135,7 @@ function TravauxDetailModal({
         <CardBody>
           <div className="flex items-start justify-between mb-4">
             <div>
-              <div className="text-sm text-purple-400 font-semibold">{travaux.code}</div>
+              <div className="text-sm text-[#B91C1C] font-semibold">{travaux.code}</div>
               <h2 className="text-xl font-bold text-[var(--text-primary)]">{travaux.titre}</h2>
             </div>
             <div className="flex items-center gap-2">
@@ -506,7 +506,7 @@ export function TravauxPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 cursor-pointer" onClick={() => setDetailTravaux(t)}>
                     <div className="flex items-center gap-2 flex-wrap mb-2">
-                      <span className="text-sm font-bold text-purple-400">{t.code}</span>
+                      <span className="text-sm font-bold text-[#B91C1C]">{t.code}</span>
                       <Badge variant={STATUT_CONFIG[t.statut].color}>{STATUT_CONFIG[t.statut].label}</Badge>
                       <Badge variant={PRIORITE_CONFIG[t.priorite].color}>{PRIORITE_CONFIG[t.priorite].label}</Badge>
                       {planningDate && (

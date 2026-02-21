@@ -159,7 +159,7 @@ export function AdvancedNoteSearch({ onSearch, onFiltersChange, isSearching }: A
               }
             }}
             placeholder="Rechercher dans les notes..."
-            className="w-full pl-10 pr-10 py-2.5 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl outline-none focus:ring-2 focus:ring-purple-500/50 text-sm"
+            className="w-full pl-10 pr-10 py-2.5 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl outline-none focus:ring-2 focus:ring-[#B91C1C]/050 text-sm"
           />
           {query && (
             <button
@@ -188,7 +188,7 @@ export function AdvancedNoteSearch({ onSearch, onFiltersChange, isSearching }: A
                       }}
                       className="w-full flex items-center gap-2 p-2 hover:bg-[var(--bg-tertiary)] rounded-lg text-left text-sm"
                     >
-                      {s.type === 'note' && <Search className="w-3 h-3 text-purple-400" />}
+                      {s.type === 'note' && <Search className="w-3 h-3 text-[#B91C1C]" />}
                       {s.type === 'tag' && <Tag className="w-3 h-3 text-blue-400" />}
                       {s.type === 'recent' && <History className="w-3 h-3 text-gray-400" />}
                       <span>{s.label}</span>
@@ -280,7 +280,7 @@ export function AdvancedNoteSearch({ onSearch, onFiltersChange, isSearching }: A
             }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors ${
               filters.epingle 
-                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
+                ? 'bg-[#B91C1C]/20 text-[#B91C1C] border border-[#B91C1C]/30' 
                 : 'bg-[var(--bg-tertiary)] hover:bg-[var(--bg-elevated)]'
             }`}
           >
@@ -320,11 +320,11 @@ export function AdvancedNoteSearch({ onSearch, onFiltersChange, isSearching }: A
 
       {/* Filtres avancés */}
       {showAdvanced && (
-        <Card className="border-purple-500/30 bg-purple-500/5">
+        <Card className="border-[#B91C1C]/30 bg-[#B91C1C]/05">
           <CardBody className="p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold flex items-center gap-2">
-                <Filter className="w-4 h-4 text-purple-400" />
+                <Filter className="w-4 h-4 text-[#B91C1C]" />
                 Filtres avancés
               </h3>
               <Button variant="ghost" size="sm" onClick={resetFilters}>
@@ -438,7 +438,7 @@ export function AdvancedNoteSearch({ onSearch, onFiltersChange, isSearching }: A
                       }}
                       className={`px-2 py-1 rounded text-xs transition-colors ${
                         (filters.searchIn || []).includes(opt.key as any)
-                          ? 'bg-purple-500 text-white'
+                          ? 'bg-[#B91C1C] text-white'
                           : 'bg-[var(--bg-tertiary)] hover:bg-[var(--bg-elevated)]'
                       }`}
                     >

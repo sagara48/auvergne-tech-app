@@ -332,8 +332,8 @@ export function AdminPage() {
       <div className="p-4 border-b border-[var(--border-primary)]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-purple-500" />
+            <div className="w-10 h-10 rounded-xl bg-[#B91C1C]/20 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-[#B91C1C]" />
             </div>
             <div>
               <h1 className="text-xl font-bold">Administration</h1>
@@ -364,7 +364,7 @@ export function AdminPage() {
               onClick={() => setActiveTab(tab.id as any)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
                 activeTab === tab.id
-                  ? 'bg-purple-500 text-white'
+                  ? 'bg-[#B91C1C] text-white'
                   : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'
               }`}
             >
@@ -442,7 +442,7 @@ export function AdminPage() {
             {/* Users list */}
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+                <Loader2 className="w-8 h-8 animate-spin text-[#B91C1C]" />
               </div>
             ) : filteredUsers.length === 0 ? (
               <Card>

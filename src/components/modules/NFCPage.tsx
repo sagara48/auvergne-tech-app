@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Nfc, Plus, Search, Smartphone, Radio, Building2, Package, Box,
   Check, X, Edit, Trash2, History, AlertTriangle, Wifi, WifiOff,
-  RefreshCw, Tag, ScanLine, Link2, Link2Off, Monitor
+  RefreshCw, Tag, ScanLine, Link2, Link2Off, Monitor, QrCode
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
 import {
@@ -19,7 +19,7 @@ import toast from 'react-hot-toast';
 const TYPE_CONFIG: Record<TypeTagNFC, { label: string; icon: any; color: string; bgColor: string }> = {
   ascenseur: { label: 'Ascenseur', icon: Building2, color: '#06b6d4', bgColor: 'bg-cyan-500/20' },
   emplacement: { label: 'Emplacement', icon: Box, color: '#f59e0b', bgColor: 'bg-amber-500/20' },
-  article: { label: 'Article', icon: Package, color: '#8b5cf6', bgColor: 'bg-purple-500/20' },
+  article: { label: 'Article', icon: Package, color: '#B91C1C', bgColor: 'bg-[#B91C1C]/20' },
 };
 
 function EncodeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
@@ -43,7 +43,7 @@ function EncodeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nfc-tags'] });
       queryClient.invalidateQueries({ queryKey: ['nfc-stats'] });
-      toast.success('Tag NFC encodé avec succès');
+      toast.success('QR Code encodé avec succès');
       setStep('success');
       onSuccess();
     },
@@ -100,7 +100,7 @@ function EncodeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
               <Nfc className="w-6 h-6 text-cyan-400" />
-              Encoder un tag NFC
+              Encoder un QR code
             </h2>
             <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
               <X className="w-5 h-5 text-[var(--text-tertiary)]" />
@@ -113,7 +113,7 @@ function EncodeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
                 <div className="flex items-center gap-2">
                   <Smartphone className={`w-5 h-5 ${nfc.capabilities.webNFC ? 'text-green-400' : 'text-amber-400'}`} />
                   <span className="text-sm text-[var(--text-secondary)]">
-                    {nfc.capabilities.webNFC ? 'NFC disponible' : 'NFC non supporté'}
+                    {nfc.capabilities.webNFC ? 'NFC disponible' : 'Caméra requise'}
                   </span>
                 </div>
                 {nfc.capabilities.webNFC && <Badge variant="green" className="ml-auto">Prêt</Badge>}
@@ -234,7 +234,7 @@ function EncodeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
               <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-cyan-500/20 flex items-center justify-center animate-pulse">
                 <Radio className="w-12 h-12 text-cyan-400" />
               </div>
-              <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">En attente d'un tag NFC...</h3>
+              <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">En attente d'un QR code...</h3>
               <p className="text-sm text-[var(--text-tertiary)] mb-6">
                 {nfc.capabilities.webNFC ? 'Approchez votre téléphone du tag' : 'NFC non disponible'}
               </p>
@@ -317,7 +317,7 @@ function TagDetailModal({ tag, onClose, onDelete }: { tag: NFCTag; onClose: () =
                 <Icon className="w-6 h-6" style={{ color: config.color }} />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">{tag.label || 'Tag NFC'}</h2>
+                <h2 className="text-lg font-bold text-[var(--text-primary)]">{tag.label || 'QR Code'}</h2>
                 <div className="text-sm text-[var(--text-tertiary)] font-mono">{tag.uid}</div>
               </div>
             </div>
@@ -467,7 +467,7 @@ function TestScanModal({ onClose }: { onClose: () => void }) {
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-cyan-500/20 flex items-center justify-center">
                 <Nfc className="w-10 h-10 text-cyan-400" />
               </div>
-              <p className="text-[var(--text-secondary)] mb-6">Testez la lecture d'un tag NFC</p>
+              <p className="text-[var(--text-secondary)] mb-6">Testez la lecture d'un QR code</p>
               <Button variant="primary" onClick={startScan}><ScanLine className="w-4 h-4" /> Démarrer le scan</Button>
             </div>
           )}
@@ -477,7 +477,7 @@ function TestScanModal({ onClose }: { onClose: () => void }) {
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-cyan-500/20 flex items-center justify-center animate-pulse">
                 <Radio className="w-10 h-10 text-cyan-400" />
               </div>
-              <p className="text-[var(--text-secondary)] mb-6">Approchez un tag NFC...</p>
+              <p className="text-[var(--text-secondary)] mb-6">Approchez un QR code...</p>
               <Button variant="secondary" onClick={() => { nfc.stopReading(); setScanning(false); }}>Annuler</Button>
             </div>
           )}
@@ -555,24 +555,19 @@ export function NFCPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-3">
-            <Nfc className="w-7 h-7 text-cyan-400" />
-            Gestion NFC
+            <QrCode className="w-7 h-7 text-cyan-400" />
+            Gestion QR Codes
           </h1>
-          <p className="text-[var(--text-secondary)] text-sm mt-1">Encodage et gestion des tags NFC</p>
+          <p className="text-[var(--text-secondary)] text-sm mt-1">Création et gestion des QR Codes</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)]">
-            {nfc.capabilities.webNFC ? (
-              <><Smartphone className="w-4 h-4 text-green-400" /><span className="text-xs text-green-400">NFC Prêt</span></>
-            ) : nfc.capabilities.isMobile ? (
-              <><Smartphone className="w-4 h-4 text-amber-400" /><span className="text-xs text-amber-400">NFC non supporté</span></>
-            ) : (
-              <><Monitor className="w-4 h-4 text-amber-400" /><span className="text-xs text-amber-400">Mobile uniquement</span></>
-            )}
+            <QrCode className="w-4 h-4 text-green-400" />
+            <span className="text-xs text-green-400">QR Code</span>
           </div>
-          <Button variant="secondary" onClick={() => setShowTestScan(true)} disabled={!nfc.capabilities.webNFC}><ScanLine className="w-4 h-4" /> Tester</Button>
-          <Button variant="primary" onClick={() => setShowEncode(true)} disabled={!nfc.capabilities.webNFC}>
-            <Plus className="w-4 h-4" /> Encoder
+          <Button variant="secondary" onClick={() => setShowTestScan(true)}><ScanLine className="w-4 h-4" /> Scanner</Button>
+          <Button variant="primary" onClick={() => setShowEncode(true)}>
+            <Plus className="w-4 h-4" /> Créer QR
           </Button>
         </div>
       </div>

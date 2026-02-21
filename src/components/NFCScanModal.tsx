@@ -288,7 +288,7 @@ function TravauxTab({ ascenseurId }: { ascenseurId: string }) {
           return (
             <div key={t.id} className="p-3 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-purple-400">{t.code}</span>
+                <span className="font-semibold text-[#B91C1C]">{t.code}</span>
                 <Badge variant={config.color as any}>{config.label}</Badge>
               </div>
               <div className="text-sm text-[var(--text-primary)]">{t.titre}</div>
@@ -397,7 +397,7 @@ function StockTab({ ascenseurId, ascenseurCode }: { ascenseurId: string; ascense
               onClick={() => { setSelectedArticle(item); setQuantite(1); }}
             >
               <div className="flex items-center gap-3">
-                <Package className="w-5 h-5 text-purple-400" />
+                <Package className="w-5 h-5 text-[#B91C1C]" />
                 <div>
                   <div className="font-medium text-[var(--text-primary)]">{item.article?.designation}</div>
                   <div className="text-xs text-[var(--text-tertiary)]">{item.article?.reference}</div>
@@ -457,10 +457,10 @@ function DemandeTab({ ascenseurId, ascenseurCode }: { ascenseurId: string; ascen
         <button
           onClick={() => setType('piece')}
           className={`p-4 rounded-lg border-2 transition-colors ${
-            type === 'piece' ? 'border-purple-500 bg-purple-500/10' : 'border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]'
+            type === 'piece' ? 'border-[#B91C1C] bg-[#B91C1C]/10' : 'border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]'
           }`}
         >
-          <Package className="w-8 h-8 mx-auto mb-2 text-purple-400" />
+          <Package className="w-8 h-8 mx-auto mb-2 text-[#B91C1C]" />
           <div className="text-sm font-medium text-[var(--text-primary)]">Demande de pièce</div>
           <div className="text-xs text-[var(--text-tertiary)]">Commande matériel</div>
         </button>

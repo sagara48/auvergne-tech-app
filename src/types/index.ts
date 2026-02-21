@@ -790,7 +790,7 @@ export const TYPE_EVENT_COLORS: Record<TypeEvent, string> = {
   travaux: '#ef4444',
   tournee: '#3b82f6',
   mise_service: '#22c55e',
-  formation: '#a855f7',
+  formation: '#DC4444',
   conge: '#f59e0b',
   rtt: '#06b6d4',
   astreinte: '#ec4899',

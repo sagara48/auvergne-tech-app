@@ -28,10 +28,10 @@ const NOTIFICATION_TYPE_CONFIG: Record<NotificationType, {
   defaultIcon: string;
 }> = {
   panne: { icon: AlertTriangle, color: '#ef4444', label: 'Panne', defaultIcon: '🚨' },
-  travaux: { icon: Hammer, color: '#a855f7', label: 'Travaux', defaultIcon: '🔧' },
+  travaux: { icon: Hammer, color: '#B91C1C', label: 'Travaux', defaultIcon: '🔧' },
   mise_service: { icon: FileCheck, color: '#f97316', label: 'Mise en service', defaultIcon: '📋' },
   stock: { icon: Package, color: '#f59e0b', label: 'Stock', defaultIcon: '📦' },
-  message: { icon: MessageCircle, color: '#8b5cf6', label: 'Message', defaultIcon: '💬' },
+  message: { icon: MessageCircle, color: '#B91C1C', label: 'Message', defaultIcon: '💬' },
   planning: { icon: Calendar, color: '#3b82f6', label: 'Planning', defaultIcon: '📅' },
   note: { icon: StickyNote, color: '#eab308', label: 'Note', defaultIcon: '📝' },
   system: { icon: Info, color: '#6b7280', label: 'Système', defaultIcon: 'ℹ️' },
@@ -166,10 +166,10 @@ function PreferencesModal({
 
   const typePrefs = [
     { key: 'panne_enabled', label: 'Pannes', icon: '🚨', color: '#ef4444' },
-    { key: 'travaux_enabled', label: 'Travaux', icon: '🔧', color: '#a855f7' },
+    { key: 'travaux_enabled', label: 'Travaux', icon: '🔧', color: '#B91C1C' },
     { key: 'mise_service_enabled', label: 'Mises en service', icon: '📋', color: '#f97316' },
     { key: 'stock_enabled', label: 'Stock', icon: '📦', color: '#f59e0b' },
-    { key: 'message_enabled', label: 'Messages', icon: '💬', color: '#8b5cf6' },
+    { key: 'message_enabled', label: 'Messages', icon: '💬', color: '#B91C1C' },
     { key: 'planning_enabled', label: 'Planning', icon: '📅', color: '#3b82f6' },
     { key: 'note_enabled', label: 'Notes', icon: '📝', color: '#eab308' },
   ];

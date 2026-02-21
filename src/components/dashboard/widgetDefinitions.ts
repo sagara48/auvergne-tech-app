@@ -44,9 +44,9 @@ export interface DashboardConfig {
 export const WIDGET_CATEGORIES: Record<WidgetCategory, { label: string; color: string }> = {
   stats: { label: 'Statistiques', color: '#3b82f6' },
   planning: { label: 'Planning', color: '#f59e0b' },
-  travaux: { label: 'Travaux & MES', color: '#a855f7' },
+  travaux: { label: 'Travaux & MES', color: '#B91C1C' },
   stock: { label: 'Stock', color: '#ef4444' },
-  communication: { label: 'Communication', color: '#8b5cf6' },
+  communication: { label: 'Communication', color: '#B91C1C' },
   temps: { label: 'Temps', color: '#14b8a6' },
   vehicule: { label: 'Véhicule', color: '#22c55e' },
   graphiques: { label: 'Graphiques', color: '#ec4899' },

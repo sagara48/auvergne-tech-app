@@ -87,7 +87,7 @@ export function StatsCountersWidget({ onRemove }: { onRemove?: () => void }) {
 
   const counters = [
     { label: 'En panne', value: stats?.pannes || 0, color: 'text-red-400', bg: 'bg-red-500/10' },
-    { label: 'Travaux', value: stats?.travaux || 0, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+    { label: 'Travaux', value: stats?.travaux || 0, color: 'text-[#B91C1C]', bg: 'bg-[#B91C1C]/10' },
     { label: 'MES', value: stats?.mes || 0, color: 'text-orange-400', bg: 'bg-orange-500/10' },
     { label: 'Demandes', value: stats?.demandes || 0, color: 'text-pink-400', bg: 'bg-pink-500/10' },
   ];
@@ -121,7 +121,7 @@ export function StatsProgressWidget({ onRemove }: { onRemove?: () => void }) {
     : 0;
 
   return (
-    <WidgetWrapper title="Progression travaux" icon={Hammer} color="#a855f7" onRemove={onRemove} compact>
+    <WidgetWrapper title="Progression travaux" icon={Hammer} color="#B91C1C" onRemove={onRemove} compact>
       <div className="h-full flex flex-col justify-center">
         <div className="text-center mb-2">
           <span className="text-3xl font-bold text-[var(--text-primary)]">{avgProgress}%</span>
@@ -207,7 +207,7 @@ export function PlanningTodayWidget({ onRemove }: { onRemove?: () => void }) {
 
   const getEventColor = (type: string) => {
     const colors: Record<string, string> = {
-      travaux: 'bg-purple-500',
+      travaux: 'bg-[#B91C1C]',
       tournee: 'bg-green-500',
       mise_service: 'bg-orange-500',
       formation: 'bg-blue-500',
@@ -272,7 +272,7 @@ export function PlanningWeekWidget({ onRemove }: { onRemove?: () => void }) {
 
   const getEventColor = (type: string) => {
     const colors: Record<string, string> = {
-      travaux: 'bg-purple-500',
+      travaux: 'bg-[#B91C1C]',
       tournee: 'bg-green-500',
       mise_service: 'bg-orange-500',
     };
@@ -286,14 +286,14 @@ export function PlanningWeekWidget({ onRemove }: { onRemove?: () => void }) {
           <div 
             key={i} 
             className={`flex flex-col rounded-lg p-1 ${
-              isToday(date) ? 'bg-purple-500/20 border border-purple-500/50' : 'bg-[var(--bg-tertiary)]'
+              isToday(date) ? 'bg-[#B91C1C]/20 border border-[#B91C1C]/050' : 'bg-[var(--bg-tertiary)]'
             }`}
           >
             <div className="text-center mb-1">
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase">
                 {format(date, 'EEE', { locale: fr })}
               </div>
-              <div className={`text-sm font-bold ${isToday(date) ? 'text-purple-400' : 'text-[var(--text-primary)]'}`}>
+              <div className={`text-sm font-bold ${isToday(date) ? 'text-[#B91C1C]' : 'text-[var(--text-primary)]'}`}>
                 {format(date, 'd')}
               </div>
             </div>
@@ -364,7 +364,7 @@ export function PlanningDeadlinesWidget({ onRemove }: { onRemove?: () => void })
               onClick={() => setModuleActif('travaux')}
             >
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-purple-400 font-semibold">{t.code}</div>
+                <div className="text-xs text-[#B91C1C] font-semibold">{t.code}</div>
                 <div className="text-sm text-[var(--text-primary)] truncate">{t.titre}</div>
               </div>
               <div className={`text-xs px-2 py-1 rounded-full ${getUrgencyColor(t.date_butoir)}`}>
@@ -443,7 +443,7 @@ export function TravauxMineWidget({ onRemove }: { onRemove?: () => void }) {
   };
 
   return (
-    <WidgetWrapper title="Mes travaux" icon={Hammer} color="#a855f7" onRemove={onRemove}>
+    <WidgetWrapper title="Mes travaux" icon={Hammer} color="#B91C1C" onRemove={onRemove}>
       {travaux?.length === 0 ? (
         <div className="h-full flex items-center justify-center text-[var(--text-muted)] text-sm">
           Aucun travaux assigné
@@ -457,7 +457,7 @@ export function TravauxMineWidget({ onRemove }: { onRemove?: () => void }) {
               onClick={() => setModuleActif('travaux')}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-purple-400 font-semibold">{t.code}</span>
+                <span className="text-xs text-[#B91C1C] font-semibold">{t.code}</span>
                 <span className={`text-xs ${priorityColor[t.priorite]}`}>●</span>
               </div>
               <div className="text-sm text-[var(--text-primary)] truncate mb-1">{t.titre}</div>
@@ -521,7 +521,7 @@ export function TravauxUrgentWidget({ onRemove }: { onRemove?: () => void }) {
                 onClick={() => setModuleActif('travaux')}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-purple-400">{t.code}</span>
+                  <span className="text-xs font-semibold text-[#B91C1C]">{t.code}</span>
                   <span className={`text-xs font-bold ${style.text}`}>
                     {days < 0 ? `${Math.abs(days)}j dépassé` : days === 0 ? "Aujourd'hui" : `${days}j`}
                   </span>
@@ -641,7 +641,7 @@ export function StockVehicleWidget({ onRemove }: { onRemove?: () => void }) {
           {stockVehicule && stockVehicule.length > 6 && (
             <button 
               onClick={() => setModuleActif('stock')}
-              className="w-full text-xs text-purple-400 hover:text-purple-300 py-1"
+              className="w-full text-xs text-[#B91C1C] hover:text-[#DC4444] py-1"
             >
               Voir tout ({stockVehicule.length})
             </button>
@@ -730,7 +730,7 @@ export function StockMovementsWidget({ onRemove }: { onRemove?: () => void }) {
           {movements?.map(m => (
             <div key={m.id} className="p-2 bg-[var(--bg-tertiary)] rounded-lg">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-purple-400 font-semibold">{m.code}</span>
+                <span className="text-xs text-[#B91C1C] font-semibold">{m.code}</span>
                 <span className={`text-xs ${statusColors[m.statut]}`}>●</span>
               </div>
               <div className="text-xs text-[var(--text-primary)] truncate">{m.article?.designation}</div>
@@ -764,7 +764,7 @@ export function ChatRecentWidget({ onRemove }: { onRemove?: () => void }) {
   });
 
   return (
-    <WidgetWrapper title="Messages récents" icon={MessageCircle} color="#8b5cf6" onRemove={onRemove}>
+    <WidgetWrapper title="Messages récents" icon={MessageCircle} color="#B91C1C" onRemove={onRemove}>
       {messages?.length === 0 ? (
         <div className="h-full flex items-center justify-center text-[var(--text-muted)] text-sm">
           Aucun message
@@ -785,7 +785,7 @@ export function ChatRecentWidget({ onRemove }: { onRemove?: () => void }) {
                 </span>
               </div>
               <div className="text-xs text-[var(--text-primary)]">
-                <span className="text-purple-400">{m.sender?.prenom}:</span> {m.content.substring(0, 50)}...
+                <span className="text-[#B91C1C]">{m.sender?.prenom}:</span> {m.content.substring(0, 50)}...
               </div>
             </div>
           ))}
@@ -813,12 +813,12 @@ export function ChatUnreadWidget({ onRemove }: { onRemove?: () => void }) {
   });
 
   return (
-    <WidgetWrapper title="Non-lus" icon={MessageCircle} color="#8b5cf6" onRemove={onRemove} compact>
+    <WidgetWrapper title="Non-lus" icon={MessageCircle} color="#B91C1C" onRemove={onRemove} compact>
       <div 
         className="h-full flex flex-col items-center justify-center cursor-pointer"
         onClick={() => setModuleActif('chat')}
       >
-        <div className={`text-4xl font-bold ${count && count > 0 ? 'text-purple-400' : 'text-[var(--text-tertiary)]'}`}>
+        <div className={`text-4xl font-bold ${count && count > 0 ? 'text-[#B91C1C]' : 'text-[var(--text-tertiary)]'}`}>
           {count || 0}
         </div>
         <div className="text-xs text-[var(--text-tertiary)]">messages</div>
@@ -869,7 +869,7 @@ export function NotesWidget({ onRemove }: { onRemove?: () => void }) {
               style={{ borderLeftColor: note.couleur || categoryColors[note.categorie] }}
             >
               <div className="flex items-center gap-2 mb-1">
-                {note.epingle && <span className="text-purple-400">📌</span>}
+                {note.epingle && <span className="text-[#B91C1C]">📌</span>}
                 <span className="text-xs font-medium text-[var(--text-primary)] truncate">{note.titre}</span>
               </div>
               {note.contenu && (
@@ -879,7 +879,7 @@ export function NotesWidget({ onRemove }: { onRemove?: () => void }) {
           ))}
           <button 
             onClick={() => setModuleActif('notes')}
-            className="w-full text-xs text-purple-400 hover:text-purple-300 py-1"
+            className="w-full text-xs text-[#B91C1C] hover:text-[#DC4444] py-1"
           >
             Voir toutes les notes →
           </button>
@@ -995,7 +995,7 @@ export function HoursSummaryWidget({ onRemove }: { onRemove?: () => void }) {
             <div className="text-[10px] text-[var(--text-tertiary)]">Trajet</div>
           </div>
           <div className="bg-[var(--bg-tertiary)] rounded-lg p-2 text-center">
-            <div className="text-lg font-bold text-purple-400">{summary?.rtt || 0}h</div>
+            <div className="text-lg font-bold text-[#B91C1C]">{summary?.rtt || 0}h</div>
             <div className="text-[10px] text-[var(--text-tertiary)]">RTT</div>
           </div>
         </div>
@@ -1137,7 +1137,7 @@ export function ChartActivityWidget({ onRemove }: { onRemove?: () => void }) {
             contentStyle={{ backgroundColor: '#27272a', border: '1px solid #3f3f46', borderRadius: '8px' }}
             labelStyle={{ color: '#fff' }}
           />
-          <Bar dataKey="travaux" stackId="a" fill="#a855f7" radius={[0, 0, 0, 0]} />
+          <Bar dataKey="travaux" stackId="a" fill="#B91C1C" radius={[0, 0, 0, 0]} />
           <Bar dataKey="tournees" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
           <Bar dataKey="mes" stackId="a" fill="#f97316" radius={[4, 4, 0, 0]} />
         </BarChart>
@@ -1175,7 +1175,7 @@ export function ChartTypesWidget({ onRemove }: { onRemove?: () => void }) {
     },
   });
 
-  const COLORS = ['#a855f7', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444'];
+  const COLORS = ['#B91C1C', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444'];
 
   return (
     <WidgetWrapper title="Types travaux" icon={Calendar} color="#ec4899" onRemove={onRemove}>
@@ -1248,7 +1248,7 @@ export function ChartTeamWidget({ onRemove }: { onRemove?: () => void }) {
           <Tooltip 
             contentStyle={{ backgroundColor: '#27272a', border: '1px solid #3f3f46', borderRadius: '8px' }}
           />
-          <Bar dataKey="travaux" fill="#a855f7" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="travaux" fill="#B91C1C" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </WidgetWrapper>
@@ -1305,7 +1305,7 @@ export function ClockWidget({ onRemove }: { onRemove?: () => void }) {
         <div className="text-xs text-[var(--text-tertiary)]">
           {format(time, 'EEEE d MMMM', { locale: fr })}
         </div>
-        <div className="text-[10px] text-purple-400 mt-1">
+        <div className="text-[10px] text-[#B91C1C] mt-1">
           Semaine {getWeek(time, { weekStartsOn: 1 })}
         </div>
       </div>
@@ -1318,9 +1318,9 @@ export function QuickLinksWidget({ onRemove }: { onRemove?: () => void }) {
   
   const links = [
     { id: 'planning', label: 'Planning', icon: Calendar, color: '#f59e0b' },
-    { id: 'travaux', label: 'Travaux', icon: Hammer, color: '#a855f7' },
+    { id: 'travaux', label: 'Travaux', icon: Hammer, color: '#B91C1C' },
     { id: 'stock', label: 'Stock', icon: Package, color: '#ef4444' },
-    { id: 'chat', label: 'Chat', icon: MessageCircle, color: '#8b5cf6' },
+    { id: 'chat', label: 'Chat', icon: MessageCircle, color: '#B91C1C' },
   ];
 
   return (
@@ -1406,11 +1406,11 @@ export function ChecklistWidget({ onRemove }: { onRemove?: () => void }) {
             onChange={(e) => setNewItem(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             placeholder="Nouvelle tâche..."
-            className="flex-1 px-2 py-1 text-xs bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded text-[var(--text-primary)] placeholder-dark-500 focus:outline-none focus:border-purple-500"
+            className="flex-1 px-2 py-1 text-xs bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded text-[var(--text-primary)] placeholder-dark-500 focus:outline-none focus:border-[#B91C1C]"
           />
           <button
             onClick={handleAdd}
-            className="p-1 bg-purple-600 hover:bg-purple-500 rounded text-[var(--text-primary)]"
+            className="p-1 bg-[#B91C1C] hover:bg-[#B91C1C] rounded text-[var(--text-primary)]"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -1428,7 +1428,7 @@ export function ChecklistWidget({ onRemove }: { onRemove?: () => void }) {
                 className={`w-4 h-4 rounded border flex items-center justify-center ${
                   item.completed 
                     ? 'bg-green-500 border-green-500' 
-                    : 'border-dark-500 hover:border-purple-500'
+                    : 'border-dark-500 hover:border-[#B91C1C]'
                 }`}
               >
                 {item.completed && <Check className="w-3 h-3 text-[var(--text-primary)]" />}
@@ -1517,7 +1517,7 @@ export function MyDayWidget({ onRemove }: { onRemove?: () => void }) {
             const isPast = isBefore(parseISO(evt.date_fin), new Date());
             const isNow = isBefore(parseISO(evt.date_debut), new Date()) && !isPast;
             const typeColors: Record<string, string> = {
-              travaux: '#a855f7', mise_service: '#f97316', tournee: '#3b82f6', manuel: '#6366f1',
+              travaux: '#B91C1C', mise_service: '#f97316', tournee: '#3b82f6', manuel: '#6366f1',
             };
             const color = typeColors[evt.type_event] || '#6366f1';
 
@@ -1661,7 +1661,7 @@ export function TeamWeatherWidget({ onRemove }: { onRemove?: () => void }) {
 
             return (
               <div key={t.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-[var(--bg-tertiary)]">
-                <div className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[9px] font-bold text-white">
+                <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center text-[9px] font-bold text-white">
                   {t.avatar_initiales || (t.prenom?.charAt(0) || '') + (t.nom?.charAt(0) || '')}
                 </div>
                 <div className="flex-1 min-w-0">

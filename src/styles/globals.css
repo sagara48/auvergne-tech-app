@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 /* ==========================================
    VARIABLES CSS POUR LES THEMES
@@ -10,57 +10,64 @@
 
 :root {
   /* Variables de couleur - Mode sombre par défaut */
-  --bg-primary: #09090b;
-  --bg-secondary: #18181b;
-  --bg-tertiary: #27272a;
-  --bg-elevated: #3f3f46;
-  --bg-hover: #52525b;
+  --bg-primary: #0F0D14;
+  --bg-secondary: #161420;
+  --bg-tertiary: #1E1B2A;
+  --bg-elevated: #2A2640;
+  --bg-hover: #342F4A;
   
-  --text-primary: #ffffff;
-  --text-secondary: #a1a1aa;
-  --text-tertiary: #71717a;
-  --text-muted: #52525b;
+  --text-primary: #F0EDF5;
+  --text-secondary: #A49BB5;
+  --text-tertiary: #7A7190;
+  --text-muted: #5A5270;
   
-  --border-primary: #3f3f46;
-  --border-secondary: #27272a;
+  --border-primary: #2E2940;
+  --border-secondary: #221F32;
   
-  --accent-primary: #8b5cf6;
-  --accent-secondary: #6366f1;
+  --accent-primary: #DC4444;
+  --accent-secondary: #B91C1C;
   
   /* Couleurs sémantiques */
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --info: #3b82f6;
+  --success: #059669;
+  --warning: #D97706;
+  --error: #EA580C;
+  --info: #2563EB;
+  
+  /* Accent backgrounds */
+  --accent-bg: rgba(185, 28, 28, 0.12);
+  --accent-bg-hover: rgba(185, 28, 28, 0.20);
   
   /* Ombres */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 8px -1px rgb(15 13 20 / 0.4);
+  --shadow-lg: 0 10px 20px -3px rgb(15 13 20 / 0.5);
 }
 
-/* Mode clair */
+/* Mode clair — Pure Lavender */
 .light {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f4f4f5;
-  --bg-tertiary: #e4e4e7;
-  --bg-elevated: #fafafa;
-  --bg-hover: #d4d4d8;
+  --bg-primary: #F3F1F6;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #EDE9F5;
+  --bg-elevated: #FAFAFC;
+  --bg-hover: #E4DFF0;
   
-  --text-primary: #18181b;
-  --text-secondary: #52525b;
-  --text-tertiary: #71717a;
-  --text-muted: #a1a1aa;
+  --text-primary: #1E1B2E;
+  --text-secondary: #585270;
+  --text-tertiary: #7A7190;
+  --text-muted: #9490A8;
   
-  --border-primary: #d4d4d8;
-  --border-secondary: #e4e4e7;
+  --border-primary: #E4DFF0;
+  --border-secondary: #ECE8F5;
   
-  --accent-primary: #7c3aed;
-  --accent-secondary: #4f46e5;
+  --accent-primary: #B91C1C;
+  --accent-secondary: #991B1B;
   
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.15);
+  --accent-bg: rgba(185, 28, 28, 0.06);
+  --accent-bg-hover: rgba(185, 28, 28, 0.12);
+  
+  --shadow-sm: 0 1px 3px 0 rgba(100, 70, 160, 0.04);
+  --shadow-md: 0 2px 8px rgba(100, 70, 160, 0.05);
+  --shadow-lg: 0 8px 24px rgba(100, 70, 160, 0.08);
 }
 
 /* ==========================================
@@ -74,7 +81,7 @@
 }
 
 html {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'DM Sans', system-ui, sans-serif;
 }
 
 body {
@@ -108,47 +115,47 @@ body {
 .theme-border-secondary { border-color: var(--border-secondary); }
 
 /* Automatisation des couleurs de texte principales */
-.dark .text-white { color: #ffffff; }
-.light .text-white { color: #18181b; }
+.dark .text-white { color: #F0EDF5; }
+.light .text-white { color: #1E1B2E; }
 
-.dark .text-dark-300 { color: #a1a1aa; }
-.light .text-dark-300 { color: #52525b; }
+.dark .text-dark-300 { color: #A49BB5; }
+.light .text-dark-300 { color: #585270; }
 
-.dark .text-dark-400 { color: #71717a; }
-.light .text-dark-400 { color: #71717a; }
+.dark .text-dark-400 { color: #7A7190; }
+.light .text-dark-400 { color: #7A7190; }
 
-.dark .text-dark-500 { color: #52525b; }
-.light .text-dark-500 { color: #a1a1aa; }
+.dark .text-dark-500 { color: #5A5270; }
+.light .text-dark-500 { color: #9490A8; }
 
 /* Automatisation des backgrounds */
-.dark .bg-dark-900 { background-color: #09090b; }
-.light .bg-dark-900 { background-color: #f4f4f5; }
+.dark .bg-dark-900 { background-color: #0F0D14; }
+.light .bg-dark-900 { background-color: #F3F1F6; }
 
-.dark .bg-dark-800 { background-color: #18181b; }
-.light .bg-dark-800 { background-color: #ffffff; }
+.dark .bg-dark-800 { background-color: #161420; }
+.light .bg-dark-800 { background-color: #FFFFFF; }
 
-.dark .bg-dark-700 { background-color: #27272a; }
-.light .bg-dark-700 { background-color: #f4f4f5; }
+.dark .bg-dark-700 { background-color: #1E1B2A; }
+.light .bg-dark-700 { background-color: #EDE9F5; }
 
-.dark .bg-dark-600 { background-color: #3f3f46; }
-.light .bg-dark-600 { background-color: #e4e4e7; }
+.dark .bg-dark-600 { background-color: #2A2640; }
+.light .bg-dark-600 { background-color: #E4DFF0; }
 
 /* Automatisation des bordures */
-.dark .border-dark-600 { border-color: #3f3f46; }
-.light .border-dark-600 { border-color: #e4e4e7; }
+.dark .border-dark-600 { border-color: #2E2940; }
+.light .border-dark-600 { border-color: #E4DFF0; }
 
-.dark .border-dark-700 { border-color: #27272a; }
-.light .border-dark-700 { border-color: #d4d4d8; }
+.dark .border-dark-700 { border-color: #221F32; }
+.light .border-dark-700 { border-color: #ECE8F5; }
 
 /* Hovers */
-.dark .hover\:bg-dark-700:hover { background-color: #27272a; }
-.light .hover\:bg-dark-700:hover { background-color: #e4e4e7; }
+.dark .hover\:bg-dark-700:hover { background-color: #1E1B2A; }
+.light .hover\:bg-dark-700:hover { background-color: #E4DFF0; }
 
-.dark .hover\:bg-dark-600:hover { background-color: #3f3f46; }
-.light .hover\:bg-dark-600:hover { background-color: #d4d4d8; }
+.dark .hover\:bg-dark-600:hover { background-color: #2A2640; }
+.light .hover\:bg-dark-600:hover { background-color: #E4DFF0; }
 
-.dark .hover\:text-white:hover { color: #ffffff; }
-.light .hover\:text-white:hover { color: #18181b; }
+.dark .hover\:text-white:hover { color: #F0EDF5; }
+.light .hover\:text-white:hover { color: #1E1B2E; }
 
 /* ==========================================
    SCROLLBAR
@@ -160,29 +167,29 @@ body {
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: #18181b;
+  background: #161420;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: #2E2940;
   border-radius: 9999px;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: #3E3858;
 }
 
 .light ::-webkit-scrollbar-track {
-  background: #f4f4f5;
+  background: #EDE9F5;
 }
 
 .light ::-webkit-scrollbar-thumb {
-  background: #d4d4d8;
+  background: #D5CFE5;
   border-radius: 9999px;
 }
 
 .light ::-webkit-scrollbar-thumb:hover {
-  background: #a1a1aa;
+  background: #B0ABBD;
 }
 
 /* ==========================================
@@ -242,15 +249,15 @@ input[type="time"]::-webkit-calendar-picker-indicator {
    ========================================== */
 
 .glow-blue {
-  box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 30px rgba(37, 99, 235, 0.3);
 }
 
 .glow-green {
-  box-shadow: 0 0 30px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 0 30px rgba(5, 150, 105, 0.3);
 }
 
 .glow-purple {
-  box-shadow: 0 0 30px rgba(168, 85, 247, 0.3);
+  box-shadow: 0 0 30px rgba(185, 28, 28, 0.3);
 }
 
 /* ==========================================
@@ -301,9 +308,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 
 .react-grid-item.react-grid-placeholder {
-  background: rgba(139, 92, 246, 0.2);
-  border: 2px dashed rgba(139, 92, 246, 0.5);
-  border-radius: 12px;
+  background: rgba(185, 28, 28, 0.15);
+  border: 2px dashed rgba(185, 28, 28, 0.4);
+  border-radius: 20px;
   opacity: 0.5;
   transition-duration: 100ms;
   z-index: 2;
@@ -323,8 +330,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   bottom: 3px;
   width: 8px;
   height: 8px;
-  border-right: 2px solid rgba(139, 92, 246, 0.5);
-  border-bottom: 2px solid rgba(139, 92, 246, 0.5);
+  border-right: 2px solid rgba(185, 28, 28, 0.4);
+  border-bottom: 2px solid rgba(185, 28, 28, 0.4);
   border-radius: 0 0 3px 0;
 }
 

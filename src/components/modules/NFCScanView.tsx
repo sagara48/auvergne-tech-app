@@ -225,7 +225,7 @@ function TravauxTab({ ascenseurId }: { ascenseurId: string }) {
         <div key={t.id} className="p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-purple-400">{t.code}</span>
+              <span className="font-semibold text-[#B91C1C]">{t.code}</span>
               {getStatutBadge(t.statut)}
             </div>
           </div>

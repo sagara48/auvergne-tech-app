@@ -56,7 +56,7 @@ const STATUTS = [
   { value: 'archivee', label: 'Archivée', color: '#71717a' },
 ];
 
-const NOTE_COLORS = ['#6366f1', '#3b82f6', '#06b6d4', '#22c55e', '#84cc16', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#a855f7'];
+const NOTE_COLORS = ['#6366f1', '#3b82f6', '#06b6d4', '#22c55e', '#84cc16', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#B91C1C'];
 
 // ============================================
 // COMPOSANT CHECKLIST
@@ -165,7 +165,7 @@ function CommentsSection({ noteId }: { noteId: string }) {
       <div className="space-y-3 max-h-48 overflow-y-auto mb-3">
         {commentaires?.map(c => (
           <div key={c.id} className="flex gap-2 group">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center text-[10px] font-bold flex-shrink-0">
               {c.technicien?.avatar_initiales || '?'}
             </div>
             <div className="flex-1">
@@ -533,7 +533,7 @@ function PartageSection({ noteId }: { noteId: string }) {
       <div className="space-y-2">
         {partages?.map(partage => (
           <div key={partage.id} className="flex items-center gap-2 p-2 bg-[var(--bg-tertiary)] rounded-lg group">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center text-[10px] font-bold text-white">
               {partage.technicien?.avatar_initiales || '?'}
             </div>
             <div className="flex-1">
@@ -607,7 +607,7 @@ function LiaisonsSection({ noteId, allNotes }: { noteId: string; allNotes?: Note
     switch (type) {
       case 'reference': return '#3b82f6';
       case 'suite': return '#22c55e';
-      case 'associee': return '#a855f7';
+      case 'associee': return '#B91C1C';
       default: return '#6b7280';
     }
   };
@@ -912,7 +912,7 @@ function NoteFormModal({
                   value={contenu}
                   onChange={e => setContenu(e.target.value)}
                   placeholder="Contenu de la note..."
-                  className="w-full h-48 p-3 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full h-48 p-3 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] resize-none focus:outline-none focus:ring-2 focus:ring-[#B91C1C]"
                 />
               </div>
             )}
@@ -986,7 +986,7 @@ function NoteFormModal({
                     <Share2 className="w-4 h-4 text-[var(--text-muted)]" />
                     <span className="text-sm text-[var(--text-primary)]">Partager avec l'équipe</span>
                   </div>
-                  <button onClick={() => setPartage(!partage)} className={`w-10 h-6 rounded-full transition-colors ${partage ? 'bg-purple-500' : 'bg-[var(--bg-elevated)]'}`}>
+                  <button onClick={() => setPartage(!partage)} className={`w-10 h-6 rounded-full transition-colors ${partage ? 'bg-[#B91C1C]' : 'bg-[var(--bg-elevated)]'}`}>
                     <div className={`w-4 h-4 bg-white rounded-full transition-transform ${partage ? 'translate-x-5' : 'translate-x-1'}`} />
                   </button>
                 </div>
@@ -1062,11 +1062,11 @@ function NoteCard({
 
   if (viewMode === 'list') {
     return (
-      <div onClick={onEdit} className={`flex items-center gap-4 p-3 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl hover:border-dark-500 transition-all cursor-pointer group ${note.epingle ? 'ring-1 ring-purple-500/30' : ''} ${echeanceStatus.status === 'depasse' ? 'border-red-500/50' : ''}`}>
+      <div onClick={onEdit} className={`flex items-center gap-4 p-3 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl hover:border-dark-500 transition-all cursor-pointer group ${note.epingle ? 'ring-1 ring-[#B91C1C]/30' : ''} ${echeanceStatus.status === 'depasse' ? 'border-red-500/50' : ''}`}>
         <div className="w-1 h-10 rounded-full" style={{ backgroundColor: note.couleur }} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            {note.epingle && <Pin className="w-3 h-3 text-purple-400" />}
+            {note.epingle && <Pin className="w-3 h-3 text-[#B91C1C]" />}
             <span className="font-medium text-[var(--text-primary)] truncate">{note.titre}</span>
             {note.rappel_date && <Bell className="w-3 h-3 text-amber-400" />}
             {echeanceStatus.status !== 'none' && (
@@ -1092,7 +1092,7 @@ function NoteCard({
         <span className="text-xs text-[var(--text-muted)]">{formatDistanceToNow(parseISO(note.updated_at), { addSuffix: true, locale: fr })}</span>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100">
           <button onClick={e => { e.stopPropagation(); onTogglePin(); }} className="p-1 hover:bg-[var(--bg-elevated)] rounded">
-            {note.epingle ? <PinOff className="w-4 h-4 text-purple-400" /> : <Pin className="w-4 h-4 text-[var(--text-tertiary)]" />}
+            {note.epingle ? <PinOff className="w-4 h-4 text-[#B91C1C]" /> : <Pin className="w-4 h-4 text-[var(--text-tertiary)]" />}
           </button>
           <button onClick={e => { e.stopPropagation(); onDelete(); }} className="p-1 hover:bg-red-500/20 rounded">
             <Trash2 className="w-4 h-4 text-red-400" />
@@ -1104,12 +1104,12 @@ function NoteCard({
 
   // Vue grille / kanban
   return (
-    <div onClick={onEdit} className={`flex flex-col bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl overflow-hidden hover:border-dark-500 transition-all cursor-pointer group ${note.epingle ? 'ring-1 ring-purple-500/30' : ''} ${echeanceStatus.status === 'depasse' ? 'border-red-500/50' : ''}`}>
+    <div onClick={onEdit} className={`flex flex-col bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl overflow-hidden hover:border-dark-500 transition-all cursor-pointer group ${note.epingle ? 'ring-1 ring-[#B91C1C]/30' : ''} ${echeanceStatus.status === 'depasse' ? 'border-red-500/50' : ''}`}>
       <div className="h-1" style={{ backgroundColor: note.couleur }} />
       <div className="p-3 flex-1 flex flex-col">
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            {note.epingle && <Pin className="w-3 h-3 text-purple-400 flex-shrink-0" />}
+            {note.epingle && <Pin className="w-3 h-3 text-[#B91C1C] flex-shrink-0" />}
             <h3 className="font-medium text-sm text-[var(--text-primary)] truncate">{note.titre}</h3>
           </div>
           <div className="flex items-center gap-1">
@@ -1276,7 +1276,7 @@ export function NotesPage() {
         </div>
         <Card className="flex-1 overflow-hidden">
           <CardBody className="p-2 h-full overflow-y-auto">
-            <button onClick={() => setSelectedDossier(null)} className={`w-full flex items-center gap-2 p-2 rounded-lg mb-1 ${selectedDossier === null ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-[var(--bg-tertiary)]'}`}>
+            <button onClick={() => setSelectedDossier(null)} className={`w-full flex items-center gap-2 p-2 rounded-lg mb-1 ${selectedDossier === null ? 'bg-[#B91C1C]/20 text-[#DC4444]' : 'hover:bg-[var(--bg-tertiary)]'}`}>
               <Folder className="w-4 h-4" />
               <span className="text-sm flex-1 text-left">Toutes</span>
               <Badge variant="purple" className="text-[10px]">{notes?.length || 0}</Badge>
@@ -1307,7 +1307,7 @@ export function NotesPage() {
             <button
               onClick={() => { setUseAdvancedSearch(false); setAdvancedSearchResults(null); }}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                !useAdvancedSearch ? 'bg-purple-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                !useAdvancedSearch ? 'bg-[#B91C1C] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
             >
               Recherche simple
@@ -1315,7 +1315,7 @@ export function NotesPage() {
             <button
               onClick={() => setUseAdvancedSearch(true)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
-                useAdvancedSearch ? 'bg-purple-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                useAdvancedSearch ? 'bg-[#B91C1C] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
             >
               <Sparkles className="w-3 h-3" />
@@ -1380,9 +1380,9 @@ export function NotesPage() {
         <div className="flex-1 overflow-auto">
           {/* Résumé résultats recherche avancée */}
           {useAdvancedSearch && advancedSearchResults && (
-            <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+            <div className="mb-4 p-3 bg-[#B91C1C]/10 border border-[#B91C1C]/30 rounded-lg">
               <p className="text-sm">
-                <span className="font-semibold text-purple-400">{advancedSearchResults.length}</span> note(s) trouvée(s)
+                <span className="font-semibold text-[#B91C1C]">{advancedSearchResults.length}</span> note(s) trouvée(s)
                 {advancedSearchResults.length > 0 && advancedSearchResults[0].score > 0 && (
                   <span className="text-[var(--text-muted)]"> — triées par pertinence</span>
                 )}
@@ -1511,7 +1511,7 @@ export function ContextNotes({
               <div className="w-1 h-full rounded" style={{ backgroundColor: note.couleur || '#6366f1' }} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  {note.epingle && <Pin className="w-3 h-3 text-purple-400" />}
+                  {note.epingle && <Pin className="w-3 h-3 text-[#B91C1C]" />}
                   <span className="font-medium text-sm text-[var(--text-primary)] truncate">{note.titre}</span>
                 </div>
                 <p className="text-xs text-[var(--text-tertiary)] line-clamp-2">{note.contenu}</p>

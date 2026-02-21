@@ -263,6 +263,50 @@ export function SynergyPanel() {
     }
   }
 
+  // ═══ SYNERGIE 11: Tournées ↔ Stock ↔ Ascenseurs (pré-chargement) ═══
+  if (stockGlobal) {
+    const ruptures = (stockGlobal as any[]).filter((s: any) => s.quantite === 0 && s.quantite_min > 0);
+    if (ruptures.length >= 3) {
+      synergies.push({
+        id: 'tournee-precheck',
+        urgence: 'moyenne',
+        icon: Truck,
+        titre: `Pré-check tournée — ${ruptures.length} ruptures de stock`,
+        description: `Plusieurs pièces courantes sont en rupture. Vérifiez les besoins avant les prochaines tournées d'entretien.`,
+        action: 'Voir tournées',
+        modulesConcernes: [
+          { id: 'tournees', label: 'Tournées' },
+          { id: 'stock', label: 'Stock' },
+        ],
+        actionModule: 'tournees',
+        details: ruptures.slice(0, 3).map((r: any) => `${r.designation || r.article?.designation || '?'} — RUPTURE`),
+      });
+    }
+  }
+
+  // ═══ SYNERGIE 12: GED ↔ MES ↔ Ascenseurs (complétude documentaire) ═══
+  if (mesList) {
+    const mesEnCours = (mesList as any[]).filter((m: any) => !['terminee', 'annulee'].includes(m.statut));
+    const sansDocuments = mesEnCours.filter((m: any) => !m.nb_documents || m.nb_documents < 3);
+    if (sansDocuments.length > 0) {
+      synergies.push({
+        id: 'mes-completude-docs',
+        urgence: sansDocuments.length >= 3 ? 'haute' : 'moyenne',
+        icon: FolderOpen,
+        titre: `${sansDocuments.length} MES — documents incomplets`,
+        description: `Des mises en service n'ont pas tous les documents obligatoires (CE, PV, bureau de contrôle). Uploadez-les avant de passer à l'étape suivante.`,
+        action: 'Voir GED',
+        modulesConcernes: [
+          { id: 'miseservice', label: 'MES' },
+          { id: 'ged', label: 'Documents' },
+          { id: 'ascenseurs', label: 'Ascenseurs' },
+        ],
+        actionModule: 'ged',
+        details: sansDocuments.slice(0, 3).map((m: any) => `${m.code} — ${m.adresse || '?'} — ${m.nb_documents || 0} docs`),
+      });
+    }
+  }
+
   // Tri par urgence
   const urgenceOrder = { haute: 0, moyenne: 1, basse: 2 };
   synergies.sort((a, b) => urgenceOrder[a.urgence] - urgenceOrder[b.urgence]);

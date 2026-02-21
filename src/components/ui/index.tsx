@@ -12,7 +12,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', children, ...props }, ref) => {
     const variants = {
-      primary: 'bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:shadow-lg hover:shadow-blue-500/25',
+      primary: 'bg-gradient-to-r from-[#B91C1C] to-[#DC4444] text-white hover:shadow-lg hover:shadow-blue-500/25',
       secondary: cn(
         'border transition-theme',
         'bg-[var(--bg-tertiary)] border-[var(--border-primary)] text-[var(--text-secondary)]',
@@ -221,7 +221,7 @@ export function Badge({ variant = 'gray', children, className }: BadgeProps) {
     amber: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
     orange: 'bg-orange-500/20 text-orange-600 dark:text-orange-400',
     red: 'bg-red-500/20 text-red-600 dark:text-red-400',
-    purple: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
+    purple: 'bg-[#B91C1C]/20 text-[#B91C1C] dark:text-[#B91C1C]',
     pink: 'bg-pink-500/20 text-pink-600 dark:text-pink-400',
     gray: 'bg-[var(--bg-elevated)] text-[var(--text-secondary)]',
   };
@@ -300,7 +300,7 @@ export function ProgressBar({ value, max = 100, variant = 'blue', className }: P
     blue: 'bg-gradient-to-r from-blue-500 to-blue-400',
     green: 'bg-gradient-to-r from-green-500 to-green-400',
     amber: 'bg-gradient-to-r from-amber-500 to-amber-400',
-    purple: 'bg-gradient-to-r from-purple-500 to-purple-400',
+    purple: 'bg-gradient-to-r from-[#B91C1C] to-[#DC4444]',
     orange: 'bg-gradient-to-r from-orange-500 to-orange-400',
   };
 

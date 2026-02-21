@@ -121,7 +121,7 @@ function AnalysePhotoModal({
         <CardBody>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Camera className="w-6 h-6 text-purple-400" />
+              <Camera className="w-6 h-6 text-[#B91C1C]" />
               Identifier une pièce par photo
             </h2>
             <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
@@ -150,9 +150,9 @@ function AnalysePhotoModal({
                 {/* Prendre une photo */}
                 <button
                   onClick={() => cameraInputRef.current?.click()}
-                  className="flex flex-col items-center gap-3 p-6 border-2 border-dashed border-[var(--border-primary)] rounded-xl hover:border-purple-500/50 hover:bg-purple-500/5 transition-all"
+                  className="flex flex-col items-center gap-3 p-6 border-2 border-dashed border-[var(--border-primary)] rounded-xl hover:border-[#B91C1C]/050 hover:bg-[#B91C1C]/05 transition-all"
                 >
-                  <Camera className="w-10 h-10 text-purple-400" />
+                  <Camera className="w-10 h-10 text-[#B91C1C]" />
                   <span className="text-sm font-medium">Prendre une photo</span>
                   <input
                     ref={cameraInputRef}
@@ -205,7 +205,7 @@ function AnalysePhotoModal({
             {/* Bouton analyser */}
             <Button
               variant="primary"
-              className="w-full bg-gradient-to-r from-purple-500 to-indigo-500"
+              className="w-full bg-gradient-to-r from-[#B91C1C] to-[#DC4444]"
               onClick={handleAnalyser}
               disabled={!photo || isAnalysing}
             >
@@ -265,7 +265,7 @@ function ResultatAnalyseModal({
         <CardBody className="max-h-[85vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Sparkles className="w-6 h-6 text-purple-400" />
+              <Sparkles className="w-6 h-6 text-[#B91C1C]" />
               Résultat de l'analyse
             </h2>
             <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
@@ -359,7 +359,7 @@ function ResultatAnalyseModal({
             {/* Rechercher chez les fournisseurs */}
             <div className="border-t border-[var(--border-primary)] pt-4">
               <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                <Search className="w-4 h-4 text-purple-400" />
+                <Search className="w-4 h-4 text-[#B91C1C]" />
                 Rechercher chez les fournisseurs
               </h4>
               
@@ -600,7 +600,7 @@ export function PiecesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center">
             <Package className="w-6 h-6 text-white" />
           </div>
           <div>
@@ -614,7 +614,7 @@ export function PiecesPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="primary"
-            className="bg-gradient-to-r from-purple-500 to-indigo-500"
+            className="bg-gradient-to-r from-[#B91C1C] to-[#DC4444]"
             onClick={() => setShowPhotoModal(true)}
           >
             <Camera className="w-5 h-5" />
@@ -636,7 +636,7 @@ export function PiecesPage() {
           onClick={() => setActiveTab('recherche')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === 'recherche' 
-              ? 'bg-purple-500/20 text-purple-300' 
+              ? 'bg-[#B91C1C]/20 text-[#DC4444]' 
               : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
           }`}
         >
@@ -729,14 +729,14 @@ export function PiecesPage() {
             {/* Résultats */}
             {isSearching && (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+                <Loader2 className="w-8 h-8 animate-spin text-[#B91C1C]" />
               </div>
             )}
 
             {search.length >= 2 && resultatsRecherche && resultatsRecherche.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {resultatsRecherche.map(piece => (
-                  <Card key={piece.id} className="hover:border-purple-500/50 transition-colors">
+                  <Card key={piece.id} className="hover:border-[#B91C1C]/050 transition-colors">
                     <CardBody>
                       <div className="flex gap-3">
                         {piece.photo_url ? (
@@ -747,7 +747,7 @@ export function PiecesPage() {
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="font-mono text-sm text-purple-400">{piece.reference}</p>
+                          <p className="font-mono text-sm text-[#B91C1C]">{piece.reference}</p>
                           <p className="font-medium truncate">{piece.designation}</p>
                           <div className="flex items-center gap-2 mt-1">
                             {piece.marque_compatible && <Badge variant="blue">{piece.marque_compatible}</Badge>}
@@ -776,14 +776,14 @@ export function PiecesPage() {
             {search.length < 2 && (
               <Card>
                 <CardBody className="text-center py-12">
-                  <Camera className="w-16 h-16 text-purple-400 mx-auto mb-4" />
+                  <Camera className="w-16 h-16 text-[#B91C1C] mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">Identifiez vos pièces par photo</h3>
                   <p className="text-[var(--text-secondary)] max-w-md mx-auto mb-4">
                     Prenez une photo de la pièce à identifier. L'IA analysera l'image, lira les références et vous proposera des suggestions de recherche.
                   </p>
                   <Button
                     variant="primary"
-                    className="bg-gradient-to-r from-purple-500 to-indigo-500"
+                    className="bg-gradient-to-r from-[#B91C1C] to-[#DC4444]"
                     onClick={() => setShowPhotoModal(true)}
                   >
                     <Camera className="w-5 h-5" />

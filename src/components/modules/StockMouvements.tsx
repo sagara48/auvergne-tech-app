@@ -44,7 +44,7 @@ const TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string }> = {
   entree: { icon: ArrowUpCircle, color: 'text-green-400', bg: 'bg-green-500/20' },
   sortie: { icon: ArrowDownCircle, color: 'text-red-400', bg: 'bg-red-500/20' },
   inventaire: { icon: RefreshCw, color: 'text-blue-400', bg: 'bg-blue-500/20' },
-  transfert_in: { icon: ArrowRightLeft, color: 'text-purple-400', bg: 'bg-purple-500/20' },
+  transfert_in: { icon: ArrowRightLeft, color: 'text-[#B91C1C]', bg: 'bg-[#B91C1C]/20' },
   transfert_out: { icon: ArrowRightLeft, color: 'text-amber-400', bg: 'bg-amber-500/20' },
 };
 
@@ -185,7 +185,7 @@ export function StockMouvements({
             return (
               <div key={m.id} className="flex items-center gap-2 p-2 bg-[var(--bg-tertiary)] rounded-lg text-sm">
                 <Icon className={`w-4 h-4 ${config.color}`} />
-                <span className="font-mono text-purple-400">{m.reference}</span>
+                <span className="font-mono text-[#B91C1C]">{m.reference}</span>
                 <span className={`font-medium ${m.type_mouvement === 'sortie' ? 'text-red-400' : 'text-green-400'}`}>
                   {m.type_mouvement === 'sortie' ? '-' : '+'}{m.quantite}
                 </span>
@@ -237,7 +237,7 @@ export function StockMouvements({
             <div className="text-[10px] text-[var(--text-muted)]">Sorties</div>
           </div>
           <div className="text-center">
-            <div className="text-purple-400 font-bold">{stats.transferts}</div>
+            <div className="text-[#B91C1C] font-bold">{stats.transferts}</div>
             <div className="text-[10px] text-[var(--text-muted)]">Transferts</div>
           </div>
         </div>
@@ -302,7 +302,7 @@ export function StockMouvements({
                     {/* Infos article */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm text-purple-400">{mouvement.reference}</span>
+                        <span className="font-mono text-sm text-[#B91C1C]">{mouvement.reference}</span>
                         <Badge variant={mouvement.type_color as any}>{mouvement.type_libelle}</Badge>
                       </div>
                       <p className="text-sm text-[var(--text-tertiary)] truncate">{mouvement.designation}</p>
@@ -365,7 +365,7 @@ export function StockMouvements({
                           <div className="flex items-center gap-2">
                             <FileText className="w-4 h-4 text-[var(--text-muted)]" />
                             <span className="text-[var(--text-muted)]">Référence:</span>
-                            <span className="text-purple-400 font-mono">{mouvement.reference_doc}</span>
+                            <span className="text-[#B91C1C] font-mono">{mouvement.reference_doc}</span>
                           </div>
                         )}
                         {mouvement.technicien_nom && (

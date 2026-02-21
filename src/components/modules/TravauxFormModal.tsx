@@ -430,7 +430,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
               <textarea
                 value={form.description}
                 onChange={e => setForm({ ...form, description: e.target.value })}
-                className="w-full px-4 py-3 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] placeholder-dark-500 focus:outline-none focus:border-purple-500 resize-none"
+                className="w-full px-4 py-3 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] placeholder-dark-500 focus:outline-none focus:border-[#B91C1C] resize-none"
                 rows={2}
                 placeholder="Détails du travaux..."
               />
@@ -495,7 +495,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
                   type="date"
                   value={form.date_butoir}
                   onChange={e => setForm({ ...form, date_butoir: e.target.value })}
-                  className="w-full px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] text-sm focus:outline-none focus:border-purple-500"
+                  className="w-full px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#B91C1C]"
                 />
               </div>
               {travaux && (
@@ -828,7 +828,7 @@ export function TravauxFormModal({ travaux, onClose, onSave }: TravauxFormModalP
                           onClick={() => setPieceMode('manuel')}
                           className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
                             pieceMode === 'manuel'
-                              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                              ? 'bg-[#B91C1C]/20 text-[#B91C1C] border border-[#B91C1C]/30'
                               : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                           }`}
                         >

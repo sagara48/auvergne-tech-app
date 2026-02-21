@@ -75,7 +75,7 @@ const STATUTS_TRAVAUX = {
   en_cours: { label: 'En cours', color: 'bg-blue-100 text-blue-600' },
   en_pause: { label: 'En pause', color: 'bg-orange-100 text-orange-600' },
   termine: { label: 'Terminé', color: 'bg-green-100 text-green-600' },
-  facture: { label: 'Facturé', color: 'bg-purple-100 text-purple-600' },
+  facture: { label: 'Facturé', color: 'bg-[#FEE2E2] text-[#B91C1C]' },
   annule: { label: 'Annulé', color: 'bg-red-100 text-red-600' },
 };
 
@@ -84,7 +84,7 @@ const STATUTS_PIECE = {
   reserve: { label: 'Réservé', color: 'bg-yellow-100 text-yellow-600', icon: Clock },
   commande: { label: 'Commandé', color: 'bg-blue-100 text-blue-600', icon: Package },
   recu: { label: 'Reçu', color: 'bg-green-100 text-green-600', icon: CheckCircle },
-  installe: { label: 'Installé', color: 'bg-purple-100 text-purple-600', icon: CheckCircle },
+  installe: { label: 'Installé', color: 'bg-[#FEE2E2] text-[#B91C1C]', icon: CheckCircle },
 };
 
 interface TravauxDetailProps {
@@ -263,7 +263,7 @@ export function TravauxDetail({ travauxId, onClose }: TravauxDetailProps) {
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
-      <div className="p-4 border-b bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+      <div className="p-4 border-b bg-gradient-to-r from-[#B91C1C] to-[#DC4444] text-white">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">

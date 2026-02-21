@@ -18,7 +18,7 @@ function getComptage(type: TypeAstreinte): 'rtt' | 'paye' {
 
 const TYPE_COLORS: Record<TypeAstreinte, string> = {
   samedi_jour: 'bg-amber-500/20 border-amber-500/40 text-amber-400',
-  samedi_nuit: 'bg-purple-500/20 border-purple-500/40 text-purple-400',
+  samedi_nuit: 'bg-[#B91C1C]/20 border-[#B91C1C]/40 text-[#B91C1C]',
   dimanche_jour: 'bg-blue-500/20 border-blue-500/40 text-blue-400',
   dimanche_nuit: 'bg-indigo-500/20 border-indigo-500/40 text-indigo-400',
   nuit_semaine: 'bg-pink-500/20 border-pink-500/40 text-pink-400',
@@ -36,7 +36,7 @@ export function AstreintesList({
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-[var(--bg-tertiary)]/30 border-b border-[var(--border-primary)]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-500 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-[#FEF2F2]0 flex items-center justify-center">
             <Moon className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -50,7 +50,7 @@ export function AstreintesList({
       </div>
 
       {/* Règles */}
-      <div className="px-4 py-3 bg-gradient-to-r from-pink-500/5 to-purple-500/5 border-b border-[var(--border-primary)]">
+      <div className="px-4 py-3 bg-gradient-to-r from-pink-500/5 to-[#B91C1C]/05 border-b border-[var(--border-primary)]">
         <div className="flex items-center gap-2 text-xs">
           <AlertCircle className="w-4 h-4 text-pink-400" />
           <span className="text-[var(--text-muted)]">
@@ -115,8 +115,8 @@ export function AstreintesList({
 
                     {/* Temps trajet */}
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                        <Car className="w-4 h-4 text-purple-400" />
+                      <div className="w-8 h-8 rounded-lg bg-[#B91C1C]/20 flex items-center justify-center">
+                        <Car className="w-4 h-4 text-[#B91C1C]" />
                       </div>
                       <div>
                         <div className="text-[10px] text-[var(--text-muted)] uppercase mb-1">Trajet</div>

@@ -20,6 +20,7 @@ import {
   Archive,
   ShoppingCart,
   Nfc,
+  QrCode,
   Wifi,
   WifiOff,
   PanelLeftClose,
@@ -31,12 +32,16 @@ import {
   Wrench,
   Route,
   Mic,
+  Search,
 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { NotificationCenter } from '@/components/notifications';
 import { RealtimeStatusIndicator } from '@/components/RealtimeStatusIndicator';
 import { PanierButton, PanierDrawer } from '@/components/Panier';
-import { NFCScanner } from '@/components/NFCScanner';
+import { QRScanner } from '@/components/QRScanner';
+import { GlobalSearch } from '@/components/GlobalSearch';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useStockAlerts } from '@/hooks/useStockAlerts';
 import { AlertCenter } from '@/components/AlertCenter';
 import { supabase } from '@/services/supabase';
 import { initAlertService } from '@/services/alertService';
@@ -59,7 +64,7 @@ const NAV_GROUPS = [
     label: 'TERRAIN',
     items: [
       { id: 'planning', name: 'Planning', icon: Calendar, color: '#f59e0b' },
-      { id: 'travaux', name: 'Travaux', icon: Hammer, color: '#a855f7' },
+      { id: 'travaux', name: 'Travaux', icon: Hammer, color: '#B91C1C' },
       { id: 'miseservice', name: 'Mise en service', icon: FileCheck, color: '#f97316' },
       { id: 'tournees', name: 'Tournées', icon: Route, color: '#84cc16' },
     ],
@@ -69,21 +74,21 @@ const NAV_GROUPS = [
     items: [
       { id: 'ascenseurs', name: 'Parc Ascenseurs', icon: Building2, color: '#06b6d4' },
       { id: 'vehicules', name: 'Véhicules', icon: Car, color: '#22c55e' },
-      { id: 'nfc', name: 'Tags NFC', icon: Nfc, color: '#06b6d4' },
+      { id: 'nfc', name: 'QR Codes', icon: QrCode, color: '#06b6d4' },
     ],
   },
   {
     label: 'STOCK',
     items: [
       { id: 'stock', name: 'Stock', icon: Package, color: '#ef4444' },
-      { id: 'pieces', name: 'Pièces détachées', icon: Wrench, color: '#8b5cf6' },
+      { id: 'pieces', name: 'Pièces détachées', icon: Wrench, color: '#6366f1' },
       { id: 'commandes', name: 'Commandes', icon: ShoppingCart, color: '#06b6d4' },
     ],
   },
   {
     label: 'COLLAB',
     items: [
-      { id: 'chat', name: 'Messages', icon: MessageCircle, color: '#8b5cf6' },
+      { id: 'chat', name: 'Messages', icon: MessageCircle, color: '#2563eb' },
       { id: 'notes', name: 'Notes', icon: StickyNote, color: '#eab308' },
       { id: 'ged', name: 'Documents', icon: FolderOpen, color: '#6366f1' },
     ],
@@ -113,10 +118,26 @@ export function Layout({ children }: LayoutProps) {
     return saved === 'true';
   });
 
+  // État épinglé (persisté)
+  const [sidebarPinned, setSidebarPinned] = useState(() => {
+    const saved = localStorage.getItem('sidebar-pinned');
+    return saved !== 'false'; // par défaut épinglée
+  });
+
   // Persister l'état de la sidebar
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
+
+  // Persister l'état épinglé
+  useEffect(() => {
+    localStorage.setItem('sidebar-pinned', String(sidebarPinned));
+  }, [sidebarPinned]);
+
+  // Breadcrumb: trouver le groupe du module actif
+  const activeModule = allModules.find(m => m.id === moduleActif);
+  const activeGroup = NAV_GROUPS.find(g => g.items.some(i => i.id === moduleActif));
+  const breadcrumbGroup = activeGroup?.label || null;
 
   // Initialiser le service d'alertes
   useEffect(() => {
@@ -125,6 +146,12 @@ export function Layout({ children }: LayoutProps) {
 
   const toggleSidebar = () => setSidebarCollapsed(!sidebarCollapsed);
   const openScanner = () => setShowNFCScan(true);
+  
+  // Raccourcis clavier
+  useKeyboardShortcuts();
+  
+  // Alertes stock push
+  useStockAlerts();
   
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -137,27 +164,41 @@ export function Layout({ children }: LayoutProps) {
       <aside 
         className={cn(
           "flex flex-col transition-all duration-300 ease-in-out",
-          "bg-[var(--bg-secondary)] border-r border-[var(--border-secondary)]",
-          sidebarCollapsed ? "w-[62px]" : "w-[220px]"
+          "bg-[var(--bg-elevated)] border-r border-[var(--border-secondary)]",
+          sidebarCollapsed ? "w-[68px]" : "w-[248px]"
         )}
       >
-        {/* Logo */}
+        {/* Logo + Pin */}
         <div className={cn(
           "border-b border-[var(--border-secondary)]",
-          sidebarCollapsed ? "p-3" : "p-5"
+          sidebarCollapsed ? "p-3" : "px-4 py-4"
         )}>
           <div className={cn(
             "flex items-center",
             sidebarCollapsed ? "justify-center" : "gap-3"
           )}>
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
-              <Building2 className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-[#B91C1C] rounded-[14px] flex items-center justify-center shadow-lg flex-shrink-0" style={{ boxShadow: '0 4px 16px rgba(185, 28, 28, 0.3)' }}>
+              <span className="text-[15px] font-black text-white">AT</span>
             </div>
             {!sidebarCollapsed && (
-              <div className="overflow-hidden">
-                <h1 className="text-lg font-bold text-[var(--text-primary)] whitespace-nowrap">AuvergneTech</h1>
-                <p className="text-xs text-[var(--text-tertiary)] whitespace-nowrap">Gestion intégrée</p>
-              </div>
+              <>
+                <div className="overflow-hidden flex-1">
+                  <h1 className="text-[16px] font-extrabold text-[var(--text-primary)] whitespace-nowrap tracking-tight">AuvergneTech</h1>
+                  <p className="text-[9px] font-semibold text-[var(--text-muted)] whitespace-nowrap tracking-[0.1em]">ASCENSEURS</p>
+                </div>
+                <button
+                  onClick={() => setSidebarPinned(!sidebarPinned)}
+                  className={cn(
+                    "w-7 h-7 rounded-lg border flex items-center justify-center flex-shrink-0 transition-all text-[11px] font-extrabold",
+                    sidebarPinned 
+                      ? "bg-[var(--accent-bg)] border-[#B91C1C]/20 text-[#B91C1C]" 
+                      : "border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                  )}
+                  title={sidebarPinned ? 'Libérer la sidebar' : 'Épingler la sidebar'}
+                >
+                  {sidebarPinned ? '◉' : '○'}
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -189,10 +230,10 @@ export function Layout({ children }: LayoutProps) {
                     <button
                       onClick={() => setModuleActif(module.id)}
                       className={cn(
-                        'w-full flex items-center rounded-lg mb-px transition-all duration-150',
-                        sidebarCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-[7px]',
+                        'w-full flex items-center rounded-xl mb-px transition-all duration-150',
+                        sidebarCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-[9px]',
                         isActive
-                          ? 'bg-gradient-to-r from-blue-500/15 to-purple-500/15 border border-blue-500/30'
+                          ? 'bg-[var(--accent-bg)] border border-[#B91C1C]/15'
                           : 'hover:bg-[var(--bg-tertiary)]'
                       )}
                       title={sidebarCollapsed ? module.name : undefined}
@@ -200,25 +241,30 @@ export function Layout({ children }: LayoutProps) {
                       {/* Active indicator bar */}
                       {isActive && (
                         <div className={cn(
-                          "absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-3.5 rounded-r-sm",
+                          "absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-3.5 rounded-r-sm bg-[#B91C1C]",
                           sidebarCollapsed && "-left-1.5"
-                        )} style={{ backgroundColor: module.color }} />
+                        )} />
                       )}
                       <Icon
                         className="w-[18px] h-[18px] flex-shrink-0"
                         style={{ color: module.color }}
                       />
                       {!sidebarCollapsed && (
-                        <span
-                          className={cn(
-                            'text-[12.5px] whitespace-nowrap overflow-hidden',
-                            isActive 
-                              ? 'text-[var(--text-primary)] font-semibold' 
-                              : 'text-[var(--text-secondary)] font-medium'
+                        <>
+                          <span
+                            className={cn(
+                              'text-[13px] whitespace-nowrap overflow-hidden flex-1',
+                              isActive 
+                                ? 'text-[#B91C1C] font-bold' 
+                                : 'text-[var(--text-secondary)] font-medium'
+                            )}
+                          >
+                            {module.name}
+                          </span>
+                          {isActive && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#B91C1C] flex-shrink-0" style={{ boxShadow: '0 0 8px rgba(185, 28, 28, 0.5)' }} />
                           )}
-                        >
-                          {module.name}
-                        </span>
+                        </>
                       )}
                     </button>
                     
@@ -244,16 +290,16 @@ export function Layout({ children }: LayoutProps) {
           <button
             onClick={() => setModuleActif('admin')}
             className={cn(
-              "w-full flex items-center rounded-lg transition-all mb-1.5",
-              sidebarCollapsed ? "justify-center p-2" : "gap-2.5 px-3 py-[7px]",
+              "w-full flex items-center rounded-xl transition-all mb-1.5",
+              sidebarCollapsed ? "justify-center p-2" : "gap-2.5 px-3 py-[9px]",
               moduleActif === 'admin'
-                ? 'bg-purple-500/10 text-purple-400'
+                ? 'bg-[var(--accent-bg)] text-[#B91C1C]'
                 : 'text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
             )}
             title={sidebarCollapsed ? 'Administration' : undefined}
           >
             <Shield className="w-[18px] h-[18px]" />
-            {!sidebarCollapsed && <span className="text-[12.5px] font-medium">Admin</span>}
+            {!sidebarCollapsed && <span className="text-[13px] font-medium">Admin</span>}
           </button>
 
           {/* Theme Toggle */}
@@ -300,33 +346,68 @@ export function Layout({ children }: LayoutProps) {
               </>
             )}
           </button>
+
+          {/* User profile */}
+          {!sidebarCollapsed && (
+            <div className="flex items-center gap-2.5 mt-2 px-2 py-2 rounded-xl bg-[var(--bg-tertiary)]">
+              <div className="w-8 h-8 bg-[#B91C1C] rounded-xl flex items-center justify-center text-xs font-bold text-white shadow flex-shrink-0" style={{ boxShadow: '0 2px 8px rgba(185,28,28,0.2)' }}>
+                {user?.avatar_initiales || 'NB'}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <p className="text-[12px] font-bold text-[var(--text-primary)] truncate">{user?.prenom || 'Nicolas'} {user?.nom?.charAt(0) || 'B'}.</p>
+                <p className="text-[9px] text-[var(--text-muted)]">Tech. principal</p>
+              </div>
+              <div className="w-2 h-2 rounded-full bg-[#059669] flex-shrink-0" style={{ boxShadow: '0 0 6px rgba(5,150,105,0.4)' }} />
+            </div>
+          )}
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Topbar */}
-        <header className="h-16 flex items-center justify-between px-6 transition-theme bg-[var(--bg-secondary)] border-b border-[var(--border-secondary)]">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">
-            {moduleActif === 'admin' ? 'Administration' : allModules.find((m) => m.id === moduleActif)?.name || 'Tableau de bord'}
-          </h2>
+        {/* Topbar with Breadcrumb */}
+        <header className="h-[60px] flex items-center justify-between px-6 transition-theme bg-[var(--bg-secondary)] border-b border-[var(--border-secondary)]">
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-[var(--text-muted)]">AuvergneTech</span>
+            {breadcrumbGroup && (
+              <>
+                <span className="text-[11px] text-[var(--border-primary)]">/</span>
+                <span className="text-[11px] font-semibold text-[var(--text-muted)]">{breadcrumbGroup}</span>
+              </>
+            )}
+            <span className="text-[11px] text-[var(--border-primary)]">/</span>
+            <span className="text-[14px] font-extrabold text-[var(--text-primary)]">
+              {moduleActif === 'admin' ? 'Administration' : activeModule?.name || 'Tableau de bord'}
+            </span>
+          </div>
 
           <div className="flex items-center gap-3">
+            {/* Recherche globale */}
+            <button
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)] w-[250px]"
+            >
+              <Search className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1 text-left text-xs">Rechercher...</span>
+              <kbd className="text-[9px] font-mono bg-[var(--bg-primary)] px-1.5 py-0.5 rounded-md border border-[var(--border-primary)] text-[#B91C1C] font-bold">⌘K</kbd>
+            </button>
+
             {/* Realtime Status Indicator */}
             <RealtimeStatusIndicator />
             
             {/* Indicateur Online/Offline */}
             {!isOnline && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 border border-red-500/30 rounded-lg animate-pulse">
-                <WifiOff className="w-4 h-4 text-red-400" />
-                <span className="text-xs font-medium text-red-400">Hors ligne</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-[#EA580C]/20 border border-[#EA580C]/30 rounded-xl animate-pulse">
+                <WifiOff className="w-4 h-4 text-[#EA580C]" />
+                <span className="text-xs font-medium text-[#EA580C]">Hors ligne</span>
               </div>
             )}
 
             {/* Theme Toggle (compact) */}
             <button 
               onClick={toggleTheme}
-              className="p-2 rounded-lg transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] hover:bg-[var(--bg-hover)]"
+              className="p-2 rounded-xl transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] hover:bg-[var(--bg-hover)]"
               title={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
             >
               {theme === 'dark' ? (
@@ -338,20 +419,21 @@ export function Layout({ children }: LayoutProps) {
 
             {/* Dictée vocale */}
             <button
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
               title="Dictée vocale"
             >
               <Mic className="w-3.5 h-3.5" />
               Dictée
             </button>
 
-            {/* NFC Scanner */}
+            {/* QR Scanner */}
             <button
               onClick={openScanner}
-              className="p-2 rounded-lg transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] hover:bg-[var(--bg-hover)]"
-              title="Scanner NFC"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+              title="Scanner QR Code"
             >
-              <Wifi className="w-5 h-5 text-cyan-400" />
+              <QrCode className="w-3.5 h-3.5 text-cyan-400" />
+              Scanner
             </button>
 
             {/* Panier */}
@@ -367,9 +449,9 @@ export function Layout({ children }: LayoutProps) {
             <div className="relative">
               <button 
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] hover:bg-[var(--bg-hover)]"
+                className="flex items-center gap-3 px-3 py-2 rounded-xl transition-theme bg-[var(--bg-tertiary)] border border-[var(--border-primary)] hover:bg-[var(--bg-hover)]"
               >
-                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-sm font-bold text-white shadow">
+                <div className="w-8 h-8 bg-[#B91C1C] rounded-xl flex items-center justify-center text-sm font-bold text-white shadow" style={{ boxShadow: '0 2px 8px rgba(185,28,28,0.2)' }}>
                   {user?.avatar_initiales || 'NB'}
                 </div>
                 <span className="text-sm font-medium text-[var(--text-primary)]">
@@ -389,7 +471,7 @@ export function Layout({ children }: LayoutProps) {
                     className="fixed inset-0 z-40" 
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl shadow-xl z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-2xl shadow-xl z-50 overflow-hidden">
                     {/* Infos utilisateur */}
                     <div className="px-4 py-3 border-b border-[var(--border-secondary)]">
                       <p className="text-sm font-medium text-[var(--text-primary)]">
@@ -423,7 +505,7 @@ export function Layout({ children }: LayoutProps) {
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                       >
-                        <Shield className="w-4 h-4 text-purple-500" />
+                        <Shield className="w-4 h-4 text-[#B91C1C]" />
                         Administration
                       </button>
                     </div>
@@ -432,7 +514,7 @@ export function Layout({ children }: LayoutProps) {
                     <div className="border-t border-[var(--border-secondary)] py-1">
                       <button 
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#EA580C] hover:bg-[#EA580C]/10 transition-colors"
                       >
                         <LogOut className="w-4 h-4" />
                         Se déconnecter
@@ -447,17 +529,22 @@ export function Layout({ children }: LayoutProps) {
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6 transition-theme bg-[var(--bg-primary)]">
-          {children}
+          <div className="animate-fade-in">
+            {children}
+          </div>
         </div>
       </main>
 
       {/* Panier Drawer */}
       <PanierDrawer />
 
-      {/* NFC Scanner Modal */}
+      {/* QR Scanner Modal */}
       {showNFCScan && (
-        <NFCScanner fullScreen autoStart onClose={() => setShowNFCScan(false)} />
+        <QRScanner fullScreen autoStart onClose={() => setShowNFCScan(false)} />
       )}
+
+      {/* Recherche globale (Ctrl+K) */}
+      <GlobalSearch />
     </div>
   );
 }

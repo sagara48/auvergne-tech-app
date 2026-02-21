@@ -751,11 +751,11 @@ function SyncModal({ onClose }: { onClose: () => void }) {
                     disabled={isRunning}
                     className={`flex-1 p-4 rounded-xl border-2 transition-all ${
                       syncMode === 'full' 
-                        ? 'border-purple-500 bg-purple-500/10' 
-                        : 'border-[var(--border-primary)] hover:border-purple-500/50'
+                        ? 'border-[#B91C1C] bg-[#B91C1C]/10' 
+                        : 'border-[var(--border-primary)] hover:border-[#B91C1C]/050'
                     }`}
                   >
-                    <Database className={`w-8 h-8 mx-auto mb-2 ${syncMode === 'full' ? 'text-purple-500' : 'text-[var(--text-muted)]'}`} />
+                    <Database className={`w-8 h-8 mx-auto mb-2 ${syncMode === 'full' ? 'text-[#B91C1C]' : 'text-[var(--text-muted)]'}`} />
                     <p className="font-semibold">Sync Complète</p>
                     <p className="text-xs text-[var(--text-muted)]">Tout le parc (~30 min)</p>
                   </button>
@@ -1120,7 +1120,7 @@ function PanneDetailModal({ panne, onClose }: { panne: any; onClose: () => void 
               {demandeur && (
                 <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
                   <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-purple-400" /> Demandeur
+                    <Phone className="w-4 h-4 text-[#B91C1C]" /> Demandeur
                   </h3>
                   <p className="text-sm font-medium">{demandeur}</p>
                   {telDemandeur && (
@@ -1731,7 +1731,7 @@ function SignalerPiecesModal({
         <div className="p-4 border-b border-[var(--border-primary)]">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold flex items-center gap-2">
-              <Package className="w-5 h-5 text-purple-400" />
+              <Package className="w-5 h-5 text-[#B91C1C]" />
               Pièces remplacées
             </h3>
             <button onClick={onClose} className="p-1 hover:bg-[var(--bg-tertiary)] rounded">
@@ -1765,8 +1765,8 @@ function SignalerPiecesModal({
             <>
               {/* Sélecteur de véhicule par technicien pour admin */}
               {isAdmin && (
-                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
-                  <label className="text-xs font-semibold text-purple-400 mb-2 block flex items-center gap-1">
+                <div className="p-3 bg-[#B91C1C]/10 border border-[#B91C1C]/30 rounded-xl">
+                  <label className="text-xs font-semibold text-[#B91C1C] mb-2 block flex items-center gap-1">
                     <User className="w-3 h-3" />
                     Technicien / Véhicule
                   </label>
@@ -1820,7 +1820,7 @@ function SignalerPiecesModal({
                     Pièces à enregistrer ({piecesRemplacees.length})
                   </h4>
                   {piecesRemplacees.map(piece => (
-                    <div key={piece.article_id} className="flex items-center gap-2 p-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                    <div key={piece.article_id} className="flex items-center gap-2 p-2 bg-[#B91C1C]/10 border border-[#B91C1C]/30 rounded-lg">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{piece.designation}</p>
                         {piece.reference && (
@@ -1889,8 +1889,8 @@ function SignalerPiecesModal({
                             disabled={dejaAjoute && dejaAjoute.quantite >= article.quantite}
                             className={`w-full text-left p-2 rounded-lg border transition-colors ${
                               dejaAjoute 
-                                ? 'bg-purple-500/5 border-purple-500/30' 
-                                : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-purple-500/50'
+                                ? 'bg-[#B91C1C]/05 border-[#B91C1C]/30' 
+                                : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-[#B91C1C]/050'
                             }`}
                           >
                             <div className="flex items-center justify-between">
@@ -1909,7 +1909,7 @@ function SignalerPiecesModal({
                                 <Badge variant={article.quantite > 2 ? 'green' : article.quantite > 0 ? 'orange' : 'red'} className="text-[10px]">
                                   {article.quantite} dispo
                                 </Badge>
-                                <Plus className={`w-4 h-4 ${dejaAjoute ? 'text-purple-400' : 'text-[var(--text-muted)]'}`} />
+                                <Plus className={`w-4 h-4 ${dejaAjoute ? 'text-[#B91C1C]' : 'text-[var(--text-muted)]'}`} />
                               </div>
                             </div>
                           </button>
@@ -2420,8 +2420,8 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
       <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <Eye className="w-5 h-5 text-purple-500" />
+            <div className="w-10 h-10 rounded-lg bg-[#B91C1C]/20 flex items-center justify-center">
+              <Eye className="w-5 h-5 text-[#B91C1C]" />
             </div>
             <div>
               <p className="font-semibold">
@@ -2500,10 +2500,10 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => setShowPiecesModal(true)}
-                  className="p-2 hover:bg-purple-500/20 rounded-lg"
+                  className="p-2 hover:bg-[#B91C1C]/20 rounded-lg"
                   title="Signaler pièces remplacées"
                 >
-                  <Package className="w-5 h-5 text-purple-500" />
+                  <Package className="w-5 h-5 text-[#B91C1C]" />
                 </button>
                 <button 
                   onClick={() => {
@@ -2769,9 +2769,9 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                               const data = event.data.data_wpanne || {};
                               const Icon = event.icon;
                               const colorClass = event.color === 'blue' ? 'bg-blue-500' : 
-                                                 event.color === 'purple' ? 'bg-purple-500' : 'bg-orange-500';
+                                                 event.color === 'purple' ? 'bg-[#B91C1C]' : 'bg-orange-500';
                               const borderClass = event.color === 'blue' ? 'border-blue-500/30' : 
-                                                  event.color === 'purple' ? 'border-purple-500/30' : 'border-orange-500/30';
+                                                  event.color === 'purple' ? 'border-[#B91C1C]/30' : 'border-orange-500/30';
                               
                               return (
                                 <div 
@@ -2821,7 +2821,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                       <div className="p-4 bg-[var(--bg-tertiary)] flex items-center justify-between">
                         <h3 className="font-semibold flex items-center gap-2">
                           {selectedIntervention.type === 'visite' && <Calendar className="w-5 h-5 text-blue-400" />}
-                          {selectedIntervention.type === 'controle' && <Eye className="w-5 h-5 text-purple-400" />}
+                          {selectedIntervention.type === 'controle' && <Eye className="w-5 h-5 text-[#B91C1C]" />}
                           {selectedIntervention.type === 'panne' && <AlertTriangle className="w-5 h-5 text-orange-400" />}
                           {selectedIntervention.type === 'visite' ? 'Visite d\'entretien' : 
                            selectedIntervention.type === 'controle' ? 'Contrôle technique' : 'Panne'}
@@ -3054,15 +3054,15 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                         <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                                <Timer className="w-5 h-5 text-purple-400" />
+                              <div className="w-10 h-10 rounded-lg bg-[#B91C1C]/20 flex items-center justify-center">
+                                <Timer className="w-5 h-5 text-[#B91C1C]" />
                               </div>
                               <div>
                                 <p className="font-medium">Temps moyen entre pannes</p>
                                 <p className="text-sm text-[var(--text-muted)]">Basé sur l'historique complet</p>
                               </div>
                             </div>
-                            <p className="text-2xl font-bold text-purple-400">{tempsMoyenEntrePannes}j</p>
+                            <p className="text-2xl font-bold text-[#B91C1C]">{tempsMoyenEntrePannes}j</p>
                           </div>
                         </div>
                       )}
@@ -3994,7 +3994,7 @@ export function ParcAscenseursPage() {
             <button
               onClick={() => setMainTab('stats')}
               className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                mainTab === 'stats' ? 'bg-purple-500 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                mainTab === 'stats' ? 'bg-[#B91C1C] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
             >
               <BarChart3 className="w-4 h-4 inline mr-1" />
@@ -4434,9 +4434,9 @@ export function ParcAscenseursPage() {
                         <p className="text-xs text-[var(--text-muted)]">En arrêt</p>
                       </CardBody>
                     </Card>
-                    <Card className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border-purple-500/30">
+                    <Card className="bg-gradient-to-br from-[#B91C1C]/20 to-[#B91C1C]/10 border-[#B91C1C]/30">
                       <CardBody className="p-4 text-center">
-                        <p className="text-2xl font-bold text-purple-400">
+                        <p className="text-2xl font-bold text-[#B91C1C]">
                           {Math.round(ascenseursAvecTournee.length / secteursTriees.length)}
                         </p>
                         <p className="text-xs text-[var(--text-muted)]">Moy. par secteur</p>
@@ -4473,7 +4473,7 @@ export function ParcAscenseursPage() {
                             <p className="text-xs text-[var(--text-muted)]">Distance</p>
                           </div>
                           <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                            <p className="text-2xl font-bold text-purple-400">
+                            <p className="text-2xl font-bold text-[#B91C1C]">
                               {optimizationResult.totalDuration ? formatDuration(optimizationResult.totalDuration) : '-'}
                             </p>
                             <p className="text-xs text-[var(--text-muted)]">Durée totale</p>
@@ -4638,7 +4638,7 @@ export function ParcAscenseursPage() {
                                         <div className="flex items-center gap-1 mt-0.5">
                                           <span className="text-xs text-[var(--text-muted)]">{ascenseursOrdre.length} asc.</span>
                                           {nb9 > 0 && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#B91C1C]/20 text-[#B91C1C]">
                                               {nb9}×9v
                                             </span>
                                           )}
@@ -4945,7 +4945,7 @@ export function ParcAscenseursPage() {
                             onClick={() => setStatsPeriod(p.value as any)}
                             className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
                               statsPeriod === p.value 
-                                ? 'bg-purple-500 text-white' 
+                                ? 'bg-[#B91C1C] text-white' 
                                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                             }`}
                           >
@@ -4976,9 +4976,9 @@ export function ParcAscenseursPage() {
                       </CardBody>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border-purple-500/30">
+                    <Card className="bg-gradient-to-br from-[#B91C1C]/20 to-[#B91C1C]/10 border-[#B91C1C]/30">
                       <CardBody className="p-4 text-center">
-                        <p className="text-3xl font-bold text-purple-400">{totalPannesPeriode}</p>
+                        <p className="text-3xl font-bold text-[#B91C1C]">{totalPannesPeriode}</p>
                         <p className="text-sm text-[var(--text-muted)]">Pannes ({statsPeriod}m)</p>
                       </CardBody>
                     </Card>
@@ -5107,7 +5107,7 @@ export function ParcAscenseursPage() {
                     <Card>
                       <CardBody className="p-4">
                         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                          <TrendingUp className="w-5 h-5 text-purple-500" />
+                          <TrendingUp className="w-5 h-5 text-[#B91C1C]" />
                           Évolution des pannes ({statsPeriod} mois)
                         </h3>
                         <div className="flex items-end gap-1 h-40 overflow-x-auto">
@@ -5115,7 +5115,7 @@ export function ParcAscenseursPage() {
                             <div key={index} className="flex flex-col items-center gap-1" style={{ minWidth: statsPeriod > 12 ? '24px' : '40px', flex: 1 }}>
                               <span className="text-[10px] font-semibold">{count}</span>
                               <div 
-                                className="w-full bg-purple-500 rounded-t transition-all"
+                                className="w-full bg-[#B91C1C] rounded-t transition-all"
                                 style={{ height: `${(count / maxPannesMois) * 100}%`, minHeight: count > 0 ? '4px' : '0' }}
                               ></div>
                               <span className="text-[9px] text-[var(--text-muted)] whitespace-nowrap">{moisLabels[index]}</span>
@@ -5734,11 +5734,11 @@ export function ParcAscenseursPage() {
                     
                     {/* Répartition par fréquence de visite */}
                     <div className="grid grid-cols-3 gap-3">
-                      <Card className={`border-2 ${sites9.length > 0 ? 'border-purple-500/50 bg-purple-500/10' : 'border-[var(--border-primary)]'}`}>
+                      <Card className={`border-2 ${sites9.length > 0 ? 'border-[#B91C1C]/050 bg-[#B91C1C]/10' : 'border-[var(--border-primary)]'}`}>
                         <CardBody className="p-3">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-2xl font-bold text-purple-400">{sites9.length}</p>
+                              <p className="text-2xl font-bold text-[#B91C1C]">{sites9.length}</p>
                               <p className="text-xs text-[var(--text-muted)]">sites ({sites9.reduce((s, x) => s + x.nbAscenseurs, 0)} asc.)</p>
                             </div>
                             <Badge variant="purple" className="text-sm">9 vis/an</Badge>

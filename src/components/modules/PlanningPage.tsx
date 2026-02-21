@@ -221,7 +221,7 @@ function CreateEventModal({ onClose, defaultDate, defaultTech, techniciens }: { 
       date_debut: new Date(`${date}T${heureDebut}:00`).toISOString(),
       date_fin: new Date(`${date}T${heureFin}:00`).toISOString(),
       est_manuel: true,
-      couleur: typeEvent === 'rdv' ? '#3b82f6' : typeEvent === 'reunion' ? '#8b5cf6' : '#6b7280',
+      couleur: typeEvent === 'rdv' ? '#3b82f6' : typeEvent === 'reunion' ? '#B91C1C' : '#6b7280',
     });
   };
 
@@ -920,7 +920,7 @@ export function PlanningPage() {
               return (
               <>
                 <div key={`tech-${tech.id}`} className="p-2 bg-[var(--bg-tertiary)]/50 border-b border-r flex items-center gap-2 sticky left-0 z-[5]">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold flex-shrink-0">{tech.avatar_initiales}</div>
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center text-xs font-bold flex-shrink-0">{tech.avatar_initiales}</div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-[var(--text-primary)]">{tech.prenom} {tech.nom?.charAt(0)}.</div>
                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -988,7 +988,7 @@ export function PlanningPage() {
               <Card className="overflow-hidden">
                 <div className="p-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Hammer className="w-4 h-4 text-purple-400" />
+                    <Hammer className="w-4 h-4 text-[#B91C1C]" />
                     <span className="text-sm font-medium text-[var(--text-primary)]">Travaux</span>
                   </div>
                   {travauxNonPlanifies && travauxNonPlanifies.length > 0 && (

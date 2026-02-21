@@ -617,8 +617,8 @@ export function StockPage() {
         </Card>
         <Card>
           <CardBody className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center"><ArrowLeftRight className="w-6 h-6 text-purple-400" /></div>
-            <div><div className="text-2xl font-extrabold text-purple-400">{stats.transferts_attente}</div><div className="text-xs text-[var(--text-tertiary)]">Transferts</div></div>
+            <div className="w-12 h-12 rounded-xl bg-[#B91C1C]/20 flex items-center justify-center"><ArrowLeftRight className="w-6 h-6 text-[#B91C1C]" /></div>
+            <div><div className="text-2xl font-extrabold text-[#B91C1C]">{stats.transferts_attente}</div><div className="text-xs text-[var(--text-tertiary)]">Transferts</div></div>
           </CardBody>
         </Card>
         <Card className="cursor-pointer hover:bg-[var(--bg-tertiary)]" onClick={() => setShowCategories(true)}>
@@ -945,12 +945,12 @@ export function StockPage() {
                 <CardBody>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                        <ArrowLeftRight className="w-6 h-6 text-purple-400" />
+                      <div className="w-12 h-12 rounded-xl bg-[#B91C1C]/20 flex items-center justify-center">
+                        <ArrowLeftRight className="w-6 h-6 text-[#B91C1C]" />
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-mono text-sm font-bold text-purple-400">{t.code}</span>
+                          <span className="font-mono text-sm font-bold text-[#B91C1C]">{t.code}</span>
                           <Badge variant={STATUT_TRANSFERT_CONFIG[t.statut as keyof typeof STATUT_TRANSFERT_CONFIG]?.color as any}>
                             {STATUT_TRANSFERT_CONFIG[t.statut as keyof typeof STATUT_TRANSFERT_CONFIG]?.label}
                           </Badge>

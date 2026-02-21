@@ -5,14 +5,16 @@ import {
   FileText, Camera, CheckCircle, Wrench, History, Download,
   Navigation, ExternalLink, User, Shield, ChevronRight, Zap,
   Package, Plus, Minus, Search, Barcode, Trash2, Settings, Loader2,
-  StickyNote
+  StickyNote, MessageCircle, Send
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Textarea, Input, Select } from '@/components/ui';
 import { supabase } from '@/services/supabase';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format, parseISO, differenceInDays, formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { ActionsRapidesNFC } from './ActionsRapidesNFC';
+
+const TECHNICIEN_ID = '11111111-1111-1111-1111-111111111111';
 
 interface FicheAscenseurNFCProps {
   codeAppareil: string;
@@ -477,6 +479,140 @@ async function enregistrerPiecesRemplacees(
     .eq('id_wsoucont', ascenseur.id_wsoucont);
 }
 
+// ═══ SYNERGY 15: Fil de discussion par ascenseur ═══
+function FilDiscussionAscenseur({ codeAppareil }: { codeAppareil: string }) {
+  const queryClient = useQueryClient();
+  const [newMessage, setNewMessage] = useState('');
+  const [expanded, setExpanded] = useState(false);
+
+  // Notes liées à cet ascenseur
+  const { data: notes } = useQuery({
+    queryKey: ['notes-ascenseur', codeAppareil],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('notes')
+        .select('*, technicien:created_by(prenom, nom, avatar_initiales)')
+        .or(`context_code.eq.${codeAppareil},titre.ilike.%${codeAppareil}%,contenu.ilike.%${codeAppareil}%`)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      return data || [];
+    },
+  });
+
+  // Messages chat liés à cet ascenseur
+  const { data: messages } = useQuery({
+    queryKey: ['chat-ascenseur', codeAppareil],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('*, auteur:user_id(prenom, nom, avatar_initiales)')
+        .ilike('contenu', `%${codeAppareil}%`)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      return data || [];
+    },
+  });
+
+  // Ajouter une note contextualisée
+  const addNoteMutation = useMutation({
+    mutationFn: async (contenu: string) => {
+      await supabase.from('notes').insert({
+        titre: `Note — ${codeAppareil}`,
+        contenu,
+        context_code: codeAppareil,
+        context_type: 'ascenseur',
+        created_by: TECHNICIEN_ID,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes-ascenseur', codeAppareil] });
+      setNewMessage('');
+      toast.success('Note ajoutée');
+    },
+    onError: () => toast.error('Erreur — la table notes existe-t-elle ?'),
+  });
+
+  // Combiner et trier chronologiquement
+  const fil = [
+    ...(notes || []).map((n: any) => ({ ...n, _type: 'note', _date: n.created_at, _auteur: n.technicien })),
+    ...(messages || []).map((m: any) => ({ ...m, _type: 'chat', _date: m.created_at, _auteur: m.auteur })),
+  ].sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime());
+
+  return (
+    <Card>
+      <CardBody className="p-3">
+        <button 
+          onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center justify-between mb-2"
+        >
+          <h4 className="text-xs font-semibold text-[var(--text-muted)] flex items-center gap-2">
+            <MessageCircle className="w-4 h-4" />
+            Fil de discussion
+            {fil.length > 0 && <Badge variant="blue" className="text-[9px]">{fil.length}</Badge>}
+          </h4>
+          <ChevronRight className={`w-3 h-3 text-[var(--text-muted)] transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        </button>
+
+        {expanded && (
+          <>
+            {/* Saisie rapide */}
+            <div className="flex gap-2 mb-2">
+              <input
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && newMessage.trim() && addNoteMutation.mutate(newMessage.trim())}
+                placeholder="Laisser une note pour l'équipe..."
+                className="flex-1 px-2.5 py-1.5 text-xs bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+              />
+              <button
+                onClick={() => newMessage.trim() && addNoteMutation.mutate(newMessage.trim())}
+                className="p-1.5 bg-blue-500/20 rounded-lg text-blue-400 hover:bg-blue-500/30 transition-colors"
+                disabled={!newMessage.trim()}
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Fil chronologique */}
+            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+              {fil.length === 0 && (
+                <div className="text-center py-3 text-[10px] text-[var(--text-muted)]">Aucune discussion sur cet ascenseur</div>
+              )}
+              {fil.slice(0, 8).map((item: any, i: number) => (
+                <div key={i} className="flex gap-2 p-2 rounded-lg bg-[var(--bg-tertiary)]">
+                  <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${
+                    item._type === 'note' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'
+                  }`}>
+                    {item._auteur?.avatar_initiales || item._auteur?.prenom?.charAt(0) || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold text-[var(--text-primary)]">
+                        {item._auteur?.prenom || 'Anonyme'} {item._auteur?.nom?.charAt(0) || ''}
+                      </span>
+                      <span className={`text-[8px] px-1 py-0.5 rounded ${
+                        item._type === 'note' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'
+                      }`}>
+                        {item._type === 'note' ? '📝 Note' : '💬 Chat'}
+                      </span>
+                      <span className="text-[9px] text-[var(--text-muted)] ml-auto">
+                        {item._date ? formatDistanceToNow(new Date(item._date), { addSuffix: true, locale: fr }) : ''}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[var(--text-secondary)] mt-0.5 line-clamp-2">
+                      {item.contenu || item.titre || ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onCreerTravaux }: FicheAscenseurNFCProps) {
   const queryClient = useQueryClient();
   const [showSignalerModal, setShowSignalerModal] = useState(false);
@@ -857,6 +993,68 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
             </Card>
           )}
 
+          {/* ═══ SYNERGY 12: Complétude documentaire ═══ */}
+          <Card className={(() => {
+            const reqDocs = ['certificat_ce', 'pv_essais', 'bureau_controle', 'plan_installation'];
+            const existTypes = (documents || []).map((d: any) => d.type_document?.toLowerCase() || d.nom?.toLowerCase() || '');
+            const found = reqDocs.filter(r => existTypes.some(e => e.includes(r.replace('_', ' ')) || e.includes(r)));
+            const pct = reqDocs.length > 0 ? (found.length / reqDocs.length) * 100 : 0;
+            return pct === 100 ? 'border-green-500/30' : pct >= 50 ? 'border-amber-500/30' : 'border-red-500/30';
+          })()}>
+            <CardBody className="p-3">
+              <h4 className="text-xs font-semibold text-[var(--text-muted)] mb-2 flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                Complétude documentaire
+              </h4>
+              {(() => {
+                const reqDocs = [
+                  { key: 'certificat_ce', label: 'Certificat CE' },
+                  { key: 'pv_essais', label: 'PV essais' },
+                  { key: 'bureau_controle', label: 'Bureau de contrôle' },
+                  { key: 'plan_installation', label: 'Plan installation' },
+                ];
+                const existTypes = (documents || []).map((d: any) => (d.type_document || d.nom || '').toLowerCase());
+                return (
+                  <div className="space-y-1.5">
+                    {reqDocs.map(req => {
+                      const found = existTypes.some(e => e.includes(req.key.replace('_', ' ')) || e.includes(req.key));
+                      return (
+                        <div key={req.key} className="flex items-center gap-2 text-xs">
+                          {found ? (
+                            <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                          ) : (
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                          )}
+                          <span className={found ? 'text-[var(--text-secondary)]' : 'text-red-400 font-medium'}>{req.label}</span>
+                          {!found && <span className="text-[10px] text-red-400/70 ml-auto">Manquant</span>}
+                        </div>
+                      );
+                    })}
+                    <div className="mt-2 pt-2 border-t border-[var(--border-secondary)]">
+                      <div className="w-full h-1.5 rounded-full bg-[var(--bg-elevated)] overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all ${
+                            (() => {
+                              const ct = reqDocs.filter(r => existTypes.some(e => e.includes(r.key.replace('_', ' ')) || e.includes(r.key))).length;
+                              return ct === reqDocs.length ? 'bg-green-500' : ct >= 2 ? 'bg-amber-500' : 'bg-red-500';
+                            })()
+                          }`}
+                          style={{ width: `${(reqDocs.filter(r => existTypes.some(e => e.includes(r.key.replace('_', ' ')) || e.includes(r.key))).length / reqDocs.length) * 100}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-[var(--text-muted)] mt-1 text-center">
+                        {reqDocs.filter(r => existTypes.some(e => e.includes(r.key.replace('_', ' ')) || e.includes(r.key))).length}/{reqDocs.length} documents obligatoires
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </CardBody>
+          </Card>
+
+          {/* ═══ SYNERGY 15: Fil de discussion ascenseur ═══ */}
+          <FilDiscussionAscenseur codeAppareil={codeAppareil} />
+
           {/* Infos techniques */}
           <Card>
             <CardBody className="p-3">
@@ -920,7 +1118,7 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
           {/* Bouton Pièces remplacées */}
           <Button 
             variant="secondary" 
-            className="w-full border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
+            className="w-full border-[#B91C1C]/050 text-[#B91C1C] hover:bg-[#B91C1C]/10"
             onClick={() => setShowPiecesModal(true)}
           >
             <Package className="w-4 h-4 mr-2" />
@@ -1052,7 +1250,7 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
               <div className="p-4 border-b border-[var(--border-primary)]">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
-                    <Package className="w-5 h-5 text-purple-400" />
+                    <Package className="w-5 h-5 text-[#B91C1C]" />
                     Pièces remplacées
                   </h3>
                   <button onClick={() => setShowPiecesModal(false)} className="p-1 hover:bg-[var(--bg-tertiary)] rounded">
@@ -1067,8 +1265,8 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
               <div className="flex-1 overflow-auto p-4 space-y-4">
                 {/* Sélecteur de véhicule par technicien pour admin */}
                 {stockVehicule?.isAdmin && (
-                  <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
-                    <label className="text-xs font-semibold text-purple-400 mb-2 block flex items-center gap-1">
+                  <div className="p-3 bg-[#B91C1C]/10 border border-[#B91C1C]/30 rounded-xl">
+                    <label className="text-xs font-semibold text-[#B91C1C] mb-2 block flex items-center gap-1">
                       <Settings className="w-3 h-3" />
                       Mode administrateur - Choisir le technicien
                     </label>
@@ -1122,7 +1320,7 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
                       Pièces à enregistrer ({piecesRemplacees.length})
                     </h4>
                     {piecesRemplacees.map(piece => (
-                      <div key={piece.article_id} className="flex items-center gap-2 p-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                      <div key={piece.article_id} className="flex items-center gap-2 p-2 bg-[#B91C1C]/10 border border-[#B91C1C]/30 rounded-lg">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-[var(--text-primary)] truncate">{piece.designation}</p>
                           {piece.reference && (
@@ -1166,7 +1364,7 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
                 ) : stockVehicule?.isAdmin && loadingAdminStock ? (
                   // Chargement stock admin
                   <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+                    <Loader2 className="w-6 h-6 animate-spin text-[#B91C1C]" />
                   </div>
                 ) : !effectiveVehiculeId ? (
                   // Non-admin sans véhicule
@@ -1210,8 +1408,8 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
                               disabled={dejaAjoute && dejaAjoute.quantite >= article.quantite}
                               className={`w-full text-left p-2 rounded-lg border transition-colors ${
                                 dejaAjoute 
-                                  ? 'bg-purple-500/5 border-purple-500/30' 
-                                  : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-purple-500/50'
+                                  ? 'bg-[#B91C1C]/05 border-[#B91C1C]/30' 
+                                  : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-[#B91C1C]/050'
                               }`}
                             >
                               <div className="flex items-center justify-between">
@@ -1230,7 +1428,7 @@ export function FicheAscenseurNFC({ codeAppareil, onClose, onOpenHistorique, onC
                                   <Badge variant={article.quantite > 2 ? 'green' : article.quantite > 0 ? 'orange' : 'red'} className="text-[10px]">
                                     {article.quantite} dispo
                                   </Badge>
-                                  <Plus className={`w-4 h-4 ${dejaAjoute ? 'text-purple-400' : 'text-[var(--text-muted)]'}`} />
+                                  <Plus className={`w-4 h-4 ${dejaAjoute ? 'text-[#B91C1C]' : 'text-[var(--text-muted)]'}`} />
                                 </div>
                               </div>
                             </button>

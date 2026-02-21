@@ -50,8 +50,8 @@ const ACTIONS_RAPIDES = [
     label: 'Créer rapport',
     description: 'Rédiger un rapport d\'intervention',
     icon: FileText,
-    color: '#8b5cf6',
-    bgColor: 'bg-purple-500/10',
+    color: '#B91C1C',
+    bgColor: 'bg-[#B91C1C]/10',
   },
   {
     id: 'signaler',

@@ -56,7 +56,7 @@ export function PredictiveAnalysisDashboard({ onSelectAscenseur, secteurs }: Pre
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <Brain className="w-12 h-12 mx-auto mb-4 text-purple-500 animate-pulse" />
+          <Brain className="w-12 h-12 mx-auto mb-4 text-[#B91C1C] animate-pulse" />
           <p className="text-[var(--text-muted)]">Analyse prédictive en cours...</p>
         </div>
       </div>
@@ -68,7 +68,7 @@ export function PredictiveAnalysisDashboard({ onSelectAscenseur, secteurs }: Pre
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center">
             <Brain className="w-6 h-6 text-white" />
           </div>
           <div>
@@ -90,7 +90,7 @@ export function PredictiveAnalysisDashboard({ onSelectAscenseur, secteurs }: Pre
 
       {/* KPIs globaux */}
       <div className="grid grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-purple-500/20 to-indigo-500/10 border-purple-500/30">
+        <Card className="bg-gradient-to-br from-[#B91C1C]/20 to-indigo-500/10 border-[#B91C1C]/30">
           <CardBody className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -362,7 +362,7 @@ function PredictionDetailModal({
             {/* Facteurs de risque */}
             <div>
               <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-purple-400" />
+                <Activity className="w-5 h-5 text-[#B91C1C]" />
                 Facteurs analysés
               </h3>
               <div className="space-y-2">

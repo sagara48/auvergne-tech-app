@@ -37,7 +37,7 @@ interface LigneReappro {
 const STATUTS = {
   en_attente: { label: 'En attente', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
   validee: { label: 'Validée', color: 'bg-blue-100 text-blue-700', icon: Check },
-  preparee: { label: 'Préparée', color: 'bg-purple-100 text-purple-700', icon: Package },
+  preparee: { label: 'Préparée', color: 'bg-[#FEE2E2] text-[#991B1B]', icon: Package },
   livree: { label: 'Livrée', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   annulee: { label: 'Annulée', color: 'bg-red-100 text-red-700', icon: XCircle },
 };
@@ -208,11 +208,11 @@ export function DemandesReappro() {
               <p className="text-xl font-bold text-blue-700">{stats.validees}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-purple-50 rounded-lg">
-            <Package className="w-5 h-5 text-purple-600" />
+          <div className="flex items-center gap-2 px-4 py-2 bg-[#FEF2F2] rounded-lg">
+            <Package className="w-5 h-5 text-[#B91C1C]" />
             <div>
-              <p className="text-sm text-purple-600">À livrer</p>
-              <p className="text-xl font-bold text-purple-700">{stats.preparees}</p>
+              <p className="text-sm text-[#B91C1C]">À livrer</p>
+              <p className="text-xl font-bold text-[#991B1B]">{stats.preparees}</p>
             </div>
           </div>
         </div>
@@ -388,7 +388,7 @@ export function DemandesReappro() {
                           <button
                             onClick={() => updateStatut(demande.id, 'preparee')}
                             disabled={processing === demande.id}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 bg-[#B91C1C] text-white rounded-lg hover:bg-[#991B1B] disabled:opacity-50"
                           >
                             {processing === demande.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />

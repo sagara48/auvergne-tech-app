@@ -1232,11 +1232,296 @@ function CommandeDetailModal({
   );
 }
 
+// ============================================
+// COMMANDE GROUPÉE INTELLIGENTE
+// Regroupe les besoins de plusieurs travaux par fournisseur
+// ============================================
+function GroupeCommandeModal({ onClose, onCreate }: { 
+  onClose: () => void; 
+  onCreate: (data: Partial<Commande>, lignes: LigneForm[]) => void;
+}) {
+  const [step, setStep] = useState<'analyse' | 'selection' | 'regroupement' | 'validation'>('analyse');
+  const [selectedBesoins, setSelectedBesoins] = useState<Set<string>>(new Set());
+  const [selectedFournisseur, setSelectedFournisseur] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const { data: travauxAttente } = useQuery({
+    queryKey: ['travaux-attente-pieces-groupe'],
+    queryFn: getTravauxEnAttentePieces,
+  });
+
+  const { data: stockArticles } = useQuery({
+    queryKey: ['stock-articles-groupe'],
+    queryFn: getStockArticles,
+  });
+
+  // Extraire les besoins de chaque travail bloqué
+  const besoins = useMemo(() => {
+    if (!travauxAttente) return [];
+    return travauxAttente.map((t: any) => ({
+      id: t.id,
+      code: t.code || 'T-???',
+      titre: t.titre || '',
+      designation_piece: t.designation_piece || t.piece_manquante || 'Pièce non spécifiée',
+      reference_piece: t.reference_piece || '',
+      quantite: t.quantite_besoin || 1,
+      ascenseur: t.ascenseur?.code_appareil || '',
+      adresse: t.ascenseur?.adresse || t.lieu || '',
+      priorite: t.priorite || 'normale',
+      // Chercher correspondance dans le stock
+      articleMatch: stockArticles?.find((a: any) => 
+        a.reference === t.reference_piece || 
+        a.designation?.toLowerCase().includes(t.designation_piece?.toLowerCase() || '')
+      ),
+    }));
+  }, [travauxAttente, stockArticles]);
+
+  // Regrouper par fournisseur potentiel
+  const groupesFournisseur = useMemo(() => {
+    const selected = besoins.filter(b => selectedBesoins.has(b.id));
+    const groupes: Record<string, typeof selected> = {};
+    selected.forEach(b => {
+      const fournisseur = b.articleMatch?.fournisseur || selectedFournisseur || 'Non attribué';
+      if (!groupes[fournisseur]) groupes[fournisseur] = [];
+      groupes[fournisseur].push(b);
+    });
+    return groupes;
+  }, [besoins, selectedBesoins, selectedFournisseur]);
+
+  const toggleBesoin = (id: string) => {
+    const next = new Set(selectedBesoins);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelectedBesoins(next);
+  };
+
+  const selectAll = () => setSelectedBesoins(new Set(besoins.map(b => b.id)));
+  const deselectAll = () => setSelectedBesoins(new Set());
+
+  const handleCreate = (fournisseur: string, items: typeof besoins) => {
+    const code = `CMD-GRP-${format(new Date(), 'yyyyMMdd-HHmm')}`;
+    const lignes: LigneForm[] = items.map((item, i) => ({
+      id: `lg-${i}`,
+      type: (item.articleMatch ? 'stock' : 'manuel') as 'stock' | 'manuel',
+      article_id: item.articleMatch?.id,
+      designation: item.designation_piece,
+      reference: item.reference_piece,
+      quantite: item.quantite,
+      ascenseur_id: undefined,
+      detail: `Pour ${item.code} — ${item.adresse}`,
+    }));
+    onCreate(
+      { code, fournisseur, statut: 'brouillon', priorite: 'haute', notes: `Commande groupée — ${items.length} besoins de ${items.length} travaux\n${notes}`, created_by: CURRENT_USER_ID },
+      lignes
+    );
+  };
+
+  const prioriteColors: Record<string, string> = { urgente: 'text-red-400', haute: 'text-amber-400', normale: 'text-blue-400', basse: 'text-[var(--text-muted)]' };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <Card className="w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
+        <CardBody className="flex flex-col h-full">
+          {/* Header */}
+          <div className="flex items-center justify-between pb-4 border-b border-[var(--border-primary)]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#B91C1C]/20 flex items-center justify-center">
+                <Package className="w-5 h-5 text-[#B91C1C]" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-[var(--text-primary)]">Commande groupée intelligente</h2>
+                <p className="text-xs text-[var(--text-tertiary)]">Regroupez les besoins de plusieurs travaux en une commande</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"><X className="w-5 h-5" /></button>
+          </div>
+
+          {/* Steps indicator */}
+          <div className="flex items-center gap-2 py-3">
+            {[
+              { id: 'analyse', label: '1. Analyse' },
+              { id: 'selection', label: '2. Sélection' },
+              { id: 'regroupement', label: '3. Regroupement' },
+            ].map((s, i) => (
+              <div key={s.id} className="flex items-center gap-2">
+                <div className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  step === s.id ? 'bg-[#B91C1C]/20 text-[#B91C1C]' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+                }`}>{s.label}</div>
+                {i < 2 && <ChevronRight className="w-3 h-3 text-[var(--text-muted)]" />}
+              </div>
+            ))}
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-auto min-h-0">
+            {/* Step 1: Analyse */}
+            {step === 'analyse' && (
+              <div className="space-y-3">
+                <div className="p-4 rounded-xl bg-gradient-to-r from-[#B91C1C]/10 to-blue-500/5 border border-[#B91C1C]/20">
+                  <div className="text-sm font-bold text-[var(--text-primary)] mb-1">📊 Analyse des besoins</div>
+                  <div className="text-xs text-[var(--text-tertiary)]">
+                    {besoins.length} travaux nécessitent des pièces. En regroupant vos commandes, vous optimisez les frais de port et réduisez les délais.
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 rounded-xl bg-[var(--bg-tertiary)] text-center">
+                    <div className="text-2xl font-bold text-red-400">{besoins.length}</div>
+                    <div className="text-xs text-[var(--text-muted)]">Travaux bloqués</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-[var(--bg-tertiary)] text-center">
+                    <div className="text-2xl font-bold text-[#B91C1C]">{besoins.reduce((a, b) => a + b.quantite, 0)}</div>
+                    <div className="text-xs text-[var(--text-muted)]">Pièces nécessaires</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-[var(--bg-tertiary)] text-center">
+                    <div className="text-2xl font-bold text-amber-400">{besoins.filter(b => b.priorite === 'urgente' || b.priorite === 'haute').length}</div>
+                    <div className="text-xs text-[var(--text-muted)]">Urgents / Haute prio</div>
+                  </div>
+                </div>
+                {besoins.length === 0 ? (
+                  <div className="text-center py-8 text-[var(--text-muted)] text-sm">Aucun travail en attente de pièces — rien à commander ! ✅</div>
+                ) : (
+                  <Button variant="primary" className="w-full" onClick={() => { selectAll(); setStep('selection'); }}>
+                    Continuer — Sélectionner les besoins
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Step 2: Sélection */}
+            {step === 'selection' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between pb-2">
+                  <span className="text-sm font-semibold text-[var(--text-primary)]">{selectedBesoins.size}/{besoins.length} sélectionnés</span>
+                  <div className="flex gap-2">
+                    <button onClick={selectAll} className="text-xs text-blue-400 hover:underline">Tout cocher</button>
+                    <button onClick={deselectAll} className="text-xs text-[var(--text-muted)] hover:underline">Tout décocher</button>
+                  </div>
+                </div>
+                {besoins.map(b => (
+                  <div
+                    key={b.id}
+                    onClick={() => toggleBesoin(b.id)}
+                    className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-all ${
+                      selectedBesoins.has(b.id) ? 'bg-[#B91C1C]/10 border-[#B91C1C]/30' : 'bg-[var(--bg-tertiary)] border-transparent hover:border-[var(--border-secondary)]'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                      selectedBesoins.has(b.id) ? 'bg-[#B91C1C] border-[#B91C1C]' : 'border-[var(--border-primary)]'
+                    }`}>
+                      {selectedBesoins.has(b.id) && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold text-[#B91C1C]">{b.code}</span>
+                        <span className={`text-[10px] font-bold ${prioriteColors[b.priorite] || ''}`}>{b.priorite?.toUpperCase()}</span>
+                      </div>
+                      <div className="text-sm text-[var(--text-primary)] truncate">{b.designation_piece}</div>
+                      <div className="text-[10px] text-[var(--text-tertiary)]">{b.adresse} {b.ascenseur && `— ${b.ascenseur}`}</div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm font-bold text-[var(--text-primary)]">×{b.quantite}</div>
+                      {b.reference_piece && <div className="text-[10px] text-[var(--text-muted)] font-mono">{b.reference_piece}</div>}
+                    </div>
+                    {b.articleMatch && (
+                      <Badge variant="green" className="text-[9px] flex-shrink-0">En stock</Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Step 3: Regroupement par fournisseur */}
+            {step === 'regroupement' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 pb-2">
+                  <span className="text-sm font-semibold text-[var(--text-primary)]">Fournisseur par défaut :</span>
+                  <select
+                    value={selectedFournisseur}
+                    onChange={e => setSelectedFournisseur(e.target.value)}
+                    className="text-sm px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)]"
+                  >
+                    <option value="">Auto-détection</option>
+                    {FOURNISSEURS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+
+                {Object.entries(groupesFournisseur).map(([fournisseur, items]) => (
+                  <Card key={fournisseur} className="overflow-hidden">
+                    <div className="px-4 py-2.5 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-[#B91C1C]" />
+                        <span className="text-sm font-bold text-[var(--text-primary)]">{fournisseur}</span>
+                        <Badge variant="purple">{items.length} articles</Badge>
+                      </div>
+                      <Button variant="primary" size="sm" onClick={() => handleCreate(fournisseur, items)}>
+                        <ShoppingCart className="w-3.5 h-3.5" /> Créer commande
+                      </Button>
+                    </div>
+                    <CardBody className="p-0">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-[10px] text-[var(--text-muted)] uppercase border-b border-[var(--border-secondary)]">
+                            <th className="px-3 py-2 text-left">Désignation</th>
+                            <th className="px-3 py-2 text-left">Réf</th>
+                            <th className="px-3 py-2 text-center">Qté</th>
+                            <th className="px-3 py-2 text-left">Pour travaux</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map(item => (
+                            <tr key={item.id} className="border-b border-[var(--border-secondary)] last:border-0">
+                              <td className="px-3 py-2 text-[var(--text-primary)]">{item.designation_piece}</td>
+                              <td className="px-3 py-2 font-mono text-[var(--text-tertiary)] text-xs">{item.reference_piece || '—'}</td>
+                              <td className="px-3 py-2 text-center font-bold">{item.quantite}</td>
+                              <td className="px-3 py-2 text-[var(--text-tertiary)] text-xs">{item.code} — {item.adresse?.substring(0, 25)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </CardBody>
+                  </Card>
+                ))}
+
+                <div>
+                  <label className="text-xs text-[var(--text-muted)] block mb-1">Notes commande</label>
+                  <textarea
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] resize-none"
+                    placeholder="Instructions livraison, remarques..."
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer navigation */}
+          <div className="flex items-center justify-between pt-4 border-t border-[var(--border-primary)] mt-3">
+            <Button variant="secondary" onClick={() => {
+              if (step === 'selection') setStep('analyse');
+              else if (step === 'regroupement') setStep('selection');
+              else onClose();
+            }}>
+              {step === 'analyse' ? 'Annuler' : '← Retour'}
+            </Button>
+            {step === 'selection' && (
+              <Button variant="primary" onClick={() => setStep('regroupement')} disabled={selectedBesoins.size === 0}>
+                Regrouper {selectedBesoins.size} besoins →
+              </Button>
+            )}
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
 // Page principale Commandes
 export function CommandesPage() {
   const [search, setSearch] = useState('');
   const [filterStatut, setFilterStatut] = useState<string>('all');
   const [showForm, setShowForm] = useState(false);
+  const [showGroupeForm, setShowGroupeForm] = useState(false);
   const [editCommande, setEditCommande] = useState<Commande | null>(null);
   const [detailCommande, setDetailCommande] = useState<Commande | null>(null);
   const [receptionCommande, setReceptionCommande] = useState<Commande | null>(null);
@@ -1339,9 +1624,14 @@ export function CommandesPage() {
             Gestion des commandes de pièces et matériel
           </p>
         </div>
-        <Button variant="primary" onClick={() => setShowForm(true)}>
-          <Plus className="w-4 h-4" /> Nouvelle commande
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setShowGroupeForm(true)}>
+            <Package className="w-4 h-4" /> Commande groupée
+          </Button>
+          <Button variant="primary" onClick={() => setShowForm(true)}>
+            <Plus className="w-4 h-4" /> Nouvelle commande
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -1359,8 +1649,8 @@ export function CommandesPage() {
         </Card>
         <Card>
           <CardBody className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
-              <Truck className="w-6 h-6 text-purple-400" />
+            <div className="w-12 h-12 rounded-xl bg-[#B91C1C]/20 flex items-center justify-center">
+              <Truck className="w-6 h-6 text-[#B91C1C]" />
             </div>
             <div>
               <div className="text-2xl font-extrabold text-[var(--text-primary)]">{stats.en_cours}</div>
@@ -1549,6 +1839,17 @@ export function CommandesPage() {
           itemCode={archiveItem.code}
           onConfirm={(raison) => archiveMutation.mutate({ id: archiveItem.id, raison })}
           onClose={() => setArchiveItem(null)}
+        />
+      )}
+
+      {/* Modal commande groupée intelligente */}
+      {showGroupeForm && (
+        <GroupeCommandeModal
+          onClose={() => setShowGroupeForm(false)}
+          onCreate={(data, lignes) => {
+            createMutation.mutate({ data, lignes });
+            setShowGroupeForm(false);
+          }}
         />
       )}
     </div>

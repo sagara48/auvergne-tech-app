@@ -25,7 +25,7 @@ const TYPE_CONFIG: Record<TypeDemande, { label: string; icon: any; color: string
   piece: { label: 'Pièce détachée', icon: Package, color: '#3b82f6', bgColor: 'bg-blue-500/20' },
   conge: { label: 'Congé payé', icon: Calendar, color: '#06b6d4', bgColor: 'bg-cyan-500/20' },
   rtt: { label: 'RTT', icon: CalendarDays, color: '#10b981', bgColor: 'bg-emerald-500/20' },
-  formation: { label: 'Formation', icon: GraduationCap, color: '#a855f7', bgColor: 'bg-purple-500/20' },
+  formation: { label: 'Formation', icon: GraduationCap, color: '#B91C1C', bgColor: 'bg-[#B91C1C]/20' },
   materiel: { label: 'Matériel/Outillage', icon: Wrench, color: '#f59e0b', bgColor: 'bg-amber-500/20' },
   intervention: { label: 'Intervention urgente', icon: AlertCircle, color: '#ef4444', bgColor: 'bg-red-500/20' },
   remboursement: { label: 'Remboursement', icon: Receipt, color: '#ec4899', bgColor: 'bg-pink-500/20' },
@@ -564,7 +564,7 @@ export function DemandesPage() {
         <Card><CardBody className="flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center"><Clock className="w-6 h-6 text-amber-400" /></div><div><div className="text-2xl font-extrabold text-amber-400">{stats?.en_attente || enAttente}</div><div className="text-xs text-[var(--text-tertiary)]">En attente</div></div></CardBody></Card>
         <Card><CardBody className="flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center"><Check className="w-6 h-6 text-green-400" /></div><div><div className="text-2xl font-extrabold text-green-400">{stats?.approuve || 0}</div><div className="text-xs text-[var(--text-tertiary)]">Approuvées</div></div></CardBody></Card>
         <Card><CardBody className="flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center"><X className="w-6 h-6 text-red-400" /></div><div><div className="text-2xl font-extrabold text-red-400">{stats?.refuse || 0}</div><div className="text-xs text-[var(--text-tertiary)]">Refusées</div></div></CardBody></Card>
-        <Card><CardBody className="flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center"><CheckCircle className="w-6 h-6 text-purple-400" /></div><div><div className="text-2xl font-extrabold text-purple-400">{stats?.termine || 0}</div><div className="text-xs text-[var(--text-tertiary)]">Terminées</div></div></CardBody></Card>
+        <Card><CardBody className="flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-[#B91C1C]/20 flex items-center justify-center"><CheckCircle className="w-6 h-6 text-[#B91C1C]" /></div><div><div className="text-2xl font-extrabold text-[#B91C1C]">{stats?.termine || 0}</div><div className="text-xs text-[var(--text-tertiary)]">Terminées</div></div></CardBody></Card>
       </div>
 
       {/* Alerte */}

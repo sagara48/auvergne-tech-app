@@ -186,7 +186,7 @@ export function FeuilleHeuresPage() {
 
               {/* Info semaine */}
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#B91C1C] to-[#DC4444] flex items-center justify-center">
                   <Calendar className="w-7 h-7 text-white" />
                 </div>
                 <div>
@@ -294,18 +294,18 @@ export function FeuilleHeuresPage() {
                   })}
                   className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${
                     semaine?.astreinte_weekend 
-                      ? 'bg-purple-500 border-purple-500' 
-                      : 'border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:border-purple-400'
+                      ? 'bg-[#B91C1C] border-[#B91C1C]' 
+                      : 'border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:border-[#B91C1C]'
                   }`}
                 >
                   {semaine?.astreinte_weekend && <Check className="w-4 h-4 text-white" />}
                 </button>
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                    <CalendarDays className="w-4 h-4 text-purple-400" />
+                  <div className="w-8 h-8 rounded-lg bg-[#B91C1C]/20 flex items-center justify-center">
+                    <CalendarDays className="w-4 h-4 text-[#B91C1C]" />
                   </div>
                   <div>
-                    <span className="text-sm font-medium text-[var(--text-primary)] group-hover:text-purple-400 transition-colors">
+                    <span className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[#B91C1C] transition-colors">
                       Week-end
                     </span>
                     <p className="text-[10px] text-[var(--text-muted)]">Samedi - Dimanche</p>

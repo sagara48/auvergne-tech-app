@@ -26,8 +26,8 @@ const TYPE_CONFIG: Record<string, {
   travaux: { 
     label: 'Travaux', 
     icon: Hammer, 
-    color: '#a855f7',
-    bgColor: 'bg-purple-500/20'
+    color: '#B91C1C',
+    bgColor: 'bg-[#B91C1C]/20'
   },
   mise_en_service: { 
     label: 'Mise en service', 

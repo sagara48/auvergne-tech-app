@@ -192,7 +192,7 @@ function ViewContent({ articles, emplacementCode }: { articles: any[]; emplaceme
           className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors"
         >
           <div className="flex items-center gap-3">
-            <Package className="w-5 h-5 text-purple-400" />
+            <Package className="w-5 h-5 text-[#B91C1C]" />
             <div>
               <div className="font-medium text-[var(--text-primary)]">{article.designation}</div>
               <div className="text-xs text-[var(--text-tertiary)]">{article.reference}</div>
@@ -297,7 +297,7 @@ function InventaireContent({
               }`}
             >
               <div className="flex items-center gap-3">
-                <Package className="w-5 h-5 text-purple-400" />
+                <Package className="w-5 h-5 text-[#B91C1C]" />
                 <div>
                   <div className="font-medium text-[var(--text-primary)]">{article.designation}</div>
                   <div className="text-xs text-[var(--text-tertiary)]">
@@ -444,7 +444,7 @@ function MouvementContent({
                 className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <Package className="w-5 h-5 text-purple-400" />
+                  <Package className="w-5 h-5 text-[#B91C1C]" />
                   <div>
                     <div className="font-medium text-[var(--text-primary)]">{article.designation}</div>
                     <div className="text-xs text-[var(--text-tertiary)]">{article.reference}</div>

@@ -116,7 +116,7 @@ export function SidebarResume({
       {/* Profil */}
       <Card>
         <CardBody className="text-center">
-          <div className="w-16 h-16 mx-auto bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-2xl font-bold text-[var(--text-primary)] mb-4">
+          <div className="w-16 h-16 mx-auto bg-gradient-to-br from-[#B91C1C] to-[#DC4444] rounded-2xl flex items-center justify-center text-2xl font-bold text-[var(--text-primary)] mb-4">
             {technicien?.avatar_initiales || 'NB'}
           </div>
           <h3 className="text-lg font-bold text-[var(--text-primary)]">
@@ -214,7 +214,7 @@ export function SidebarResume({
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase mt-1">Travail</div>
             </div>
             <div className="bg-[var(--bg-tertiary)] rounded-xl p-4 text-center">
-              <div className="text-2xl font-extrabold text-purple-400 font-mono">
+              <div className="text-2xl font-extrabold text-[#B91C1C] font-mono">
                 {totaux.heures_trajet.toFixed(1)}h
               </div>
               <div className="text-[10px] text-[var(--text-tertiary)] uppercase mt-1">Trajets</div>

@@ -44,7 +44,7 @@ const STATUTS_CONFIG: Record<string, { label: string; color: string }> = {
   en_cours: { label: 'En cours', color: 'bg-blue-100 text-blue-600' },
   en_pause: { label: 'En pause', color: 'bg-orange-100 text-orange-600' },
   termine: { label: 'Terminé', color: 'bg-green-100 text-green-600' },
-  facture: { label: 'Facturé', color: 'bg-purple-100 text-purple-600' },
+  facture: { label: 'Facturé', color: 'bg-[#FEE2E2] text-[#B91C1C]' },
   annule: { label: 'Annulé', color: 'bg-red-100 text-red-600' },
 };
 
@@ -171,12 +171,12 @@ export function TravauxListe() {
             </div>
             <p className="text-2xl font-bold text-green-700">{stats.termines}</p>
           </div>
-          <div className="bg-purple-50 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-purple-600 mb-1">
+          <div className="bg-[#FEF2F2] rounded-lg p-3">
+            <div className="flex items-center gap-2 text-[#B91C1C] mb-1">
               <Euro className="w-4 h-4" />
               <span className="text-xs">CA Total</span>
             </div>
-            <p className="text-lg font-bold text-purple-700">{formatMontant(stats.montantTotal)}</p>
+            <p className="text-lg font-bold text-[#991B1B]">{formatMontant(stats.montantTotal)}</p>
           </div>
           <div className="bg-red-50 rounded-lg p-3">
             <div className="flex items-center gap-2 text-red-600 mb-1">

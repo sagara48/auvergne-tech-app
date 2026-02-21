@@ -197,11 +197,11 @@ export function NFCScanner({ autoStart = false, onClose, fullScreen = false }: N
               <div className="text-center">
                 <div className={`w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center ${
                   scannedTag.type === 'ascenseur' ? 'bg-cyan-500/20' :
-                  scannedTag.type === 'emplacement' ? 'bg-amber-500/20' : 'bg-purple-500/20'
+                  scannedTag.type === 'emplacement' ? 'bg-amber-500/20' : 'bg-[#B91C1C]/20'
                 }`}>
                   {scannedTag.type === 'ascenseur' && <Building2 className="w-12 h-12 text-cyan-400" />}
                   {scannedTag.type === 'emplacement' && <Box className="w-12 h-12 text-amber-400" />}
-                  {scannedTag.type === 'article' && <Package className="w-12 h-12 text-purple-400" />}
+                  {scannedTag.type === 'article' && <Package className="w-12 h-12 text-[#B91C1C]" />}
                 </div>
 
                 <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2">
