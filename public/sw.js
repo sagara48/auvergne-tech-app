@@ -1,6 +1,7 @@
-// Service Worker pour AuvergneTech PWA
-const CACHE_NAME = 'auvergnetech-v1';
+// Service Worker V2 pour AuvergneTech PWA — Feature 53: Mode hors-ligne complet
+const CACHE_NAME = 'auvergnetech-v2';
 const OFFLINE_URL = '/offline.html';
+const CDN_CACHE = 'auvergnetech-cdn-v1';
 
 // Ressources à mettre en cache immédiatement
 const PRECACHE_ASSETS = [
@@ -10,30 +11,40 @@ const PRECACHE_ASSETS = [
   '/manifest.json'
 ];
 
+// CDN assets (Three.js pour 3D offline)
+const CDN_ASSETS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+];
+
 // Ressources API à mettre en cache avec stratégie Network First
-const API_CACHE_NAME = 'auvergnetech-api-v1';
+const API_CACHE_NAME = 'auvergnetech-api-v2';
 
 // Installation du Service Worker
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installation...');
+  console.log('[SW] Installation V2...');
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('[SW] Mise en cache des ressources statiques');
+    Promise.all([
+      caches.open(CACHE_NAME).then((cache) => {
+        console.log('[SW] Cache ressources statiques');
         return cache.addAll(PRECACHE_ASSETS);
-      })
-      .then(() => self.skipWaiting())
+      }),
+      caches.open(CDN_CACHE).then((cache) => {
+        console.log('[SW] Cache CDN (Three.js)');
+        return cache.addAll(CDN_ASSETS).catch(() => console.log('[SW] CDN cache skipped (offline)'));
+      }),
+    ]).then(() => self.skipWaiting())
   );
 });
 
 // Activation et nettoyage des anciens caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activation...');
+  console.log('[SW] Activation V2...');
+  const keepCaches = [CACHE_NAME, API_CACHE_NAME, CDN_CACHE];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME && cacheName !== API_CACHE_NAME) {
+          if (!keepCaches.includes(cacheName)) {
             console.log('[SW] Suppression ancien cache:', cacheName);
             return caches.delete(cacheName);
           }
@@ -50,6 +61,12 @@ self.addEventListener('fetch', (event) => {
 
   // Ignorer les requêtes non-GET
   if (request.method !== 'GET') {
+    return;
+  }
+
+  // Stratégie pour CDN (Three.js etc.) — Cache first
+  if (url.hostname.includes('cdnjs.cloudflare.com') || url.hostname.includes('cdn.')) {
+    event.respondWith(cacheFirstStrategy(request));
     return;
   }
 
@@ -145,8 +162,12 @@ self.addEventListener('message', (event) => {
   }
   
   if (event.data && event.data.type === 'CACHE_ASCENSEURS') {
-    // Mettre en cache les données ascenseurs pour utilisation offline
     cacheAscenseursData(event.data.data);
+  }
+  
+  // Feature 53: Cache tolerie pieces for offline
+  if (event.data && event.data.type === 'CACHE_TOLERIE') {
+    cacheTolerieData(event.data.data);
   }
 });
 
@@ -166,3 +187,13 @@ self.addEventListener('message', (event) => {
     self.registration.update();
   }
 });
+
+// Feature 53: Cache tolerie pieces offline
+async function cacheTolerieData(data) {
+  const cache = await caches.open(API_CACHE_NAME);
+  const response = new Response(JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+  await cache.put('/api/tolerie-pieces-cache', response);
+  console.log('[SW] Pièces tôlerie mises en cache:', data.length, 'pièces');
+}
