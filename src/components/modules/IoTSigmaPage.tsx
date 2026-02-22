@@ -20,7 +20,7 @@ import {
   Sigma4Chart, Sigma4ChartItem, Sigma4Dashboard, Sigma4Lift, Sigma4ServiceEntry,
   Sigma4MonitorData, MonitorAction,
   getDashboard, getLifts, getLiftServices, getMonitorOnline, sendMonitorAction,
-  getErrorInfo, getSigma4FrontUrl, getSigma4Session,
+  getErrorInfo, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
   isConnectedToSigma4, loginSigma4, logoutSigma4,
   MONITOR_ACTIONS,
 } from '@/services/sigma4liftsApi';
@@ -812,10 +812,12 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
   const { data: monitor, isLoading, error, dataUpdatedAt } = useQuery({
     queryKey: ['sigma4', 'monitor', liftId],
     queryFn: () => getMonitorOnline(liftId),
-    refetchInterval: 10000,
+    refetchInterval: 1000,
     retry: 1,
     retryDelay: 5000,
   });
+  // Charger les labels de modes (cache long)
+  useQuery({ queryKey: ['sigma4', 'modes'], queryFn: fetchModesXML, staleTime: 3600000, retry: 1 });
   const [showActions, setShowActions] = useState(false);
 
   const handleAction = async (action: MonitorAction) => {
@@ -824,6 +826,18 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
     try {
       await sendMonitorAction(liftId, action, lift?.numeroCabina || 1);
       toast.success('Action envoyée : ' + label);
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] }), 2000);
+    } catch (e: any) {
+      toast.error(e.message || 'Erreur lors de l\'envoi');
+    }
+  };
+
+  /** Envoyer la cabine à un étage (Comando ecogo) */
+  const handleComando = async (planta: number) => {
+    if (!confirm(`Envoyer la cabine à l'étage ${planta} ?`)) return;
+    try {
+      await sendMonitorAction(liftId, 'Comando' as MonitorAction, lift?.numeroCabina || 1, { planta });
+      toast.success(`Commande envoyée : étage ${planta}`);
       setTimeout(() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] }), 2000);
     } catch (e: any) {
       toast.error(e.message || 'Erreur lors de l\'envoi');
@@ -882,7 +896,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
   const doorColor = door ? (['#059669', '#CA8A04', '#EA580C', '#CA8A04'][door.estado] || '#64748B') : '#64748B';
 
   // Conversion intensités (API renvoie en centièmes d'ampère)
-  const fmtA = (v: number | null | undefined) => v != null ? `${(v / 100).toFixed(2)} A` : '—';
+  // Removed fmtA — using AliCard now
 
   return (
     <div className="h-full overflow-y-auto space-y-2">
@@ -932,16 +946,25 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
             </CardBody></Card>
           )}
 
-          {/* ── Moniteur ECO — Position, Poids, Destination ── */}
-          <div className="grid grid-cols-4 gap-1.5">
+          {/* ── État — Mode de fonctionnement ── */}
+          <Card><CardBody className="p-2 flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${getModeColor(monitor.modoFuncionamiento)}20` }}>
+              <Layers className="w-3.5 h-3.5" style={{ color: getModeColor(monitor.modoFuncionamiento) }} />
+            </div>
+            <div>
+              <p className="text-[6px] text-[var(--text-muted)] font-semibold uppercase">État</p>
+              <p className="text-[11px] font-extrabold" style={{ color: getModeColor(monitor.modoFuncionamiento) }}>{getModeLabel(monitor.modoFuncionamiento)}</p>
+            </div>
+          </CardBody></Card>
+
+          {/* ── KPIs principaux ── */}
+          <div className="grid grid-cols-3 gap-1.5">
             <MiniKPI label="Position" value={monitor.posicionMilimetros != null ? `${monitor.posicionMilimetros} mm` : '—'}
               icon={<MapPin className="w-3.5 h-3.5" />} color="#3B82F6" />
             <MiniKPI label="Destination" value={monitor.destino != null ? String(monitor.destino) : '—'}
               icon={<Navigation className="w-3.5 h-3.5" />} color="#8B5CF6" />
             <MiniKPI label="Poids" value={monitor.peso != null ? `${monitor.peso} Kg` : '—'}
               icon={<Weight className="w-3.5 h-3.5" />} color="#EA580C" />
-            <MiniKPI label="Mode" value={monitor.modoFuncionamiento != null ? String(monitor.modoFuncionamiento) : '—'}
-              icon={<Layers className="w-3.5 h-3.5" />} color="#059669" />
           </div>
 
           <div className="grid grid-cols-2 gap-1.5">
@@ -954,7 +977,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 <MonitorBadge label="Porte 1" value={doorLabel} color={doorColor} />
                 <MonitorBadge label="Cellule photo" value={door?.fotocelula ? '⚠️ Activée' : 'Libre'} color={door?.fotocelula ? '#CA8A04' : '#059669'} />
                 <MonitorBadge label="À niveau" value={monitor.nivel ? '✅ Oui' : 'Non'} color={monitor.nivel ? '#059669' : '#CA8A04'} />
-                <MonitorBadge label="État" value={String(monitor.estado ?? '—')} color="#64748B" />
+                <MonitorBadge label="Surcharge" value={monitor.motivoNoArranque === 8 || monitor.peso != null && lift?.cargaUtil != null && monitor.peso > lift.cargaUtil ? '⚠️ OUI' : 'Non'} color={monitor.motivoNoArranque === 8 ? '#DC2626' : '#059669'} />
               </div>
               {monitor.embarques && monitor.embarques.length > 1 && monitor.embarques[1].habilitado && (
                 <div className="pt-1 border-t border-[var(--border-secondary)]">
@@ -978,65 +1001,80 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
             {/* ── Chaîne de sécurité (Série) ── */}
             <Card><CardBody className="p-2 space-y-1.5">
               <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
-                <Shield className="w-2.5 h-2.5" /> Série (chaîne de sécurité)
+                <Shield className="w-2.5 h-2.5" /> Série
               </p>
-              <div className="flex flex-wrap gap-1 justify-center">
+              {/* Points optionnels 85, 95 au-dessus (comme S4L) */}
+              <div className="flex justify-center gap-6">
+                {([['85', monitor.serieSeguridad85], ['95', monitor.serieSeguridad95]] as [string, boolean | null][]).map(([id, ok]) => (
+                  <div key={id}
+                    className="w-7 h-5 rounded flex items-center justify-center text-[8px] font-extrabold"
+                    style={{
+                      backgroundColor: ok === true ? '#5cb85c' : '#9e9e9e',
+                      color: 'white',
+                    }}>
+                    {id}
+                  </div>
+                ))}
+              </div>
+              {/* Points principaux 00, 40, 60, 70, 80, 90 */}
+              <div className="flex justify-center gap-1">
                 {([
                   ['00', monitor.serieSeguridad00],
                   ['40', monitor.serieSeguridad40],
                   ['60', monitor.serieSeguridad60],
                   ['70', monitor.serieSeguridad70],
                   ['80', monitor.serieSeguridad80],
-                  ['85', monitor.serieSeguridad85],
                   ['90', monitor.serieSeguridad90],
-                  ['95', monitor.serieSeguridad95],
                 ] as [string, boolean | null][]).map(([id, ok]) => (
                   <div key={id}
-                    className={cn('w-8 h-6 rounded flex items-center justify-center text-[9px] font-extrabold',
-                      ok === true  ? 'bg-[#059669] text-white' :
-                      ok === false ? 'bg-[#64748B] text-white' :
-                                     'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
-                    )}>
+                    className="w-8 h-6 rounded flex items-center justify-center text-[9px] font-extrabold"
+                    style={{
+                      backgroundColor: ok === true ? '#5cb85c' : '#9e9e9e',
+                      color: 'white',
+                    }}>
                     {id}
                   </div>
                 ))}
               </div>
-              <p className="text-[5px] text-[var(--text-muted)] text-center">
-                🟢 Fermé (OK) · ⚫ Ouvert / Non applicable
-              </p>
             </CardBody></Card>
           </div>
 
           {/* ── Alimentation ── */}
           <Card><CardBody className="p-2">
-            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
+            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1.5 flex items-center gap-1">
               <Zap className="w-2.5 h-2.5" /> Alimentation
             </p>
-            <div className="grid grid-cols-3 gap-1">
-              <MonitorBadge label="Tension d'entrée" value={monitor.tensionEntrada != null ? `${monitor.tensionEntrada} V` : '—'} color="#3B82F6" />
-              <MonitorBadge label="Tension (batterie)" value={monitor.tensionBateria != null ? `${(monitor.tensionBateria / 10).toFixed(0)} V` : '—'} color="#8B5CF6" />
-              <MonitorBadge label="Tension (circuit contrôleur)" value={monitor.tensionManiobra != null ? `${monitor.tensionManiobra} V` : '—'} color="#3B82F6" />
-              <MonitorBadge label="Courant (circuit contrôleur)" value={fmtA(monitor.intensidadManiobra)} color="#64748B" />
-              <MonitorBadge label="Tension (circuit auxiliaire)" value={monitor.tensionCircuitoAux != null ? `${monitor.tensionCircuitoAux} V` : '—'} color="#3B82F6" />
-              <MonitorBadge label="Courant (circuit auxiliaire)" value={fmtA(monitor.intensidadCircuitoAux)} color="#64748B" />
+            {/* Grille 3 colonnes fidèle au layout S4L */}
+            <div className="grid grid-cols-3 gap-1.5">
+              <AliCard label="Tension d'entrée" value={monitor.tensionEntrada} unit="V" />
+              <AliCard label="Tension (batterie)" value={monitor.tensionBateria != null ? Math.round(monitor.tensionBateria / 10) : null} unit="V" />
+              <AliCard label="Tension (circuit contrôleur)" value={monitor.tensionManiobra} unit="V" />
+              <AliCard label="Courant (circuit contrôleur)" value={monitor.intensidadManiobra != null ? (monitor.intensidadManiobra / 100) : null} unit="A" decimals={2} />
+              <AliCard label="Tension (circuit auxiliaire)" value={monitor.tensionCircuitoAux} unit="V" />
+              <AliCard label="Courant (circuit auxiliaire)" value={monitor.intensidadCircuitoAux != null ? (monitor.intensidadCircuitoAux / 100) : null} unit="A" decimals={2} />
             </div>
-            {/* Batterie */}
+            {/* Batterie + Réseau */}
             {monitor.cargaBateria != null && (
-              <div className="mt-1.5 pt-1 border-t border-[var(--border-secondary)] flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-5 h-8 rounded border-2 border-[var(--text-muted)] relative overflow-hidden">
-                    <div className="absolute bottom-0 w-full transition-all rounded-sm"
+              <div className="mt-2 pt-1.5 border-t border-[var(--border-secondary)] flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="relative w-6 h-10 border-2 rounded-sm overflow-hidden" style={{ borderColor: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#5cb85c' }}>
+                    <div className="absolute -top-[3px] left-1/2 -translate-x-1/2 w-3 h-1.5 rounded-t" style={{ backgroundColor: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#5cb85c' }} />
+                    <div className="absolute bottom-0 w-full transition-all"
                       style={{
                         height: `${monitor.cargaBateria}%`,
-                        backgroundColor: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#059669',
+                        backgroundColor: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#5cb85c',
                       }} />
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-1 bg-[var(--text-muted)] rounded-t" />
                   </div>
-                  <span className="text-[11px] font-extrabold" style={{
-                    color: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#059669'
+                  <span className="text-[13px] font-extrabold" style={{
+                    color: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#5cb85c'
                   }}>{monitor.cargaBateria} %</span>
                 </div>
-                <MonitorBadge label="Réseau" value={monitor.conectadoARed ? '✅ Connecté' : '❌ Déconnecté'} color={monitor.conectadoARed ? '#059669' : '#DC2626'} />
+                <div className="flex items-center gap-1.5">
+                  <div className={cn('w-2 h-2 rounded-full', monitor.conectadoARed ? 'bg-[#5cb85c]' : 'bg-[#DC2626]')} />
+                  <span className="text-[8px] font-bold text-[var(--text-secondary)]">
+                    {monitor.conectadoARed ? 'Connecté au réseau' : 'Déconnecté'}
+                  </span>
+                </div>
               </div>
             )}
           </CardBody></Card>
@@ -1062,39 +1100,45 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           <Card><CardBody className="p-2">
             <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1.5">Appel / Envoi</p>
             <div className="grid grid-cols-3 gap-2">
-              {/* Cabine */}
+              {/* Envoi de cabine (cliquable → envoie Comando) */}
               <div>
                 <p className="text-[6px] font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Envoi de cabine</p>
                 <div className="flex flex-wrap gap-0.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeCabinCalls.includes(f);
-                    return <span key={f} className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold',
-                      active ? 'bg-[#8B5CF6] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-                    )}>{f}</span>;
+                    return <button key={f} onClick={() => handleComando(f)}
+                      title={`Envoyer cabine à l'étage ${f}`}
+                      className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#8B5CF6]',
+                      active ? 'bg-[#8B5CF6] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#8B5CF6]/20'
+                    )}>{f}</button>;
                   })}
                 </div>
               </div>
-              {/* Montée */}
+              {/* Appel palier en montée (cliquable) */}
               <div>
                 <p className="text-[6px] font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en montée</p>
                 <div className="flex flex-wrap gap-0.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeUpCalls.includes(f);
-                    return <span key={f} className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold',
-                      active ? 'bg-[#059669] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-                    )}>{f}</span>;
+                    return <button key={f} onClick={() => handleComando(f)}
+                      title={`Appel montée étage ${f}`}
+                      className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#059669]',
+                      active ? 'bg-[#059669] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#059669]/20'
+                    )}>{f}</button>;
                   })}
                 </div>
               </div>
-              {/* Descente */}
+              {/* Appel palier en descente (cliquable) */}
               <div>
                 <p className="text-[6px] font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en descente</p>
                 <div className="flex flex-wrap gap-0.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeDownCalls.includes(f);
-                    return <span key={f} className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold',
-                      active ? 'bg-[#DC2626] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-                    )}>{f}</span>;
+                    return <button key={f} onClick={() => handleComando(f)}
+                      title={`Appel descente étage ${f}`}
+                      className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#DC2626]',
+                      active ? 'bg-[#DC2626] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#DC2626]/20'
+                    )}>{f}</button>;
                   })}
                 </div>
               </div>
@@ -1164,6 +1208,18 @@ function busLabel(v: number | null | undefined): string {
 function busColor(v: number | null | undefined): string {
   if (v == null) return '#64748B';
   switch (v) { case 0: return '#059669'; case 1: return '#CA8A04'; case 2: return '#DC2626'; default: return '#64748B'; }
+}
+
+/** Card alimentation fidèle au layout S4L (label petit au-dessus, valeur + unité en grand) */
+function AliCard({ label, value, unit, decimals = 0 }: { label: string; value: number | null | undefined; unit: string; decimals?: number }) {
+  return (
+    <div className="bg-[var(--bg-secondary)] rounded p-1.5 text-center">
+      <p className="text-[5px] text-[var(--text-muted)] font-semibold truncate">{label}</p>
+      <p className="text-[12px] font-extrabold text-[var(--text-primary)]">
+        {value != null ? `${decimals > 0 ? value.toFixed(decimals) : value} ${unit}` : '—'}
+      </p>
+    </div>
+  );
 }
 
 function MiniKPI({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color: string }) {

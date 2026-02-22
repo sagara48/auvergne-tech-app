@@ -240,9 +240,15 @@ export async function getLiftServices(liftId: number): Promise<Sigma4ServiceEntr
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MONITOR ONLINE — Types données temps réel
-// Source : GET /divide/lifts/{id}/status — réponse réelle S4L
+// ÉTATS PORTES (embarque.estado)
 // ═══════════════════════════════════════════════════════════════
+
+export const DOOR_STATES: Record<number, { label: string; color: string }> = {
+  0: { label: 'Fermée',      color: '#059669' },
+  1: { label: 'Ouverture…',  color: '#CA8A04' },
+  2: { label: 'Ouverte',     color: '#EA580C' },
+  3: { label: 'Fermeture…',  color: '#CA8A04' },
+};
 
 export interface Sigma4Embarque {
   fotocelula: boolean;
@@ -449,6 +455,94 @@ export async function getErrorInfo(params?: Record<string, string>): Promise<any
     ? '?' + new URLSearchParams(params).toString()
     : '';
   return sigma4Get(`/divide/info/errores${qs}`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODES DE FONCTIONNEMENT (XML MODES.FR)
+// ═══════════════════════════════════════════════════════════════
+
+/** Cache local des modes (numéro → label FR) */
+let _modesCache: Map<number, string> | null = null;
+
+/** Fallback hardcodé pour les modes les plus courants */
+const MODE_FALLBACK: Record<number, string> = {
+  0:  'HORS SERVICE',
+  1:  'NORMAL',
+  2:  'NORMAL. PARKING',
+  3:  'INSPECTION',
+  4:  'INSPECTION HUECO',
+  5:  'POMPIERS',
+  6:  'POMPIERS PHASE 2',
+  7:  'SECOURS',
+  8:  'MES (RAPPEL)',
+  9:  'PRIORITAIRE',
+  10: 'VIP',
+  11: 'SABBATIQUE',
+  12: 'ATTENTE',
+  20: 'NORMAL. AUTONOME',
+  21: 'NORMAL. SIMPLEX',
+  22: 'NORMAL. DUPLEX',
+  23: 'NORMAL. TÉLÉCOMMANDÉ',
+  24: 'NORMAL. SELECTIF',
+  25: 'NORMAL. COLLECTIF DESCENTE',
+  26: 'NORMAL. COLLECTIF COMPLET',
+  30: 'APPRENTISSAGE GAINE',
+  31: 'TEST AUTOMATIQUE',
+  40: 'BLOCAGE. ERREUR',
+  41: 'BLOCAGE. SÉRIE OUVERTE',
+  50: 'HORS TENSION',
+  99: 'INCONNU',
+};
+
+/** Charger les modes depuis le fichier XML MODES.FR du serveur S4L */
+export async function fetchModesXML(): Promise<Map<number, string>> {
+  if (_modesCache) return _modesCache;
+  try {
+    const token = getStoredSession()?.token;
+    if (!token) throw new Error('No token');
+    const res = await fetch(`${SIGMA4_API}/divide/files/MODES.FR`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const text = await res.text();
+      if (text.includes('<')) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'text/xml');
+        const map = new Map<number, string>();
+        // Essayer plusieurs formats XML possibles
+        const nodes = doc.querySelectorAll('mode, Mode, MODE, m, item, entry');
+        nodes.forEach(node => {
+          const id = parseInt(node.getAttribute('id') || node.getAttribute('ID') || node.getAttribute('num') || node.getAttribute('code') || '', 10);
+          const txt = (node.getAttribute('text') || node.getAttribute('name') || node.getAttribute('label') || node.textContent || '').trim();
+          if (!isNaN(id) && txt) map.set(id, txt.toUpperCase());
+        });
+        if (map.size > 0) { _modesCache = map; return map; }
+      }
+    }
+  } catch { /* fallback */ }
+  _modesCache = new Map(Object.entries(MODE_FALLBACK).map(([k, v]) => [Number(k), v]));
+  return _modesCache;
+}
+
+/** Obtenir le label d'un mode (sync, depuis le cache ou fallback) */
+export function getModeLabel(modoFuncionamiento: number | null | undefined): string {
+  if (modoFuncionamiento == null) return '—';
+  if (_modesCache?.has(modoFuncionamiento)) return _modesCache.get(modoFuncionamiento)!;
+  if (modoFuncionamiento in MODE_FALLBACK) return MODE_FALLBACK[modoFuncionamiento];
+  return `MODE ${modoFuncionamiento}`;
+}
+
+/** Couleur associée au mode de fonctionnement */
+const MODE_COLORS: Record<number, string> = {
+  0: '#059669', 1: '#DC2626', 3: '#CA8A04', 4: '#CA8A04', 5: '#3B82F6',
+  6: '#64748B', 7: '#CA8A04', 8: '#EA580C', 9: '#DC2626', 15: '#DC2626',
+  16: '#DC2626', 17: '#EA580C', 18: '#8B5CF6', 19: '#CA8A04', 20: '#3B82F6',
+  21: '#DC2626', 22: '#CA8A04', 23: '#059669', 24: '#059669', 25: '#059669',
+  26: '#059669', 30: '#CA8A04', 31: '#CA8A04', 40: '#DC2626', 41: '#DC2626', 50: '#64748B',
+};
+export function getModeColor(modoFuncionamiento: number | null | undefined): string {
+  if (modoFuncionamiento == null) return '#64748B';
+  return MODE_COLORS[modoFuncionamiento] || '#64748B';
 }
 
 /** Hardware d'un ascenseur */
