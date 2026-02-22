@@ -104,7 +104,7 @@ export type RemoteCommand = 'call_car' | 'reset_board' | 'force_alarm_test' | 'c
 // ═══ CONFIGURATION ═══
 
 const SIGMA4_BASE = 'https://www.sigma4lifts.com';
-const SIGMA4_API  = `${SIGMA4_BASE}/sigma-api`;
+const SIGMA4_API  = '/api/sigma4';  // Proxy Vercel → contourne CORS
 const SIGMA4_FRONT = `${SIGMA4_BASE}/sigma-front/#/`;
 
 const STORAGE_KEY = 'sigma4_session';
