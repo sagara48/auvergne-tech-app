@@ -28,6 +28,7 @@ import {
 import {
   searchErrorCodes, getAllErrorCodes, getErrorStats, getErrorsByFamily,
   mergeApiErrors, severityInfo, severityFromApi, lookupErrorCode,
+  lookupSuceso, lookupAviso,
   SEVERITY_LEVELS, CAUSA_CATEGORIES, S4LErrorCode, SeverityKey, S4LApiErrorEntry,
 } from '@/services/sigma4ErrorCodes';
 
@@ -1517,11 +1518,21 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
     retry: 1,
   });
 
-  // Construire le code erreur standard depuis content/type/subtype
+  // Construire le code erreur standard depuis content/type/subtype/subsubtype
+  // Format API: content="0102", subtype=X, subsubtype=Y
+  // Format bundle: CM_AVERIA_0102 (4-digit) ou CM_AVERIA_010200 (6-digit = content + subsubtype padded)
   const buildErrorCode = (msg: Sigma4MessageEntry): string => {
     const content = (msg.content || '').trim();
     if (content === '0000' || content === '') return ''; // Pas d'erreur
     return content;
+  };
+
+  // Construire le code étendu 6 chiffres si possible (content 4 digits + subsubtype)
+  const buildExtendedCode = (msg: Sigma4MessageEntry): string | null => {
+    const content = (msg.content || '').trim();
+    if (!content || content.length !== 4 || !/^\d{4}$/.test(content)) return null;
+    const sub = String(msg.subsubtype || 0).padStart(2, '0');
+    return content + sub;
   };
 
   // Index rapide depuis allCodes (API + local)
@@ -1604,24 +1615,70 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
     5: { label: 'Commande', color: '#8B5CF6', icon: '🟣' },
   };
 
-  // Enrichir les messages
+  // Enrichir les messages — routage par dtype (SUCESO vs ALARMA vs AVISO)
   const enrichedErrors = useMemo(() => {
     if (!rawMessages || !Array.isArray(rawMessages)) return [];
     return rawMessages.map((msg: Sigma4MessageEntry) => {
       const code = buildErrorCode(msg);
-      const catalog = findInCatalog(code);
-      const decoded = code && !catalog ? decodeUnknownCode(code) : null;
+      const extCode = buildExtendedCode(msg);
       const msgType = MSG_TYPES[msg.type] || { label: `Type ${msg.type}`, color: '#64748B', icon: '⚪' };
+      const dtype = (msg.dtype || '').toUpperCase();
+
+      let description = '';
+      let cause = '';
+      let help = '';
+      let severity: string | undefined;
+      let family = '';
+      let displayCode = code || '—';
+
+      if (!code) {
+        // Pas de code erreur → retour à la normale
+        description = 'Retour à la normale';
+      } else if (dtype === 'SUCESO') {
+        // ── ÉVÉNEMENT : chercher dans la table SUCESO ──
+        const sucesoDesc = lookupSuceso(code);
+        description = sucesoDesc || `Événement ${code}`;
+        family = 'SUCESO';
+      } else if (dtype === 'AVISO' || dtype === 'WARNING') {
+        // ── AVERTISSEMENT : chercher dans la table AVISO ──
+        const avisoDesc = lookupAviso(code);
+        description = avisoDesc || `Avertissement ${code}`;
+        family = 'AVISO';
+      } else {
+        // ── ALARMA / ERREUR : chercher dans les codes AVERIA ──
+        // 1. Code étendu 6 chiffres (content + subsubtype)
+        let catalog: S4LErrorCode | undefined;
+        if (extCode) {
+          catalog = allCodesIndex.get(extCode) || lookupErrorCode(extCode);
+        }
+        // 2. Code direct 4 chiffres
+        if (!catalog) {
+          catalog = findInCatalog(code);
+        }
+
+        if (catalog) {
+          displayCode = catalog.code;
+          description = catalog.description;
+          cause = catalog.cause || '';
+          help = catalog.help || '';
+          severity = catalog.severity;
+          family = catalog.family || '';
+        } else {
+          const decoded = decodeUnknownCode(code);
+          description = decoded?.desc || `Code ${code}`;
+          family = decoded?.family || '';
+        }
+      }
 
       return {
         ...msg,
         errorCode: code || '—',
-        displayCode: code ? (catalog ? catalog.code : code) : '—',
-        description: catalog?.description || (code === '' ? 'Retour à la normale' : decoded?.desc || `Code ${code}`),
-        cause: catalog?.cause || '',
-        help: catalog?.help || '',
-        severity: catalog?.severity,
-        family: catalog?.family || decoded?.family || '',
+        displayCode,
+        description,
+        cause,
+        help,
+        severity,
+        family,
         msgType,
         date: msg.messageDate,
         dateEnd: msg.closingDate || '',
@@ -1750,15 +1807,27 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
 
       {/* Debug panel */}
       {showDebug && (
-        <Card className="flex-shrink-0 max-h-40 overflow-y-auto"><CardBody className="p-2">
+        <Card className="flex-shrink-0 max-h-48 overflow-y-auto"><CardBody className="p-2">
           <p className="text-[7px] font-extrabold text-[#8B5CF6] mb-1">🔍 Debug — /divide/lifts/{liftId}/messages ({days}j)</p>
           <p className="text-[6px] text-[var(--text-secondary)] mb-1">
             {rawMessages ? `${Array.isArray(rawMessages) ? rawMessages.length : '?'} items reçus` : 'Pas de données'}
+            {' · '}{enrichedErrors.filter((e: any) => e.family === 'SUCESO').length} SUCESO
+            {' · '}{enrichedErrors.filter((e: any) => !e.isNoError && e.family !== 'SUCESO' && e.family !== 'AVISO').length} ALARMA
+            {' · '}{enrichedErrors.filter((e: any) => e.family === 'AVISO').length} AVISO
           </p>
           {rawMessages && Array.isArray(rawMessages) && rawMessages.length > 0 && (
-            <pre className="text-[5px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] rounded p-1 overflow-x-auto max-h-24 whitespace-pre-wrap break-all">
-              {JSON.stringify(rawMessages.slice(0, 3), null, 1)}
-            </pre>
+            <div className="space-y-0.5">
+              <p className="text-[5px] font-bold text-[var(--text-muted)] uppercase">Derniers 5 messages bruts :</p>
+              {rawMessages.slice(0, 5).map((msg: any, i: number) => (
+                <div key={i} className="text-[5px] font-mono bg-[var(--bg-tertiary)] rounded px-1 py-0.5 flex gap-2">
+                  <span className="text-[#EA580C] font-bold">{msg.dtype}</span>
+                  <span>type={msg.type} sub={msg.subtype}/{msg.subsubtype}</span>
+                  <span className="text-[#059669] font-bold">content="{msg.content}"</span>
+                  <span className="text-[var(--text-muted)]">{msg.messageDate?.slice(0, 16)}</span>
+                  <span className="text-[#8B5CF6]">liftId={msg.liftId}</span>
+                </div>
+              ))}
+            </div>
           )}
         </CardBody></Card>
       )}
@@ -1854,11 +1923,12 @@ function LiftMessageRow({ msg }: { msg: any }) {
         {expanded && (
           <div className="px-3 pb-2 space-y-1 border-t border-[var(--border-secondary)]">
             {/* Détails techniques */}
-            <div className="mt-1 grid grid-cols-4 gap-1">
+            <div className="mt-1 grid grid-cols-5 gap-1">
               <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">ID:</span> <span className="font-mono">{msg.id}</span></div>
+              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Dtype:</span> <span className="font-mono text-[#8B5CF6]">{msg.dtype}</span></div>
               <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Type:</span> <span className="font-mono">{msg.type}/{msg.subtype}/{msg.subsubtype}</span></div>
               <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Content:</span> <span className="font-mono text-[#EA580C]">{msg.content}</span></div>
-              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Archivé:</span> {msg.archivado ? 'Oui' : 'Non'}</div>
+              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">LiftId:</span> <span className="font-mono">{msg.liftId}</span></div>
             </div>
             {msg.cause && (
               <div>
