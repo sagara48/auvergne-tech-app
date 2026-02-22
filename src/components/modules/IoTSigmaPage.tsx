@@ -754,20 +754,6 @@ function MonitorTab({ selectedLiftId, setSelectedLiftId, onLiftChange }: {
     onLiftChange(lift);
   }, [selectedLiftId, activeLifts]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeLifts = useMemo(() => {
-    if (!lifts) return [];
-    let list = lifts.filter(l => !l.baja);
-    if (search) {
-      const q = search.toLowerCase();
-      list = list.filter(l =>
-        l.liftCompRef.toLowerCase().includes(q) ||
-        l.city.toLowerCase().includes(q) ||
-        l.descripcion.toLowerCase().includes(q)
-      );
-    }
-    return list.sort((a, b) => a.liftCompRef.localeCompare(b.liftCompRef));
-  }, [lifts, search]);
-
   if (isLoading) return <LoadingState text="Chargement des ascenseurs..." />;
 
   return (
