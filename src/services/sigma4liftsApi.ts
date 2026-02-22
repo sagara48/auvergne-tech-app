@@ -147,11 +147,11 @@ export function getSigma4FrontUrl(): string {
 // ═══ AUTH — Login / Logout / Refresh ═══
 
 export async function loginSigma4(username: string, password: string): Promise<Sigma4Session> {
-  // POST /divide/login → retourne le token
+  // POST /divide/login → form-urlencoded
   const res = await fetch(`${SIGMA4_API}/divide/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ username, password }).toString(),
   });
 
   if (!res.ok) {
