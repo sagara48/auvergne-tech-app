@@ -3,11 +3,11 @@
 // Login → /divide/login → Dashboard | Ascenseurs | Monitor | Erreurs
 // ═══════════════════════════════════════════════════════════════
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Radio, ExternalLink, RefreshCw, LogIn, LogOut, Loader2,
   XCircle, BarChart3, PieChart, ChevronDown, ChevronUp,
-  LayoutDashboard, Building2, Search, MapPin,
+  LayoutDashboard, Building2, Search, MapPin, Check,
   ChevronRight, Shield, Layers, Navigation, Wifi, Activity, TrendingUp,
   Monitor, AlertTriangle, BookOpen, ArrowUp, ArrowDown, DoorOpen,
   Weight, Thermometer, Zap, Send, Filter,
@@ -19,8 +19,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Sigma4Chart, Sigma4ChartItem, Sigma4Dashboard, Sigma4Lift, Sigma4ServiceEntry,
   Sigma4MonitorData, MonitorAction,
-  getDashboard, getLifts, getLiftServices, getMonitorOnline, sendMonitorAction,
+  getDashboard, getLifts, getLiftServices, getMonitorOnline, sendMonitorAction, activateMonitor,
   getErrorInfo, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
+  getDrivePhaseLabel, getDrivePhaseColor, getContactorLabel, getContactorColor, getBrakeLabel, getBrakeColor,
   isConnectedToSigma4, loginSigma4, logoutSigma4,
   MONITOR_ACTIONS,
 } from '@/services/sigma4liftsApi';
@@ -809,14 +810,74 @@ function MonitorTab() {
 
 function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
   const qc = useQueryClient();
-  const { data: monitor, isLoading, error, dataUpdatedAt } = useQuery({
+
+  // ── Phase de connexion ──
+  const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'error'>('connecting');
+  const [connectionStep, setConnectionStep] = useState(0);
+  const [connectionError, setConnectionError] = useState('');
+
+  const CONNECTION_STEPS = [
+    { label: 'Établissement de la connexion…', icon: '📡' },
+    { label: 'Activation du monitor…', icon: '🔌' },
+    { label: 'Synchronisation des données…', icon: '📊' },
+    { label: 'Connexion établie', icon: '✅' },
+  ];
+
+  useEffect(() => {
+    let cancelled = false;
+    setConnectionState('connecting');
+    setConnectionStep(0);
+    setConnectionError('');
+
+    (async () => {
+      try {
+        // Étape 1 — Connexion
+        if (cancelled) return;
+        setConnectionStep(0);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Étape 2 — Activation du monitor
+        if (cancelled) return;
+        setConnectionStep(1);
+        try {
+          await activateMonitor(liftId);
+        } catch {
+          // Pas bloquant — certains ascenseurs fonctionnent sans activation explicite
+        }
+        await new Promise(r => setTimeout(r, 500));
+
+        // Étape 3 — Premier fetch des données
+        if (cancelled) return;
+        setConnectionStep(2);
+        await getMonitorOnline(liftId);
+        await new Promise(r => setTimeout(r, 400));
+
+        // Étape 4 — Connecté
+        if (cancelled) return;
+        setConnectionStep(3);
+        await new Promise(r => setTimeout(r, 300));
+
+        if (!cancelled) setConnectionState('connected');
+      } catch (e: any) {
+        if (!cancelled) {
+          setConnectionError(e.message || 'Erreur de connexion');
+          setConnectionState('error');
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [liftId]);
+
+  // ── Polling (uniquement quand connecté) ──
+  const { data: monitor, error, dataUpdatedAt } = useQuery({
     queryKey: ['sigma4', 'monitor', liftId],
     queryFn: () => getMonitorOnline(liftId),
     refetchInterval: 1000,
     retry: 1,
     retryDelay: 5000,
+    enabled: connectionState === 'connected',
   });
-  // Charger les labels de modes (cache long)
   useQuery({ queryKey: ['sigma4', 'modes'], queryFn: fetchModesXML, staleTime: Infinity, retry: false });
   const [showActions, setShowActions] = useState(false);
 
@@ -847,31 +908,99 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
     }
   };
 
-  if (isLoading) return <LoadingState text="Connexion au monitor..." />;
-
-  if (error) {
-    const msg = (error as Error).message || '';
-    const is404 = msg.includes('404') || msg.includes('Not Found');
+  // ── Écran de connexion ──
+  if (connectionState === 'connecting') {
     return (
       <div className="h-full flex items-center justify-center">
-        <Card><CardBody className="p-4 text-center max-w-xs">
+        <Card className="w-64"><CardBody className="p-5 space-y-4">
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#059669]/10 flex items-center justify-center mx-auto mb-3">
+              <Monitor className="w-6 h-6 text-[#059669]" />
+            </div>
+            <h3 className="text-[12px] font-extrabold">Connexion au Monitor</h3>
+            <p className="text-[8px] text-[var(--text-muted)] mt-0.5">{lift?.liftCompRef || `#${liftId}`}</p>
+          </div>
+
+          <div className="space-y-2">
+            {CONNECTION_STEPS.map((step, i) => {
+              const isActive = i === connectionStep;
+              const isDone = i < connectionStep;
+              return (
+                <div key={i} className={cn('flex items-center gap-2 px-2 py-1.5 rounded transition-all duration-300',
+                  isActive ? 'bg-[#059669]/10' : isDone ? 'opacity-60' : 'opacity-25'
+                )}>
+                  {isDone ? (
+                    <div className="w-4 h-4 rounded-full bg-[#059669] flex items-center justify-center flex-shrink-0">
+                      <Check className="w-2.5 h-2.5 text-white" />
+                    </div>
+                  ) : isActive ? (
+                    <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+                      <div className="w-3 h-3 rounded-full border-2 border-[#059669] border-t-transparent animate-spin" />
+                    </div>
+                  ) : (
+                    <div className="w-4 h-4 rounded-full bg-[var(--bg-tertiary)] flex-shrink-0" />
+                  )}
+                  <span className={cn('text-[8px] font-semibold',
+                    isActive ? 'text-[#059669]' : isDone ? 'text-[var(--text-secondary)]' : 'text-[var(--text-muted)]'
+                  )}>{step.label}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Barre de progression */}
+          <div className="w-full h-1 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
+            <div className="h-full bg-[#059669] rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${((connectionStep + 1) / CONNECTION_STEPS.length) * 100}%` }} />
+          </div>
+        </CardBody></Card>
+      </div>
+    );
+  }
+
+  // ── Erreur de connexion ──
+  if (connectionState === 'error') {
+    const is404 = connectionError.includes('404') || connectionError.includes('Not Found');
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Card className="w-64"><CardBody className="p-5 text-center space-y-3">
           {is404 ? (
             <>
-              <Monitor className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2 opacity-50" />
+              <Monitor className="w-8 h-8 text-[var(--text-muted)] mx-auto opacity-50" />
               <p className="text-[10px] font-bold text-[var(--text-muted)]">Monitor non disponible</p>
-              <p className="text-[8px] text-[var(--text-muted)] mt-1">
+              <p className="text-[8px] text-[var(--text-muted)]">
                 L'ascenseur <strong>{lift?.liftCompRef}</strong> ne supporte pas le monitoring temps réel.
               </p>
             </>
           ) : (
             <>
-              <XCircle className="w-8 h-8 text-[#DC2626] mx-auto mb-2" />
-              <p className="text-[10px] font-bold text-[#DC2626]">Erreur de chargement</p>
-              <p className="text-[8px] text-[var(--text-muted)]">{msg}</p>
-              <button onClick={() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] })}
-                className="mt-2 px-3 py-1 rounded bg-[#059669] text-white text-[9px] font-bold">Réessayer</button>
+              <XCircle className="w-8 h-8 text-[#DC2626] mx-auto" />
+              <p className="text-[10px] font-bold text-[#DC2626]">Échec de connexion</p>
+              <p className="text-[8px] text-[var(--text-muted)]">{connectionError}</p>
             </>
           )}
+          <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); }}
+            className="px-4 py-1.5 rounded bg-[#059669] text-white text-[9px] font-bold hover:bg-[#059669]/90">
+            Réessayer
+          </button>
+        </CardBody></Card>
+      </div>
+    );
+  }
+
+  // ── Erreur de polling (après connexion réussie) ──
+  if (error && !monitor) {
+    const msg = (error as Error).message || '';
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Card className="w-64"><CardBody className="p-5 text-center space-y-3">
+          <XCircle className="w-8 h-8 text-[#DC2626] mx-auto" />
+          <p className="text-[10px] font-bold text-[#DC2626]">Connexion perdue</p>
+          <p className="text-[8px] text-[var(--text-muted)]">{msg}</p>
+          <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); }}
+            className="px-4 py-1.5 rounded bg-[#059669] text-white text-[9px] font-bold hover:bg-[#059669]/90">
+            Reconnecter
+          </button>
         </CardBody></Card>
       </div>
     );
@@ -1088,9 +1217,9 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               <Activity className="w-2.5 h-2.5" /> Variateur
             </p>
             <div className="grid grid-cols-4 gap-1">
-              <MonitorBadge label="Phase" value={String(monitor.faseVariador ?? '—')} color="#64748B" />
-              <MonitorBadge label="Contacteurs" value={String(monitor.variadorContactores ?? '—')} color="#64748B" />
-              <MonitorBadge label="Frein" value={String(monitor.variadorFreno ?? '—')} color="#64748B" />
+              <MonitorBadge label="Phase" value={getDrivePhaseLabel(monitor.faseVariador)} color={getDrivePhaseColor(monitor.faseVariador)} />
+              <MonitorBadge label="Contacteurs" value={getContactorLabel(monitor.variadorContactores)} color={getContactorColor(monitor.variadorContactores)} />
+              <MonitorBadge label="Frein" value={getBrakeLabel(monitor.variadorFreno)} color={getBrakeColor(monitor.variadorFreno)} />
               <MonitorBadge label="TSO" value={monitor.variadorTSO ? 'Actif' : 'Inactif'} color={monitor.variadorTSO ? '#DC2626' : '#059669'} />
               <MonitorBadge label="V bus" value={monitor.tensionBus != null ? `${monitor.tensionBus} V` : '—'} color="#3B82F6" />
               <MonitorBadge label="I bus" value={monitor.intensidadBus != null ? `${monitor.intensidadBus}` : '—'} color="#3B82F6" />

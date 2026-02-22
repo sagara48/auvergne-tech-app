@@ -244,8 +244,56 @@ export async function getLiftServices(liftId: number): Promise<Sigma4ServiceEntr
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ÉTATS PORTES (embarque.estado)
+// VARIATEUR — Labels phases, contacteurs, freins
+// Source : protocole ecoGO / convention variateurs ascenseurs
 // ═══════════════════════════════════════════════════════════════
+
+/** Phase du variateur (faseVariador) */
+export const DRIVE_PHASES: Record<number, { label: string; color: string }> = {
+  0: { label: 'Arrêté',           color: '#64748B' },
+  1: { label: 'Pré-magnétisation', color: '#CA8A04' },
+  2: { label: 'Accélération',     color: '#3B82F6' },
+  3: { label: 'Vitesse constante', color: '#059669' },
+  4: { label: 'Décélération',     color: '#EA580C' },
+  5: { label: 'Arrêt frein',      color: '#CA8A04' },
+  6: { label: 'Recalage',         color: '#8B5CF6' },
+  7: { label: 'Évacuation',       color: '#DC2626' },
+};
+
+/** Contacteurs (variadorContactores) — bitmask K1/K2 */
+export const CONTACTOR_STATES: Record<number, { label: string; color: string }> = {
+  0: { label: 'K1/K2 ouverts',   color: '#64748B' },
+  1: { label: 'K1 fermé',        color: '#CA8A04' },
+  2: { label: 'K2 fermé',        color: '#CA8A04' },
+  3: { label: 'K1+K2 fermés',    color: '#059669' },
+};
+
+/** Frein (variadorFreno) — bitmask micros frein */
+export const BRAKE_STATES: Record<number, { label: string; color: string }> = {
+  0: { label: 'Frein appliqué',     color: '#059669' },
+  1: { label: 'Frein 1 relâché',    color: '#CA8A04' },
+  2: { label: 'Frein 2 relâché',    color: '#CA8A04' },
+  3: { label: 'Freins relâchés',    color: '#3B82F6' },
+};
+
+export function getDrivePhaseLabel(v: number | null | undefined): string {
+  return v != null && DRIVE_PHASES[v] ? DRIVE_PHASES[v].label : v != null ? `Phase ${v}` : '—';
+}
+export function getDrivePhaseColor(v: number | null | undefined): string {
+  return v != null && DRIVE_PHASES[v] ? DRIVE_PHASES[v].color : '#64748B';
+}
+export function getContactorLabel(v: number | null | undefined): string {
+  return v != null && CONTACTOR_STATES[v] ? CONTACTOR_STATES[v].label : v != null ? `État ${v}` : '—';
+}
+export function getContactorColor(v: number | null | undefined): string {
+  return v != null && CONTACTOR_STATES[v] ? CONTACTOR_STATES[v].color : '#64748B';
+}
+export function getBrakeLabel(v: number | null | undefined): string {
+  return v != null && BRAKE_STATES[v] ? BRAKE_STATES[v].label : v != null ? `État ${v}` : '—';
+}
+export function getBrakeColor(v: number | null | undefined): string {
+  return v != null && BRAKE_STATES[v] ? BRAKE_STATES[v].color : '#64748B';
+}
 
 export const DOOR_STATES: Record<number, { label: string; color: string }> = {
   0: { label: 'Fermée',      color: '#059669' },
