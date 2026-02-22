@@ -534,8 +534,7 @@ export async function getLiftErrors(liftId: number, days = 7): Promise<Sigma4Mes
   const end = new Date();
   const start = new Date(end.getTime() - days * 86400_000);
   const fmt = (d: Date) => `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}+${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  const qs = `?startDate=${encodeURIComponent(fmt(start))}&endDate=${encodeURIComponent(fmt(end))}`;
-  return sigma4Get(`/divide/lifts/${liftId}/messages${qs}`);
+  return sigma4Get(`/divide/lifts/${liftId}/messages?startDate=${fmt(start)}&endDate=${fmt(end)}`);
 }
 
 /** Catalogue erreurs S4L — /info/errores (avec params optionnels) */
