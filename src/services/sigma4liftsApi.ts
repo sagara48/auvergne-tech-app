@@ -135,11 +135,14 @@ async function sigma4Put(path: string, body?: any): Promise<any> {
   const token = getStoredSession()?.token;
   if (!token) throw new Error('Non connecté');
 
-  const opts: RequestInit = {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-  };
-  if (body !== undefined && body !== null) opts.body = JSON.stringify(body);
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  const opts: RequestInit = { method: 'PUT', headers };
+
+  // Body seulement si fourni (pas de Content-Type sans body, comme Axios)
+  if (body !== undefined && body !== null) {
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
 
   const res = await fetch(`${SIGMA4_API}${path}`, opts);
 
@@ -476,8 +479,17 @@ export async function getMonitorOnline(liftId: number): Promise<Sigma4MonitorDat
 }
 
 /** Activer le monitor temps réel (session monitoring) */
+/** Activer le monitor (initialisation) */
 export async function activateMonitor(liftId: number): Promise<any> {
-  return sigma4Put(`/divide/lifts/${liftId}/control/activateMonitor`);
+  // Étape 1 : Activation initiale (comme S4L: da function)
+  await sigma4Put(`/divide/lifts/${liftId}/control/activateMonitor`);
+  // Étape 2 : Démarrer le flux temps réel (comme S4L: la function = logMonitorUsage)  
+  return sigma4Put(`/divide/lifts/${liftId}/control/activateMonitor?start=true`);
+}
+
+/** Keep-alive monitor — rappeler start=true pour maintenir le flux */
+export async function keepAliveMonitor(liftId: number): Promise<any> {
+  return sigma4Put(`/divide/lifts/${liftId}/control/activateMonitor?start=true`);
 }
 
 /** Obtenir l'URL du monitor temps réel (serveur WebSocket/polling séparé) */

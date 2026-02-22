@@ -19,7 +19,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Sigma4Chart, Sigma4ChartItem, Sigma4Dashboard, Sigma4Lift, Sigma4ServiceEntry,
   Sigma4MonitorData, MonitorAction,
-  getDashboard, getLifts, getLiftServices, getMonitorOnline, sendMonitorAction, activateMonitor,
+  getDashboard, getLifts, getLiftServices, getMonitorOnline, sendMonitorAction, activateMonitor, keepAliveMonitor,
   getErrorInfo, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
   getDrivePhaseLabel, getDrivePhaseColor, getContactorLabel, getContactorColor, getBrakeLabel, getBrakeColor,
   isConnectedToSigma4, loginSigma4, logoutSigma4,
@@ -842,8 +842,9 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
         setConnectionStep(1);
         try {
           await activateMonitor(liftId);
-        } catch {
-          // Pas bloquant
+        } catch (e: any) {
+          console.warn('[Monitor] activateMonitor failed:', e.message);
+          // Continue quand même — status peut fonctionner sans activation explicite
         }
 
         // Étape 3 — Premier fetch des données
@@ -868,6 +869,15 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
 
     return () => { cancelled = true; };
   }, [liftId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Keep-alive : ré-activer le monitor toutes les 10s ──
+  useEffect(() => {
+    if (connectionState !== 'connected') return;
+    const interval = setInterval(() => {
+      keepAliveMonitor(liftId).catch(() => {});
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [connectionState, liftId]);
 
   // ── Polling (uniquement quand connecté) ──
   const { data: monitor, error, dataUpdatedAt } = useQuery({
@@ -1051,8 +1061,13 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
         <div className="flex items-center gap-1">
           <div className="w-1.5 h-1.5 rounded-full bg-[#059669] animate-pulse" />
           <span className="text-[7px] text-[var(--text-muted)]">
-            {updatedAt || 'Live'}
+            {dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString('fr-FR') : 'Live'}
           </span>
+          {updatedAt && (
+            <span className="text-[6px] text-[var(--text-muted)] opacity-60" title="Dernière mise à jour de l'ascenseur">
+              (S4L: {updatedAt})
+            </span>
+          )}
           <button onClick={() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] })}
             className="p-1 rounded hover:bg-[var(--bg-tertiary)]">
             <RefreshCw className="w-3 h-3 text-[var(--text-muted)]" />
