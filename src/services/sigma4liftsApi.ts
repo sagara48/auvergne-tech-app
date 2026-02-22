@@ -443,7 +443,7 @@ export async function getMonitorURL(liftId: number): Promise<string | null> {
 /** Envoyer une commande ecoGO (Monitor Online action)
  *  PUT /lifts/{id}/control/{cabina}/ecogo/{action} { orden, planta } */
 export async function sendMonitorAction(
-  liftId: number, action: MonitorAction, cabina = 1, params?: { orden?: number; planta?: number }
+  liftId: number, action: MonitorAction, cabina = 1, params?: { orden?: string | number; planta?: number }
 ): Promise<any> {
   return sigma4Put(`/divide/lifts/${liftId}/control/${cabina}/ecogo/${action}`, params || {});
 }

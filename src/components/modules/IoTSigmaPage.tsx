@@ -832,17 +832,18 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
     }
   };
 
-  /** Envoyer la cabine à un étage (Comando ecogo) */
-  const handleComando = async (planta: number) => {
-    if (!confirm(`Envoyer la cabine à l'étage ${planta} ?`)) return;
+  /** Envoyer un appel via ecogo/Comando */
+  const handleComando = async (planta: number, orden: string) => {
+    const typeLabel = orden === 'LlamadasCabina' ? 'cabine' : orden === 'LlamadasExterioresSubida' ? 'montée' : 'descente';
+    if (!confirm(`Envoyer appel ${typeLabel} → étage ${planta} ?`)) return;
     try {
-      await sendMonitorAction(liftId, 'Comando' as MonitorAction, lift?.numeroCabina || 1, { planta: planta - 1 });
-      toast.success(`Commande envoyée : étage ${planta}`);
+      await sendMonitorAction(liftId, 'Comando' as MonitorAction, lift?.numeroCabina || 1, { orden, planta: planta - 1 });
+      toast.success(`Appel ${typeLabel} envoyé : étage ${planta}`);
       setTimeout(() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] }), 1500);
     } catch (e: any) {
       const msg = e.message || 'Erreur inconnue';
-      console.error('[Comando]', liftId, planta, msg);
-      toast.error(`Erreur commande étage ${planta} : ${msg}`);
+      console.error('[Comando]', liftId, orden, planta, msg);
+      toast.error(`Erreur appel étage ${planta} : ${msg}`);
     }
   };
 
@@ -1108,7 +1109,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 <div className="flex flex-wrap gap-0.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeCabinCalls.includes(f);
-                    return <button key={f} onClick={() => handleComando(f)}
+                    return <button key={f} onClick={() => handleComando(f, 'LlamadasCabina')}
                       title={`Envoyer cabine à l'étage ${f}`}
                       className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#8B5CF6]',
                       active ? 'bg-[#8B5CF6] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#8B5CF6]/20'
@@ -1122,7 +1123,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 <div className="flex flex-wrap gap-0.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeUpCalls.includes(f);
-                    return <button key={f} onClick={() => handleComando(f)}
+                    return <button key={f} onClick={() => handleComando(f, 'LlamadasExterioresSubida')}
                       title={`Appel montée étage ${f}`}
                       className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#059669]',
                       active ? 'bg-[#059669] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#059669]/20'
@@ -1136,7 +1137,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 <div className="flex flex-wrap gap-0.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeDownCalls.includes(f);
-                    return <button key={f} onClick={() => handleComando(f)}
+                    return <button key={f} onClick={() => handleComando(f, 'LlamadasExterioresBajada')}
                       title={`Appel descente étage ${f}`}
                       className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#DC2626]',
                       active ? 'bg-[#DC2626] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#DC2626]/20'
