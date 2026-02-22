@@ -835,7 +835,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
         // Étape 1 — Connexion
         if (cancelled) return;
         setConnectionStep(0);
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 300));
 
         // Étape 2 — Activation du monitor
         if (cancelled) return;
@@ -843,9 +843,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
         try {
           await activateMonitor(liftId);
         } catch {
-          // Pas bloquant — certains ascenseurs fonctionnent sans activation explicite
+          // Pas bloquant
         }
-        await new Promise(r => setTimeout(r, 500));
 
         // Étape 3 — Premier fetch des données
         if (cancelled) return;
@@ -853,10 +852,10 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
         const firstData = await getMonitorOnline(liftId);
         if (!cancelled) setInitialMonitorData(firstData);
 
-        // Étape 4 — Connecté (transition rapide)
+        // Étape 4 — Connecté (immédiat)
         if (cancelled) return;
         setConnectionStep(3);
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 150));
 
         if (!cancelled) setConnectionState('connected');
       } catch (e: any) {
@@ -879,6 +878,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
     retryDelay: 5000,
     enabled: connectionState === 'connected',
     initialData: initialMonitorData ?? undefined,
+    initialDataUpdatedAt: initialMonitorData ? Date.now() : undefined,
+    structuralSharing: false, // évite les comparaisons profondes à chaque poll (perf)
   });
   useQuery({ queryKey: ['sigma4', 'modes'], queryFn: fetchModesXML, staleTime: Infinity, retry: false });
   const [showActions, setShowActions] = useState(false);
