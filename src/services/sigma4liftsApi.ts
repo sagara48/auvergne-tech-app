@@ -1,153 +1,66 @@
 // ═══════════════════════════════════════════════════════════════
-// SIGMA4LIFTS API — Connexion directe à la plateforme IoT
-// Auth → Token → Fetch data → Cache Supabase
-// https://www.sigma4lifts.com/sigma-front/#/
+// SIGMA4LIFTS API — Connexion directe plateforme IoT
+// Auth: POST /divide/login → token
+// Data: GET /divide/dashboard, /divide/users, etc.
+// Proxy Vercel: /api/sigma4/* → sigma4lifts.com/sigma/rs/*
 // ═══════════════════════════════════════════════════════════════
-
-import { supabase } from './supabase';
 
 // ═══ TYPES ═══
 
-export type EtatAscenseur = 'normal' | 'inspection' | 'hors_service' | 'emprisonnement' | 'alarme' | 'maintenance';
-export type EtatPorte = 'ouverte' | 'fermee' | 'en_mouvement' | 'bloquee';
-export type NiveauAlerte = 'info' | 'warning' | 'critical' | 'emergency';
-export type TypeEvenement = 'trajet' | 'alarme' | 'erreur' | 'maintenance' | 'emprisonnement' | 'porte' | 'batterie' | 'temperature' | 'statut' | 'firmware';
-
 export interface Sigma4Session {
   token: string;
-  refreshToken?: string;
   userId: string;
   userName: string;
-  expiresAt: number;  // timestamp ms
   company?: string;
+  expiresAt: number;
 }
 
-export interface LiftStatus {
-  liftId: string;
-  ascenseurId?: string;
-  nom: string;
-  adresse: string;
-  lat?: number;
-  lng?: number;
-  etat: EtatAscenseur;
-  etage: number;
-  etageMax: number;
-  positionMm: number;
-  porte: EtatPorte;
-  enMouvement: boolean;
-  direction: 'up' | 'down' | 'idle';
-  batteriePercent: number;
-  temperatureMachinerie: number;
-  securitesOk: boolean;
-  connecte: boolean;
-  dernierSignal: string;
-  firmwareVersion: string;
-  hardwareVersion: string;
-  controllerType: string;
-}
-
-export interface LiftAlert {
+export interface Sigma4ChartItem {
+  label: string | null;
+  quantity: number;
   id: string;
-  liftId: string;
-  niveau: NiveauAlerte;
-  type: TypeEvenement;
-  message: string;
-  timestamp: string;
-  acquittee: boolean;
-  acquittePar?: string;
-  acquitteDate?: string;
 }
 
-export interface LiftEvent {
-  id: string;
-  liftId: string;
-  type: TypeEvenement;
-  description: string;
-  timestamp: string;
-  details?: Record<string, any>;
+export interface Sigma4Chart {
+  caption: string;
+  aspect: 'pie' | 'bar';
+  data: Sigma4ChartItem[];
+  idString: string;
 }
 
-export interface TrafficStats {
-  liftId: string;
-  date: string;
-  trajetsTotal: number;
-  trajetsParHeure: number[];
-  etagesPlusFrequentes: { etage: number; count: number }[];
-  tempsArretMoyen: number;
-  consommationKwh?: number;
+export interface Sigma4Dashboard {
+  groupId: string | null;
+  dashboard: Sigma4Chart[];
 }
 
-export interface LiftHealth {
-  liftId: string;
-  scoreGlobal: number;
-  moteur: number;
-  portes: number;
-  cables: number;
-  frein: number;
-  variateur: number;
-  dernierCalcul: string;
-}
+// ═══ CONFIG ═══
 
-export interface IoTDashboardStats {
-  totalAscenseurs: number;
-  enLigne: number;
-  horsLigne: number;
-  enPanne: number;
-  alertesActives: number;
-  emprisonnements24h: number;
-  trajetsAujourdhui: number;
-  disponibiliteMoyenne: number;
-}
+const SIGMA4_API   = '/api/sigma4';  // Proxy Vercel → sigma4lifts.com/sigma/rs/
+const SIGMA4_FRONT = 'https://www.sigma4lifts.com/sigma-front/#/';
+const STORAGE_KEY  = 'sigma4_session';
 
-export type RemoteCommand = 'call_car' | 'reset_board' | 'force_alarm_test' | 'change_mode' | 'force_door_close';
-
-// ═══ CONFIGURATION ═══
-
-const SIGMA4_BASE = 'https://www.sigma4lifts.com';
-const SIGMA4_API  = '/api/sigma4';  // Proxy Vercel → contourne CORS
-const SIGMA4_FRONT = `${SIGMA4_BASE}/sigma-front/#/`;
-
-const STORAGE_KEY = 'sigma4_session';
-
-// ═══ SESSION MANAGEMENT ═══
+// ═══ SESSION ═══
 
 function getStoredSession(): Sigma4Session | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const session: Sigma4Session = JSON.parse(raw);
-    if (session.expiresAt < Date.now()) {
-      localStorage.removeItem(STORAGE_KEY);
-      return null;
-    }
-    return session;
+    const s: Sigma4Session = JSON.parse(raw);
+    if (s.expiresAt < Date.now()) { localStorage.removeItem(STORAGE_KEY); return null; }
+    return s;
   } catch { return null; }
 }
 
-function storeSession(session: Sigma4Session) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-}
+function storeSession(s: Sigma4Session) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+function clearSession() { localStorage.removeItem(STORAGE_KEY); }
 
-function clearSession() {
-  localStorage.removeItem(STORAGE_KEY);
-}
+export function getSigma4Session(): Sigma4Session | null { return getStoredSession(); }
+export function isConnectedToSigma4(): boolean { return getStoredSession() !== null; }
+export function getSigma4FrontUrl(): string { return SIGMA4_FRONT; }
 
-export function getSigma4Session(): Sigma4Session | null {
-  return getStoredSession();
-}
-
-export function isConnectedToSigma4(): boolean {
-  return getStoredSession() !== null;
-}
-
-export function getSigma4FrontUrl(): string {
-  return SIGMA4_FRONT;
-}
-
-// ═══ AUTH — Login / Logout / Refresh ═══
+// ═══ AUTH ═══
 
 export async function loginSigma4(username: string, password: string): Promise<Sigma4Session> {
-  // POST /divide/login → form-urlencoded
   const res = await fetch(`${SIGMA4_API}/divide/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -156,469 +69,313 @@ export async function loginSigma4(username: string, password: string): Promise<S
 
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) throw new Error('Identifiants incorrects');
-    if (res.status === 404) throw new Error('Utilisateur non trouvé');
-    const err = await res.text().catch(() => '');
-    throw new Error(`Erreur Sigma4Lifts (${res.status}): ${err}`);
+    throw new Error(`Erreur Sigma4 (${res.status})`);
   }
 
   const data = await res.json();
 
-  // Extraire le token — peut être à la racine ou dans un sous-objet
-  const token = data.token || data.access_token || data.accessToken
-    || data.sessionId || data.session_id || data.key
-    || (typeof data === 'string' ? data : '');
+  // Le token peut être retourné directement comme string ou dans un objet
+  const token = typeof data === 'string' ? data
+    : data.token || data.access_token || data.accessToken || data.sessionId || data.key || '';
 
-  if (!token) throw new Error('Token non reçu — vérifiez vos identifiants');
+  if (!token) throw new Error('Token non reçu');
 
-  // Récupérer les infos utilisateur avec le token
+  // Infos utilisateur
   let userName = username;
   let company = '';
   let userId = username;
   try {
-    const userRes = await fetch(`${SIGMA4_API}/divide/users?loginName=${encodeURIComponent(username)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (userRes.ok) {
-      const userData = await userRes.json();
-      const user = Array.isArray(userData) ? userData[0] : userData;
-      userName = user?.name || user?.userName || user?.loginName || username;
-      company = user?.company || user?.companyName || user?.divide || '';
-      userId = String(user?.id || user?.userId || username);
-    }
-  } catch {}
-
-  const session: Sigma4Session = {
-    token,
-    refreshToken: undefined,
-    userId,
-    userName,
-    company,
-    expiresAt: Date.now() + 86400 * 1000, // 24h
-  };
-
-  storeSession(session);
-
-  // Enregistrer la connexion Sigma4 dans Supabase (métadonnées)
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const userRes = await sigma4Get('/divide/users?loginName=' + encodeURIComponent(username), token);
+    const user = Array.isArray(userRes) ? userRes[0] : userRes;
     if (user) {
-      await supabase.from('sigma4_connections').upsert({
-        user_id: user.id,
-        sigma4_user_id: session.userId,
-        sigma4_email: username,
-        sigma4_company: session.company,
-        last_login: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
+      userName = user.name || user.userName || user.loginName || username;
+      company = user.company || user.companyName || user.divide || '';
+      userId = String(user.id || user.userId || username);
     }
   } catch {}
 
+  const session: Sigma4Session = { token, userId, userName, company, expiresAt: Date.now() + 86400_000 };
+  storeSession(session);
   return session;
 }
 
-export async function logoutSigma4(): Promise<void> {
-  const session = getStoredSession();
-  if (session?.token) {
-    await fetch(`${SIGMA4_API}/auth/logout`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${session.token}` },
-    }).catch(() => {});
-  }
-  clearSession();
-}
+export function logoutSigma4(): void { clearSession(); }
 
-async function refreshToken(): Promise<boolean> {
-  const session = getStoredSession();
-  if (!session?.refreshToken) return false;
-  try {
-    const res = await fetch(`${SIGMA4_API}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: session.refreshToken }),
-    });
-    if (!res.ok) { clearSession(); return false; }
-    const data = await res.json();
-    storeSession({
-      ...session,
-      token: data.token || data.access_token,
-      expiresAt: Date.now() + (data.expiresIn || 86400) * 1000,
-    });
-    return true;
-  } catch { clearSession(); return false; }
-}
+// ═══ FETCH HELPERS ═══
 
-// ═══ FETCH WRAPPER (auth + retry) ═══
-
-async function sigma4Fetch<T>(path: string, options?: RequestInit): Promise<T> {
-  let session = getStoredSession();
-  if (!session) throw new Error('Non connecté à Sigma4Lifts');
-
-  // Token expiré ? tenter refresh
-  if (session.expiresAt < Date.now() + 60000) {
-    const ok = await refreshToken();
-    if (!ok) throw new Error('Session Sigma4Lifts expirée — reconnectez-vous');
-    session = getStoredSession()!;
-  }
+async function sigma4Get(path: string, tokenOverride?: string): Promise<any> {
+  const token = tokenOverride || getStoredSession()?.token;
+  if (!token) throw new Error('Non connecté');
 
   const res = await fetch(`${SIGMA4_API}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.token}`,
-      ...(options?.headers || {}),
-    },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
-  // 401 → tenter refresh une fois
-  if (res.status === 401) {
-    const ok = await refreshToken();
-    if (ok) {
-      const s2 = getStoredSession()!;
-      const res2 = await fetch(`${SIGMA4_API}${path}`, {
-        ...options,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s2.token}` },
-      });
-      if (res2.ok) return res2.json();
-    }
-    clearSession();
-    throw new Error('Session expirée — reconnectez-vous');
-  }
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`Sigma4 erreur ${res.status}: ${err}`);
-  }
-
+  if (res.status === 401) { clearSession(); throw new Error('Session expirée'); }
+  if (!res.ok) throw new Error(`Sigma4 ${res.status}`);
   return res.json();
 }
 
-// ═══ STATUS — Données temps réel depuis Sigma4 ═══
+async function sigma4Post(path: string, body: any): Promise<any> {
+  const token = getStoredSession()?.token;
+  if (!token) throw new Error('Non connecté');
 
-export async function getLiftStatuses(): Promise<LiftStatus[]> {
-  try {
-    const data = await sigma4Fetch<any[]>('/lifts');
-    return (data || []).map(mapSigmaLift);
-  } catch (e) {
-    // Fallback Supabase cache
-    const { data } = await supabase.from('iot_lifts').select('*').order('nom');
-    return (data || []).map(mapDbLift);
-  }
+  const res = await fetch(`${SIGMA4_API}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (res.status === 401) { clearSession(); throw new Error('Session expirée'); }
+  if (!res.ok) throw new Error(`Sigma4 ${res.status}`);
+  return res.json();
 }
 
-export async function getLiftStatus(liftId: string): Promise<LiftStatus | null> {
-  try {
-    const data = await sigma4Fetch<any>(`/lifts/${liftId}`);
-    return mapSigmaLift(data);
-  } catch {
-    const { data } = await supabase.from('iot_lifts').select('*').eq('lift_id', liftId).single();
-    return data ? mapDbLift(data) : null;
-  }
+// ═══ ENDPOINTS CONNUS ═══
+
+export async function getDashboard(): Promise<Sigma4Dashboard> {
+  return sigma4Get('/divide/dashboard');
 }
 
-// ═══ NOTIFY — Alertes depuis Sigma4 ═══
-
-export async function getActiveAlerts(): Promise<LiftAlert[]> {
-  try {
-    const data = await sigma4Fetch<any[]>('/alerts?status=active');
-    return (data || []).map(mapSigmaAlert);
-  } catch {
-    const { data } = await supabase.from('iot_alerts').select('*').eq('acquittee', false).order('timestamp', { ascending: false });
-    return data || [];
-  }
+export async function getUser(loginName: string): Promise<any> {
+  return sigma4Get('/divide/users?loginName=' + encodeURIComponent(loginName));
 }
 
-export async function getAllAlerts(limit = 50): Promise<LiftAlert[]> {
-  try {
-    const data = await sigma4Fetch<any[]>(`/alerts?limit=${limit}`);
-    return (data || []).map(mapSigmaAlert);
-  } catch {
-    const { data } = await supabase.from('iot_alerts').select('*').order('timestamp', { ascending: false }).limit(limit);
-    return data || [];
-  }
+// ═══ LIFT TYPES ═══
+
+export interface Sigma4LiftGroup {
+  id: number;
+  groupName: string;
+  description: string;
+  companyId: number;
 }
 
-export async function acknowledgeAlert(alertId: string): Promise<void> {
-  try {
-    await sigma4Fetch(`/alerts/${alertId}/acknowledge`, { method: 'POST' });
-  } catch {}
-  // Aussi en local
-  try { await supabase.from('iot_alerts').update({ acquittee: true, acquitte_date: new Date().toISOString() }).eq('id', alertId); } catch {}
+export interface Sigma4Lift {
+  id: number;
+  liftCompRef: string;
+  cir: string | null;
+  officialRegNumber: string | null;
+  manufacturerRef: string;
+  manufacturerName: string;
+  descripcion: string;
+  registrationDate: string | null;
+  commisioningDate: string | null;
+  deregistrationDate: string | null;
+  billingStartDate: string | null;
+  billingChangeDate: string | null;
+  phoneNumber: string;
+  accesoPv: boolean;
+  tracId: number;
+  estado: number;
+  situacionEnEdificio: string;
+  numeroCabina: number;
+  traccion: string;
+  numeroPersonas: number;
+  cargaUtil: number | null;
+  arquitectura: string;
+  numeroParadas: number | null;
+  modeloManiobra: number;
+  versionSW: string;
+  baja: boolean;
+  address: string;
+  city: string;
+  province: string;
+  zipCode: string;
+  en8128: boolean;
+  reporteExternoEn8128: boolean;
+  tipoEnlace: number;
+  modeloTelefono: string;
+  modeloAscensor: string;
+  ccid: string;
+  macGSR: string | null;
+  latitude: number;
+  longitude: number;
+  ascensoresEnBateria: number;
+  dateEN8128OK: string | null;
+  ip: string | null;
+  apn: string | null;
+  simStatus: string | null;
+  versionSW: string;
+  groups: Sigma4LiftGroup[];
 }
 
-// ═══ PREVENTIVE — Événements ═══
+// ═══ ENDPOINTS ═══
 
-export async function getEvents(liftId?: string, limit = 100): Promise<LiftEvent[]> {
-  try {
-    const path = liftId ? `/lifts/${liftId}/events?limit=${limit}` : `/events?limit=${limit}`;
-    const data = await sigma4Fetch<any[]>(path);
-    return (data || []).map(mapSigmaEvent);
-  } catch {
-    let q = supabase.from('iot_events').select('*').order('timestamp', { ascending: false }).limit(limit);
-    if (liftId) q = q.eq('lift_id', liftId);
-    const { data } = await q;
-    return data || [];
-  }
+export async function getLifts(): Promise<Sigma4Lift[]> {
+  return sigma4Get('/divide/lifts?advanced=true');
 }
 
-// ═══ TRAFFIC CONTROL ═══
-
-export async function getTrafficStats(liftId: string, days = 7): Promise<TrafficStats[]> {
-  try {
-    const data = await sigma4Fetch<any[]>(`/lifts/${liftId}/traffic?days=${days}`);
-    return (data || []).map(mapSigmaTraffic);
-  } catch {
-    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-    const { data } = await supabase.from('iot_traffic').select('*').eq('lift_id', liftId).gte('date', since).order('date');
-    return data || [];
-  }
+export async function getLiftById(id: number): Promise<Sigma4Lift> {
+  return sigma4Get(`/divide/lifts/${id}?advanced=true`);
 }
 
-// ═══ HEALTH — Santé composants ═══
+// ═══ TRAFFIC / SERVICES ═══
 
-export async function getLiftHealth(liftId: string): Promise<LiftHealth | null> {
-  try {
-    const data = await sigma4Fetch<any>(`/lifts/${liftId}/health`);
-    return mapSigmaHealth(data);
-  } catch {
-    const { data } = await supabase.from('iot_health').select('*').eq('lift_id', liftId).single();
-    return data || null;
-  }
+export interface Sigma4ServiceEntry {
+  fecha: string;
+  total: number;
+  parcial: number;
 }
 
-export async function getAllHealthScores(): Promise<LiftHealth[]> {
-  try {
-    const data = await sigma4Fetch<any[]>('/health');
-    return (data || []).map(mapSigmaHealth);
-  } catch {
-    const { data } = await supabase.from('iot_health').select('*').order('score_global');
-    return data || [];
-  }
+export async function getLiftServices(liftId: number): Promise<Sigma4ServiceEntry[]> {
+  return sigma4Get(`/divide/lifts/${liftId}/services`);
 }
 
-// ═══ REMOTE CONTROL ═══
+// ═══════════════════════════════════════════════════════════════
+// MONITOR ONLINE — Types données temps réel
+// ═══════════════════════════════════════════════════════════════
 
-export async function sendRemoteCommand(liftId: string, command: RemoteCommand, params?: Record<string, any>): Promise<{ success: boolean; message: string }> {
-  try {
-    const data = await sigma4Fetch<any>(`/lifts/${liftId}/command`, {
-      method: 'POST',
-      body: JSON.stringify({ command, ...params }),
-    });
-    return { success: true, message: data.message || `Commande "${command}" envoyée` };
-  } catch (e: any) {
-    return { success: false, message: e.message || 'Échec de la commande' };
-  }
+export interface Sigma4MonitorData {
+  // Position & mouvement
+  posicion: number | null;
+  destino: number | null;
+  plantas: number | null;
+  nivel?: string | null;
+  // Portes
+  puerta: string | null;           // 'ABIERTA' | 'CERRADA'
+  fotocelula: boolean | null;
+  ordenAbrir?: boolean | null;
+  ordenCerrar?: boolean | null;
+  // Charge
+  peso: number | null;
+  sobrecarga: boolean | null;
+  // Sécurité
+  serie: string | null;
+  serieSeguridad: string | null;
+  // Variateur & Bus
+  tensionBus: number | null;
+  variador: string | null;
+  estadoAscensor: string | null;
+  canA: string | null;
+  canB: string | null;
+  canH: string | null;             // CAN gaine (hueco)
+  canM: string | null;             // CAN manœuvre
+  // Appels
+  comandos: string | null;
+  exteriorSubida: number[] | null;
+  exteriorBajada: number[] | null;
+  ultimoEvento: string | null;
+  // Stats
+  cabina: number | null;
+  viajes?: number | null;
+  viajesHoy?: number | null;
+  temperatura?: number | null;
+  // Communication
+  operador?: string | null;
+  paquetesEnviados?: number | null;
+  paquetesErroneos?: number | null;
+  porcentajeErrores?: number | null;
 }
 
-// ═══ DASHBOARD STATS (agrégation) ═══
+// Actions Monitor Online (29 commandes extraites du bundle)
+export type MonitorAction =
+  | 'ACTIVAR_PONER_SERVICIO' | 'ACTIVAR_FUERA_SERVICIO' | 'ACTIVAR_RESET'
+  | 'BORRAR_LLAMADAS_CABINA' | 'BORRAR_LLAMADAS_EXTERIORES'
+  | 'FORZAR_LLAMADA' | 'FORZAR_TEST_TELEFONO' | 'FORZAR_TEST_EN'
+  | 'FORZAR_BATERIA_BAJA' | 'FORZAR_MODO_VOZ' | 'FIN_ALARMA_REMOTO'
+  | 'LUZ_HUECO' | 'RESET_PLACA' | 'REINICIAR_SCRIPT_BOOTLOADER'
+  | 'PIDE_ERRORES_DUMP' | 'GET_PARAMETERS' | 'SET_PARAMETERS'
+  | 'DEVOLVER_LOG_ONLINE' | 'SOLICITA_MODO' | 'CAR_CALL';
 
-export async function getIoTDashboardStats(): Promise<IoTDashboardStats> {
-  const lifts = await getLiftStatuses();
-  const alerts = await getActiveAlerts();
-  const enLigne = lifts.filter(l => l.connecte).length;
-  const enPanne = lifts.filter(l => l.etat === 'hors_service' || l.etat === 'alarme').length;
-  const dispo = lifts.length > 0 ? Math.round(((lifts.length - enPanne) / lifts.length) * 100) : 100;
+export const MONITOR_ACTIONS: { key: MonitorAction; label: string; icon: string; danger?: boolean }[] = [
+  { key: 'ACTIVAR_PONER_SERVICIO',    label: 'Mise en service',       icon: '▶️' },
+  { key: 'ACTIVAR_FUERA_SERVICIO',    label: 'Mise hors service',     icon: '⏸️', danger: true },
+  { key: 'ACTIVAR_RESET',             label: 'Reset armoire',         icon: '🔄' },
+  { key: 'RESET_PLACA',               label: 'Reset carte',           icon: '🔧', danger: true },
+  { key: 'BORRAR_LLAMADAS_CABINA',    label: 'Effacer appels cabine', icon: '🗑️' },
+  { key: 'BORRAR_LLAMADAS_EXTERIORES',label: 'Effacer appels paliers',icon: '🗑️' },
+  { key: 'FORZAR_LLAMADA',            label: 'Forcer appel alarme',   icon: '🚨' },
+  { key: 'FORZAR_TEST_TELEFONO',      label: 'Test téléphone',        icon: '📞' },
+  { key: 'FORZAR_TEST_EN',            label: 'Test EN 81-28',         icon: '🛡️' },
+  { key: 'FORZAR_BATERIA_BAJA',       label: 'Forcer batterie basse', icon: '🔋' },
+  { key: 'FIN_ALARMA_REMOTO',         label: 'Fin alarme',            icon: '🔕' },
+  { key: 'LUZ_HUECO',                 label: 'Lumière gaine ON/OFF',  icon: '💡' },
+  { key: 'GET_PARAMETERS',            label: 'Lire paramètres',       icon: '📖' },
+  { key: 'SET_PARAMETERS',            label: 'Écrire paramètres',     icon: '📝', danger: true },
+  { key: 'PIDE_ERRORES_DUMP',         label: 'Dump erreurs',          icon: '📋' },
+  { key: 'DEVOLVER_LOG_ONLINE',       label: 'Récupérer log',         icon: '📄' },
+  { key: 'SOLICITA_MODO',             label: 'Demander mode',         icon: '❓' },
+  { key: 'REINICIAR_SCRIPT_BOOTLOADER', label: 'Redémarrer bootloader', icon: '⚙️', danger: true },
+];
 
-  // Compteurs trafic du jour
-  let trajets = 0;
-  try {
-    const data = await sigma4Fetch<any>('/traffic/today');
-    trajets = data?.total || 0;
-  } catch {}
+// ═══════════════════════════════════════════════════════════════
+// SMART PREVENTIVE — Types erreurs
+// ═══════════════════════════════════════════════════════════════
 
-  // Emprisonnements 24h
-  let empris = 0;
-  try {
-    const data = await sigma4Fetch<any[]>('/events?type=emprisonnement&since=24h');
-    empris = (data || []).length;
-  } catch {}
-
-  return { totalAscenseurs: lifts.length, enLigne, horsLigne: lifts.length - enLigne, enPanne, alertesActives: alerts.length, emprisonnements24h: empris, trajetsAujourdhui: trajets, disponibiliteMoyenne: dispo };
+export interface Sigma4ErrorEntry {
+  errorCode: string;
+  description?: string;
+  date: string;
+  origin?: string;
+  severity?: string;
+  causa?: string;
 }
 
-// ═══ SYNC Sigma4 → Supabase cache ═══
+// ═══════════════════════════════════════════════════════════════
+// OPERATING STATES (extrait du bundle)
+// ═══════════════════════════════════════════════════════════════
 
-export async function syncToSupabaseCache(): Promise<{ synced: number; errors: number }> {
-  if (!isConnectedToSigma4()) return { synced: 0, errors: 0 };
-  let synced = 0, errors = 0;
-  try {
-    const lifts = await sigma4Fetch<any[]>('/lifts');
-    for (const l of lifts || []) {
-      const mapped = mapSigmaLift(l);
-      const { error } = await supabase.from('iot_lifts').upsert({
-        lift_id: mapped.liftId, nom: mapped.nom, adresse: mapped.adresse,
-        lat: mapped.lat, lng: mapped.lng, etat: mapped.etat, etage: mapped.etage,
-        etage_max: mapped.etageMax, position_mm: mapped.positionMm, porte: mapped.porte,
-        en_mouvement: mapped.enMouvement, direction: mapped.direction,
-        batterie_percent: mapped.batteriePercent, temperature_machinerie: mapped.temperatureMachinerie,
-        securites_ok: mapped.securitesOk, connecte: mapped.connecte,
-        dernier_signal: mapped.dernierSignal, firmware_version: mapped.firmwareVersion,
-        hardware_version: mapped.hardwareVersion, controller_type: mapped.controllerType,
-      }, { onConflict: 'lift_id' });
-      if (error) errors++; else synced++;
-    }
-  } catch { errors++; }
-  return { synced, errors };
-}
-
-// ═══ REALTIME — Supabase (pour cache local) ═══
-
-export function subscribeToLiftUpdates(callback: (payload: any) => void) {
-  return supabase.channel('iot-realtime')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'iot_lifts' }, callback)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'iot_alerts' }, callback)
-    .subscribe();
-}
-
-export function subscribeToAlerts(callback: (alert: LiftAlert) => void) {
-  return supabase.channel('iot-alerts')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'iot_alerts' }, (p) => callback(p.new as LiftAlert))
-    .subscribe();
-}
-
-// ═══ MAPPERS — Sigma4 API → types locaux ═══
-// Les noms de champs Sigma4 peuvent varier, on gère toutes les variantes
-
-function mapSigmaLift(d: any): LiftStatus {
-  return {
-    liftId: d.id || d.liftId || d.lift_id || '',
-    ascenseurId: d.ascenseurId || d.ascenseur_id,
-    nom: d.name || d.nom || d.description || '',
-    adresse: d.address || d.adresse || d.location || '',
-    lat: d.lat || d.latitude,
-    lng: d.lng || d.longitude,
-    etat: mapEtat(d.status || d.state || d.etat),
-    etage: d.floor ?? d.etage ?? d.currentFloor ?? 0,
-    etageMax: d.maxFloor ?? d.etageMax ?? d.totalFloors ?? 10,
-    positionMm: d.positionMm ?? d.position ?? 0,
-    porte: mapPorte(d.doorStatus || d.door || d.porte),
-    enMouvement: d.moving ?? d.enMouvement ?? d.isMoving ?? false,
-    direction: mapDirection(d.direction || d.dir),
-    batteriePercent: d.battery ?? d.batteryPercent ?? d.batteriePercent ?? 100,
-    temperatureMachinerie: d.temperature ?? d.machineTemp ?? d.temperatureMachinerie ?? 22,
-    securitesOk: d.safetyOk ?? d.securitesOk ?? d.safetyDevicesOk ?? true,
-    connecte: d.connected ?? d.online ?? d.connecte ?? true,
-    dernierSignal: d.lastSignal || d.dernierSignal || d.lastSeen || new Date().toISOString(),
-    firmwareVersion: d.firmwareVersion || d.fwVersion || d.firmware || '',
-    hardwareVersion: d.hardwareVersion || d.hwVersion || d.hardware || '',
-    controllerType: d.controllerType || d.controller || d.boardType || 'MP ecoGO',
-  };
-}
-
-function mapSigmaAlert(d: any): LiftAlert {
-  return {
-    id: d.id || d.alertId || '',
-    liftId: d.liftId || d.lift_id || d.elevatorId || '',
-    niveau: mapNiveau(d.level || d.severity || d.niveau),
-    type: (d.type || d.eventType || 'erreur') as TypeEvenement,
-    message: d.message || d.description || d.text || '',
-    timestamp: d.timestamp || d.date || d.createdAt || new Date().toISOString(),
-    acquittee: d.acknowledged ?? d.acquittee ?? false,
-    acquittePar: d.acknowledgedBy,
-    acquitteDate: d.acknowledgedAt,
-  };
-}
-
-function mapSigmaEvent(d: any): LiftEvent {
-  return {
-    id: d.id || d.eventId || '',
-    liftId: d.liftId || d.lift_id || d.elevatorId || '',
-    type: (d.type || d.eventType || 'trajet') as TypeEvenement,
-    description: d.description || d.message || d.text || '',
-    timestamp: d.timestamp || d.date || new Date().toISOString(),
-    details: d.details || d.data,
-  };
-}
-
-function mapSigmaTraffic(d: any): TrafficStats {
-  return {
-    liftId: d.liftId || d.lift_id || '',
-    date: d.date || '',
-    trajetsTotal: d.totalTrips ?? d.trajetsTotal ?? 0,
-    trajetsParHeure: d.tripsPerHour || d.trajetsParHeure || [],
-    etagesPlusFrequentes: d.topFloors || d.etagesPlusFrequentes || [],
-    tempsArretMoyen: d.avgStopTime ?? d.tempsArretMoyen ?? 0,
-    consommationKwh: d.consumption ?? d.consommationKwh,
-  };
-}
-
-function mapSigmaHealth(d: any): LiftHealth {
-  return {
-    liftId: d.liftId || d.lift_id || '',
-    scoreGlobal: d.globalScore ?? d.scoreGlobal ?? d.score ?? 100,
-    moteur: d.motor ?? d.moteur ?? 100,
-    portes: d.doors ?? d.portes ?? 100,
-    cables: d.cables ?? d.ropes ?? 100,
-    frein: d.brake ?? d.frein ?? 100,
-    variateur: d.inverter ?? d.variateur ?? d.drive ?? 100,
-    dernierCalcul: d.lastCalculation || d.dernierCalcul || new Date().toISOString(),
-  };
-}
-
-function mapDbLift(d: any): LiftStatus {
-  return {
-    liftId: d.lift_id, nom: d.nom, adresse: d.adresse, lat: d.lat, lng: d.lng,
-    etat: d.etat, etage: d.etage, etageMax: d.etage_max, positionMm: d.position_mm,
-    porte: d.porte, enMouvement: d.en_mouvement, direction: d.direction,
-    batteriePercent: d.batterie_percent, temperatureMachinerie: d.temperature_machinerie,
-    securitesOk: d.securites_ok, connecte: d.connecte, dernierSignal: d.dernier_signal,
-    firmwareVersion: d.firmware_version, hardwareVersion: d.hardware_version,
-    controllerType: d.controller_type,
-  };
-}
-
-function mapEtat(s: string): EtatAscenseur {
-  const map: Record<string, EtatAscenseur> = {
-    normal: 'normal', running: 'normal', active: 'normal', 'in_service': 'normal',
-    inspection: 'inspection', test: 'inspection',
-    'out_of_service': 'hors_service', stopped: 'hors_service', disabled: 'hors_service', hors_service: 'hors_service',
-    entrapment: 'emprisonnement', trapped: 'emprisonnement', emprisonnement: 'emprisonnement',
-    alarm: 'alarme', error: 'alarme', fault: 'alarme', alarme: 'alarme',
-    maintenance: 'maintenance', service: 'maintenance',
-  };
-  return map[s?.toLowerCase()] || 'normal';
-}
-
-function mapPorte(s: string): EtatPorte {
-  const map: Record<string, EtatPorte> = {
-    open: 'ouverte', opened: 'ouverte', ouverte: 'ouverte',
-    closed: 'fermee', fermee: 'fermee',
-    moving: 'en_mouvement', opening: 'en_mouvement', closing: 'en_mouvement', en_mouvement: 'en_mouvement',
-    blocked: 'bloquee', stuck: 'bloquee', bloquee: 'bloquee',
-  };
-  return map[s?.toLowerCase()] || 'fermee';
-}
-
-function mapDirection(s: string): 'up' | 'down' | 'idle' {
-  if (!s) return 'idle';
-  const low = s.toLowerCase();
-  if (low === 'up' || low === 'montee' || low === 'ascending') return 'up';
-  if (low === 'down' || low === 'descente' || low === 'descending') return 'down';
-  return 'idle';
-}
-
-function mapNiveau(s: string): NiveauAlerte {
-  const map: Record<string, NiveauAlerte> = {
-    info: 'info', low: 'info', notice: 'info',
-    warning: 'warning', warn: 'warning', medium: 'warning',
-    critical: 'critical', high: 'critical', error: 'critical',
-    emergency: 'emergency', urgent: 'emergency', fatal: 'emergency',
-  };
-  return map[s?.toLowerCase()] || 'info';
-}
-
-// ═══ CONSTANTES UI ═══
-
-export const ETAT_CONFIG: Record<EtatAscenseur, { label: string; couleur: string; icon: string }> = {
-  normal:          { label: 'En service',      couleur: '#059669', icon: '✅' },
-  inspection:      { label: 'Inspection',      couleur: '#3B82F6', icon: '🔍' },
-  hors_service:    { label: 'Hors service',    couleur: '#DC2626', icon: '🔴' },
-  emprisonnement:  { label: 'Emprisonnement',  couleur: '#DC2626', icon: '🚨' },
-  alarme:          { label: 'Alarme',          couleur: '#EA580C', icon: '⚠️' },
-  maintenance:     { label: 'Maintenance',     couleur: '#8B5CF6', icon: '🔧' },
+export const OPERATING_STATES: Record<string, { label: string; color: string }> = {
+  OPERATIVO:                { label: 'En marche',                color: '#00E200' },
+  PARADO:                   { label: 'Hors service',             color: '#FF0000' },
+  MANTENIMIENTO_O_REVISION: { label: 'Maintenance / Inspection', color: '#EFA52A' },
+  EMERGENCY:                { label: 'Urgence',                  color: '#33CCCC' },
+  OTROS:                    { label: 'Modes spéciaux',           color: '#008000' },
+  SIN_CONFIGURACION:        { label: 'Non configuré',            color: '#7673D9' },
+  SIN_CONEXION_S:           { label: 'Sans connexion',           color: '#EA580C' },
 };
 
-export const NIVEAU_ALERTE: Record<NiveauAlerte, { label: string; couleur: string }> = {
-  info:      { label: 'Info',      couleur: '#3B82F6' },
-  warning:   { label: 'Attention', couleur: '#CA8A04' },
-  critical:  { label: 'Critique',  couleur: '#EA580C' },
-  emergency: { label: 'Urgence',   couleur: '#DC2626' },
-};
+// ═══════════════════════════════════════════════════════════════
+// NOUVEAUX ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
+
+/** Données Monitor Online temps réel */
+export async function getMonitorOnline(liftId: number, cabina = 1): Promise<Sigma4MonitorData> {
+  return sigma4Get(`/divide/lifts/${liftId}/monitor/${cabina}`);
+}
+
+/** Envoyer une action Monitor Online */
+export async function sendMonitorAction(liftId: number, action: MonitorAction, cabina = 1, params?: any): Promise<any> {
+  return sigma4Post(`/divide/lifts/${liftId}/control/${cabina}/${action}`, params || {});
+}
+
+/** Historique d'erreurs */
+export async function getLiftErrors(liftId: number): Promise<Sigma4ErrorEntry[]> {
+  return sigma4Get(`/divide/lifts/${liftId}/errors`);
+}
+
+/** Info erreur (description/cause/aide) */
+export async function getErrorInfo(errorCode: string): Promise<any> {
+  return sigma4Get(`/divide/info/errores?code=${encodeURIComponent(errorCode)}`);
+}
+
+/** Hardware d'un ascenseur */
+export async function getLiftHardware(liftId: number): Promise<any> {
+  return sigma4Get(`/divide/lifts/${liftId}/hardware`);
+}
+
+/** Paramètres */
+export async function getLiftParameters(liftId: number): Promise<any> {
+  return sigma4Get(`/divide/lifts/${liftId}/parameters`);
+}
+
+/** Groupes */
+export async function getLiftGroups(): Promise<Sigma4LiftGroup[]> {
+  return sigma4Get('/divide/lifts/groups');
+}
+
+/** Tracs (historique événements) */
+export async function getTracs(liftId?: number): Promise<any> {
+  return sigma4Get(liftId ? `/divide/tracs?liftId=${liftId}` : '/divide/tracs');
+}
+
+/** Analytics */
+export async function getAnalytics(type: 'avgavailability' | 'avgservices' | 'stopped'): Promise<any> {
+  return sigma4Get(`/analytics/${type}`);
+}
+
+// ═══ GENERIC ═══
+
+export async function sigma4Request(path: string): Promise<any> {
+  return sigma4Get(path);
+}
