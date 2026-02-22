@@ -68,31 +68,31 @@ function LoginView({ onConnected }: { onConnected: () => void }) {
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#059669] to-[#047857] flex items-center justify-center mx-auto mb-2">
             <Radio className="w-7 h-7 text-white" />
           </div>
-          <h2 className="text-[16px] font-extrabold" style={{ letterSpacing: '-0.03em' }}>Sigma4Lifts</h2>
-          <p className="text-[9px] text-[var(--text-muted)]">Connectez-vous à votre compte Sigma4Lifts<br />pour accéder à la télésurveillance IoT</p>
+          <h2 className="text-xl font-extrabold" style={{ letterSpacing: '-0.03em' }}>Sigma4Lifts</h2>
+          <p className="text-sm text-[var(--text-muted)]">Connectez-vous à votre compte Sigma4Lifts<br />pour accéder à la télésurveillance IoT</p>
         </div>
         <div className="space-y-2">
           <div>
-            <label className="text-[8px] font-bold text-[var(--text-muted)] uppercase">Identifiant Sigma4</label>
-            <Input type="text" value={loginName} onChange={e => setLoginName(e.target.value)} placeholder="Auver015" className="text-[10px] mt-0.5" onKeyDown={e => e.key === 'Enter' && handleLogin()} autoFocus />
+            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Identifiant Sigma4</label>
+            <Input type="text" value={loginName} onChange={e => setLoginName(e.target.value)} placeholder="Auver015" className="text-sm mt-0.5" onKeyDown={e => e.key === 'Enter' && handleLogin()} autoFocus />
           </div>
           <div>
-            <label className="text-[8px] font-bold text-[var(--text-muted)] uppercase">Mot de passe</label>
-            <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="text-[10px] mt-0.5" onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Mot de passe</label>
+            <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="text-sm mt-0.5" onKeyDown={e => e.key === 'Enter' && handleLogin()} />
           </div>
           {error && <div className="flex items-center gap-1 p-1.5 rounded bg-[#DC2626]/10 border border-[#DC2626]/20">
             <XCircle className="w-3 h-3 text-[#DC2626] flex-shrink-0" />
-            <p className="text-[8px] text-[#DC2626] font-semibold">{error}</p>
+            <p className="text-xs text-[#DC2626] font-semibold">{error}</p>
           </div>}
           <button onClick={handleLogin} disabled={loading || !loginName || !password}
-            className="w-full py-2 rounded-lg bg-gradient-to-r from-[#059669] to-[#047857] text-white text-[11px] font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 hover:opacity-90 transition-opacity">
+            className="w-full py-2 rounded-lg bg-gradient-to-r from-[#059669] to-[#047857] text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 hover:opacity-90 transition-opacity">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
             {loading ? 'Connexion...' : 'Se connecter'}
           </button>
         </div>
         <div className="mt-3 pt-2 border-t border-[var(--border-secondary)] text-center">
-          <a href={getSigma4FrontUrl()} target="_blank" rel="noopener noreferrer" className="text-[8px] text-[var(--text-muted)] hover:text-[#059669]">
-            <ExternalLink className="w-2.5 h-2.5 inline mr-0.5" />Accéder à sigma4lifts.com
+          <a href={getSigma4FrontUrl()} target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--text-muted)] hover:text-[#059669]">
+            <ExternalLink className="w-3.5 h-3.5 inline mr-0.5" />Accéder à sigma4lifts.com
           </a>
         </div>
       </CardBody></Card>
@@ -120,29 +120,29 @@ function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
       {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#059669] flex items-center justify-center"><Radio className="w-4 h-4 text-white" /></div>
+          <div className="w-8 h-8 rounded-xl bg-[#059669] flex items-center justify-center"><Radio className="w-4 h-4 text-white" /></div>
           <div>
-            <h1 className="text-[15px] font-extrabold text-[var(--text-primary)]" style={{ letterSpacing: '-0.03em' }}>Sigma4Lifts IoT</h1>
-            <p className="text-[7px] text-[var(--text-muted)]">Connecté : {session?.userName} {session?.company && `· ${session.company}`}</p>
+            <h1 className="text-xl font-extrabold text-[var(--text-primary)]" style={{ letterSpacing: '-0.03em' }}>Sigma4Lifts IoT</h1>
+            <p className="text-xs text-[var(--text-muted)]">Connecté : {session?.userName} {session?.company && `· ${session.company}`}</p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => qc.invalidateQueries({ queryKey: ['sigma4'] })} className="p-1 rounded text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]" title="Rafraîchir"><RefreshCw className="w-3 h-3" /></button>
-          <a href={getSigma4FrontUrl()} target="_blank" rel="noopener noreferrer" className="p-1 rounded text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]" title="Sigma4Lifts"><ExternalLink className="w-3 h-3" /></a>
-          <button onClick={onDisconnect} className="flex items-center gap-0.5 px-1.5 py-1 rounded text-[8px] font-semibold text-[#DC2626] hover:bg-[#DC2626]/10"><LogOut className="w-3 h-3" /></button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => qc.invalidateQueries({ queryKey: ['sigma4'] })} className="p-2 rounded-xl text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] transition-colors" title="Rafraîchir"><RefreshCw className="w-4 h-4" /></button>
+          <a href={getSigma4FrontUrl()} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] transition-colors" title="Sigma4Lifts"><ExternalLink className="w-4 h-4" /></a>
+          <button onClick={onDisconnect} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-[#DC2626] hover:bg-[#DC2626]/10 transition-colors"><LogOut className="w-4 h-4" /> Déconnecter</button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0.5 flex-shrink-0 bg-[var(--bg-secondary)] rounded-lg p-0.5">
+      <div className="flex items-center gap-2 border-b border-[var(--border-primary)] pb-2 flex-shrink-0">
         {tabs.map(t => {
           const Icon = t.icon;
           const active = tab === t.id;
           return <button key={t.id} onClick={() => setTab(t.id)}
-            className={cn('flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[9px] font-bold transition-all',
-              active ? 'bg-[var(--bg-primary)] text-[#059669] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+            className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all',
+              active ? 'bg-[#059669]/15 text-[#059669]' : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)]'
             )}>
-            <Icon className="w-3 h-3" />{t.label}
+            <Icon className="w-4 h-4" />{t.label}
           </button>;
         })}
       </div>
@@ -274,8 +274,8 @@ function LiftsTab() {
           <Card key={s.label} className="flex-1"><CardBody className="p-1.5 flex items-center gap-1.5">
             <s.icon className="w-3 h-3 flex-shrink-0" style={{ color: s.color }} />
             <div>
-              <p className="text-[12px] font-extrabold font-mono" style={{ color: s.color }}>{s.value}</p>
-              <p className="text-[6px] text-[var(--text-muted)] font-semibold leading-tight">{s.label}</p>
+              <p className="text-base font-extrabold font-mono" style={{ color: s.color }}>{s.value}</p>
+              <p className="text-sm text-[var(--text-muted)] font-semibold leading-tight">{s.label}</p>
             </div>
           </CardBody></Card>
         ))}
@@ -288,17 +288,17 @@ function LiftsTab() {
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Rechercher ref, nom, adresse, ville..."
-            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none focus:border-[#059669] transition-colors"
+            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-sm outline-none focus:border-[#059669] transition-colors"
           />
         </div>
         <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
-          className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none min-w-0">
+          className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-sm outline-none min-w-0">
           <option value="all">Tous groupes</option>
           {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           <option value="__none">Sans groupe</option>
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none min-w-0">
+          className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-sm outline-none min-w-0">
           <option value="all">Tous statuts</option>
           <option value="estado_0">En marche</option>
           <option value="estado_90">Sans connexion</option>
@@ -309,7 +309,7 @@ function LiftsTab() {
           <option value="no_group">Sans groupe</option>
         </select>
         <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
-          className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none min-w-0">
+          className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-sm outline-none min-w-0">
           <option value="ref">Tri: Référence</option>
           <option value="city">Tri: Ville</option>
           <option value="group">Tri: Groupe</option>
@@ -318,7 +318,7 @@ function LiftsTab() {
 
       {/* Count */}
       <div className="flex-shrink-0 px-1">
-        <p className="text-[8px] text-[var(--text-muted)]">
+        <p className="text-xs text-[var(--text-muted)]">
           {filtered.length} ascenseur{filtered.length > 1 ? 's' : ''} {filtered.length !== total && `(sur ${total})`}
         </p>
       </div>
@@ -327,7 +327,7 @@ function LiftsTab() {
       <div className="flex-1 overflow-y-auto space-y-1">
         {filtered.length === 0 && (
           <div className="flex items-center justify-center py-8">
-            <p className="text-[10px] text-[var(--text-muted)]">Aucun ascenseur trouvé</p>
+            <p className="text-sm text-[var(--text-muted)]">Aucun ascenseur trouvé</p>
           </div>
         )}
         {filtered.map(lift => (
@@ -362,19 +362,19 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
           {/* Main info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-extrabold text-[var(--text-primary)]">{lift.liftCompRef}</span>
-              <span className="px-1 py-0.5 rounded text-[5px] font-bold" style={{ backgroundColor: status.color + '18', color: status.color }}>{status.label}</span>
+              <span className="text-sm font-extrabold text-[var(--text-primary)]">{lift.liftCompRef}</span>
+              <span className="px-1 py-0.5 rounded text-sm font-bold" style={{ backgroundColor: status.color + '18', color: status.color }}>{status.label}</span>
               {lift.groups.map(g => (
-                <span key={g.id} className="px-1.5 py-0.5 rounded-full bg-[#3B82F6]/10 text-[6px] font-bold text-[#3B82F6]">
+                <span key={g.id} className="px-1.5 py-0.5 rounded-full bg-[#3B82F6]/10 text-sm font-bold text-[#3B82F6]">
                   {g.groupName}
                 </span>
               ))}
-              {lift.en8128 && <Shield className="w-2.5 h-2.5 text-[#059669]" />}
+              {lift.en8128 && <Shield className="w-3.5 h-3.5 text-[#059669]" />}
             </div>
-            <p className="text-[8px] text-[var(--text-muted)] truncate">{lift.descripcion || '—'}</p>
+            <p className="text-xs text-[var(--text-muted)] truncate">{lift.descripcion || '—'}</p>
             {hasAddress && (
-              <p className="text-[7px] text-[var(--text-muted)] truncate flex items-center gap-0.5">
-                <MapPin className="w-2 h-2 flex-shrink-0" />
+              <p className="text-xs text-[var(--text-muted)] truncate flex items-center gap-1.5">
+                <MapPin className="w-3 h-3 flex-shrink-0" />
                 {[lift.address, lift.zipCode, lift.city].filter(Boolean).join(', ')}
               </p>
             )}
@@ -384,20 +384,20 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
           <div className="flex items-center gap-2 flex-shrink-0">
             {lift.numeroParadas != null && lift.numeroParadas > 0 && (
               <div className="text-center">
-                <p className="text-[10px] font-bold font-mono text-[var(--text-primary)]">{lift.numeroParadas}</p>
-                <p className="text-[5px] text-[var(--text-muted)]">arrêts</p>
+                <p className="text-sm font-bold font-mono text-[var(--text-primary)]">{lift.numeroParadas}</p>
+                <p className="text-sm text-[var(--text-muted)]">arrêts</p>
               </div>
             )}
             {lift.cargaUtil != null && lift.cargaUtil > 0 && (
               <div className="text-center">
-                <p className="text-[10px] font-bold font-mono text-[var(--text-primary)]">{lift.cargaUtil}</p>
-                <p className="text-[5px] text-[var(--text-muted)]">kg</p>
+                <p className="text-sm font-bold font-mono text-[var(--text-primary)]">{lift.cargaUtil}</p>
+                <p className="text-sm text-[var(--text-muted)]">kg</p>
               </div>
             )}
             {lift.numeroPersonas > 0 && (
               <div className="text-center">
-                <p className="text-[10px] font-bold font-mono text-[var(--text-primary)]">{lift.numeroPersonas}</p>
-                <p className="text-[5px] text-[var(--text-muted)]">pers.</p>
+                <p className="text-sm font-bold font-mono text-[var(--text-primary)]">{lift.numeroPersonas}</p>
+                <p className="text-sm text-[var(--text-muted)]">pers.</p>
               </div>
             )}
             <ChevronRight className={cn('w-3 h-3 text-[var(--text-muted)] transition-transform', isExpanded && 'rotate-90')} />
@@ -426,8 +426,8 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
             {/* Network info (if available) */}
             {(lift.ip || lift.apn || lift.simStatus) && (
               <div className="p-1.5 rounded bg-[var(--bg-secondary)]">
-                <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
-                  <Wifi className="w-2.5 h-2.5" />Réseau / SIM
+                <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
+                  <Wifi className="w-3.5 h-3.5" />Réseau / SIM
                 </p>
                 <div className="grid grid-cols-3 gap-x-3 gap-y-1">
                   {lift.ip && <DetailItem label="IP" value={lift.ip} />}
@@ -448,9 +448,9 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
             <div className="flex items-center gap-2 p-1.5 rounded bg-[var(--bg-secondary)]">
               <Shield className={cn('w-3.5 h-3.5', lift.en8128 ? 'text-[#059669]' : 'text-[var(--text-muted)]')} />
               <div className="flex-1">
-                <p className="text-[8px] font-bold">{lift.en8128 ? 'EN 81-28 conforme' : 'EN 81-28 non conforme'}</p>
-                {lift.dateEN8128OK && <p className="text-[7px] text-[var(--text-muted)]">Validé le {formatDate(lift.dateEN8128OK)}</p>}
-                {lift.reporteExternoEn8128 && <p className="text-[6px] text-[#EA580C] font-semibold">Report externe actif</p>}
+                <p className="text-xs font-bold">{lift.en8128 ? 'EN 81-28 conforme' : 'EN 81-28 non conforme'}</p>
+                {lift.dateEN8128OK && <p className="text-xs text-[var(--text-muted)]">Validé le {formatDate(lift.dateEN8128OK)}</p>}
+                {lift.reporteExternoEn8128 && <p className="text-sm text-[#EA580C] font-semibold">Report externe actif</p>}
               </div>
             </div>
 
@@ -462,14 +462,14 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
               {hasCoords && (
                 <a href={`https://www.google.com/maps?q=${lift.latitude},${lift.longitude}`}
                   target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-[#3B82F6]/10 text-[#3B82F6] text-[8px] font-bold hover:bg-[#3B82F6]/20 transition-colors">
-                  <Navigation className="w-2.5 h-2.5" />Voir sur la carte
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-[#3B82F6]/10 text-[#3B82F6] text-xs font-bold hover:bg-[#3B82F6]/20 transition-colors">
+                  <Navigation className="w-3.5 h-3.5" />Voir sur la carte
                 </a>
               )}
               <a href={`${getSigma4FrontUrl()}lift/${lift.id}`}
                 target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2 py-1 rounded bg-[#059669]/10 text-[#059669] text-[8px] font-bold hover:bg-[#059669]/20 transition-colors">
-                <ExternalLink className="w-2.5 h-2.5" />Sigma4Lifts
+                className="flex items-center gap-1 px-2 py-1 rounded bg-[#059669]/10 text-[#059669] text-xs font-bold hover:bg-[#059669]/20 transition-colors">
+                <ExternalLink className="w-3.5 h-3.5" />Sigma4Lifts
               </a>
             </div>
           </div>
@@ -482,8 +482,8 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[6px] text-[var(--text-muted)] font-semibold uppercase">{label}</p>
-      <p className="text-[8px] font-bold text-[var(--text-primary)] truncate">{value}</p>
+      <p className="text-sm text-[var(--text-muted)] font-semibold uppercase">{label}</p>
+      <p className="text-xs font-bold text-[var(--text-primary)] truncate">{value}</p>
     </div>
   );
 }
@@ -501,7 +501,7 @@ function LiftTrafficSection({ liftId }: { liftId: number }) {
   if (isLoading) return (
     <div className="flex items-center gap-1.5 p-1.5 rounded bg-[var(--bg-secondary)]">
       <Loader2 className="w-3 h-3 animate-spin text-[#3B82F6]" />
-      <span className="text-[8px] text-[var(--text-muted)]">Chargement trafic...</span>
+      <span className="text-xs text-[var(--text-muted)]">Chargement trafic...</span>
     </div>
   );
 
@@ -535,31 +535,31 @@ function LiftTrafficSection({ liftId }: { liftId: number }) {
   return (
     <div className="p-1.5 rounded bg-[var(--bg-secondary)] space-y-1.5">
       <div className="flex items-center justify-between">
-        <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
-          <Activity className="w-2.5 h-2.5" />Trafic / Manœuvres
+        <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
+          <Activity className="w-3.5 h-3.5" />Trafic / Manœuvres
         </p>
-        <span className="text-[7px] font-mono text-[var(--text-muted)]">Compteur: {totalCounter.toLocaleString('fr-FR')}</span>
+        <span className="text-xs font-mono text-[var(--text-muted)]">Compteur: {totalCounter.toLocaleString('fr-FR')}</span>
       </div>
 
       {/* Mini KPIs */}
       <div className="grid grid-cols-3 gap-1">
         <div className="text-center p-1 rounded bg-[var(--bg-primary)]">
-          <p className="text-[11px] font-extrabold font-mono text-[#3B82F6]">{avgDaily}</p>
-          <p className="text-[5px] text-[var(--text-muted)] font-semibold">moy/jour (30j)</p>
+          <p className="text-sm font-extrabold font-mono text-[#3B82F6]">{avgDaily}</p>
+          <p className="text-sm text-[var(--text-muted)] font-semibold">moy/jour (30j)</p>
         </div>
         <div className="text-center p-1 rounded bg-[var(--bg-primary)]">
-          <p className="text-[11px] font-extrabold font-mono text-[#8B5CF6]">{maxDaily}</p>
-          <p className="text-[5px] text-[var(--text-muted)] font-semibold">max/jour (30j)</p>
+          <p className="text-sm font-extrabold font-mono text-[#8B5CF6]">{maxDaily}</p>
+          <p className="text-sm text-[var(--text-muted)] font-semibold">max/jour (30j)</p>
         </div>
         <div className="text-center p-1 rounded bg-[var(--bg-primary)]">
-          <p className="text-[11px] font-extrabold font-mono text-[#059669]">{totalLast30.toLocaleString('fr-FR')}</p>
-          <p className="text-[5px] text-[var(--text-muted)] font-semibold">total 30j</p>
+          <p className="text-sm font-extrabold font-mono text-[#059669]">{totalLast30.toLocaleString('fr-FR')}</p>
+          <p className="text-sm text-[var(--text-muted)] font-semibold">total 30j</p>
         </div>
       </div>
 
       {/* Sparkline Bar Chart */}
       <div>
-        <p className="text-[6px] text-[var(--text-muted)] mb-0.5">Manœuvres / jour (60 derniers jours)</p>
+        <p className="text-sm text-[var(--text-muted)] mb-0.5">Manœuvres / jour (60 derniers jours)</p>
         <div className="flex items-end gap-px h-10">
           {sparkData.map((d, i) => {
             const pct = (d.trips / sparkMax) * 100;
@@ -580,8 +580,8 @@ function LiftTrafficSection({ liftId }: { liftId: number }) {
         </div>
         {/* Date labels */}
         <div className="flex justify-between mt-0.5">
-          <span className="text-[5px] text-[var(--text-muted)]">{formatDateShort(sparkData[0]?.date)}</span>
-          <span className="text-[5px] text-[var(--text-muted)]">{formatDateShort(sparkData[sparkData.length - 1]?.date)}</span>
+          <span className="text-sm text-[var(--text-muted)]">{formatDateShort(sparkData[0]?.date)}</span>
+          <span className="text-sm text-[var(--text-muted)]">{formatDateShort(sparkData[sparkData.length - 1]?.date)}</span>
         </div>
       </div>
     </div>
@@ -613,17 +613,17 @@ function DashboardKPIs({ charts }: { charts: Sigma4Chart[] }) {
       { label: 'À l\'arrêt', value: aLarret, color: '#DC2626' },
       { label: 'Maintenance', value: maintenance, color: '#8B5CF6' },
       { label: 'Sans connexion', value: sansConnexion, color: '#EA580C' },
-    ].map(k => <Card key={k.label}><CardBody className="p-1.5 text-center">
-      <p className="text-[16px] font-extrabold font-mono" style={{ color: k.color }}>{k.value}</p>
-      <p className="text-[6px] text-[var(--text-muted)] font-semibold leading-tight">{k.label}</p>
+    ].map(k => <Card key={k.label}><CardBody className="p-3 text-center">
+      <p className="text-xl font-extrabold font-mono" style={{ color: k.color }}>{k.value}</p>
+      <p className="text-sm text-[var(--text-muted)] font-semibold leading-tight">{k.label}</p>
     </CardBody></Card>)}
     {en28total > 0 && <div className="col-span-5">
       <div className="flex items-center gap-2 px-2 py-1 rounded bg-[var(--bg-secondary)]">
-        <span className="text-[8px] font-bold">EN 81-28 :</span>
+        <span className="text-xs font-bold">EN 81-28 :</span>
         <div className="flex-1 h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
           <div className="h-full rounded-full bg-[#059669]" style={{ width: `${(en28ok / en28total) * 100}%` }} />
         </div>
-        <span className="text-[8px] font-mono"><span className="text-[#059669] font-bold">{en28ok}</span> OK / <span className="text-[#DC2626] font-bold">{en28ko}</span> KO</span>
+        <span className="text-xs font-mono"><span className="text-[#059669] font-bold">{en28ok}</span> OK / <span className="text-[#DC2626] font-bold">{en28ko}</span> KO</span>
       </div>
     </div>}
   </div>;
@@ -646,22 +646,22 @@ function ChartCard({ chart }: { chart: Sigma4Chart }) {
       <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between mb-1">
         <div className="flex items-center gap-1">
           {chart.aspect === 'pie' ? <PieChart className="w-3 h-3 text-[#3B82F6]" /> : <BarChart3 className="w-3 h-3 text-[#8B5CF6]" />}
-          <span className="text-[9px] font-bold">{chart.caption}</span>
+          <span className="text-sm font-bold">{chart.caption}</span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-[7px] font-mono text-[var(--text-muted)]">{total}</span>
-          {expanded ? <ChevronUp className="w-2.5 h-2.5 text-[var(--text-muted)]" /> : <ChevronDown className="w-2.5 h-2.5 text-[var(--text-muted)]" />}
+          <span className="text-xs font-mono text-[var(--text-muted)]">{total}</span>
+          {expanded ? <ChevronUp className="w-3.5 h-3.5 text-[var(--text-muted)]" /> : <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />}
         </div>
       </button>
 
       {chart.aspect === 'pie' ? <PieViz items={items} total={total} /> : <BarViz items={items} />}
 
-      {expanded && <div className="mt-1.5 pt-1 border-t border-[var(--border-secondary)] space-y-0.5">
+      {expanded && <div className="mt-1.5 pt-1 border-t border-[var(--border-secondary)] space-y-1.5">
         {items.sort((a, b) => b.quantity - a.quantity).map((d, i) => <div key={d.id} className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
-          <span className="text-[7px] flex-1 truncate">{cleanLabel(d.label)}</span>
-          <span className="text-[8px] font-mono font-bold">{d.quantity}</span>
-          <span className="text-[6px] text-[var(--text-muted)] font-mono w-8 text-right">{total > 0 ? Math.round((d.quantity / total) * 100) : 0}%</span>
+          <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+          <span className="text-xs flex-1 truncate">{cleanLabel(d.label)}</span>
+          <span className="text-xs font-mono font-bold">{d.quantity}</span>
+          <span className="text-sm text-[var(--text-muted)] font-mono w-8 text-right">{total > 0 ? Math.round((d.quantity / total) * 100) : 0}%</span>
         </div>)}
       </div>}
     </CardBody>
@@ -686,13 +686,13 @@ function PieViz({ items, total }: { items: Sigma4ChartItem[]; total: number }) {
         strokeDasharray={`${s.pct * 0.754} ${(100 - s.pct) * 0.754}`}
         strokeDashoffset={`${-s.offset * 0.754}`} />)}
     </svg>
-    <div className="flex-1 space-y-0.5">
+    <div className="flex-1 space-y-1.5">
       {segments.slice(0, 4).map(s => <div key={s.id} className="flex items-center gap-1">
-        <div className="w-1.5 h-1.5 rounded-sm flex-shrink-0" style={{ backgroundColor: s.color }} />
-        <span className="text-[7px] truncate flex-1">{cleanLabel(s.label)}</span>
-        <span className="text-[7px] font-mono font-bold">{s.quantity}</span>
+        <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: s.color }} />
+        <span className="text-xs truncate flex-1">{cleanLabel(s.label)}</span>
+        <span className="text-xs font-mono font-bold">{s.quantity}</span>
       </div>)}
-      {segments.length > 4 && <p className="text-[6px] text-[var(--text-muted)]">+{segments.length - 4} autres</p>}
+      {segments.length > 4 && <p className="text-sm text-[var(--text-muted)]">+{segments.length - 4} autres</p>}
     </div>
   </div>;
 }
@@ -703,18 +703,18 @@ function BarViz({ items }: { items: Sigma4ChartItem[] }) {
   const max = Math.max(...items.map(d => d.quantity));
   const sorted = [...items].sort((a, b) => b.quantity - a.quantity).slice(0, 6);
 
-  return <div className="space-y-0.5">
+  return <div className="space-y-1.5">
     {sorted.map((d, i) => {
       const pct = max > 0 ? (d.quantity / max) * 100 : 0;
       return <div key={d.id} className="flex items-center gap-1.5">
-        <span className="text-[6px] w-20 truncate text-right text-[var(--text-muted)]">{cleanLabel(d.label)}</span>
+        <span className="text-sm w-20 truncate text-right text-[var(--text-muted)]">{cleanLabel(d.label)}</span>
         <div className="flex-1 h-2.5 bg-[var(--bg-tertiary)] rounded overflow-hidden">
           <div className="h-full rounded transition-all" style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
         </div>
-        <span className="text-[7px] font-mono font-bold w-6 text-right">{d.quantity}</span>
+        <span className="text-xs font-mono font-bold w-6 text-right">{d.quantity}</span>
       </div>;
     })}
-    {items.length > 6 && <p className="text-[6px] text-[var(--text-muted)] text-right">+{items.length - 6} autres</p>}
+    {items.length > 6 && <p className="text-sm text-[var(--text-muted)] text-right">+{items.length - 6} autres</p>}
   </div>;
 }
 
@@ -760,35 +760,35 @@ function MonitorTab({ selectedLiftId, setSelectedLiftId, onLiftChange }: {
   return (
     <div className="h-full flex gap-2 overflow-hidden">
       {/* Sidebar — Sélection ascenseur */}
-      <div className="w-48 flex-shrink-0 flex flex-col gap-1 overflow-hidden">
+      <div className="w-56 flex-shrink-0 flex flex-col gap-1 overflow-hidden">
         <div className="relative">
           <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Rechercher..."
-            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[8px] outline-none focus:border-[#059669]" />
+            className="w-full pl-8 pr-3 py-2 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm outline-none focus:border-[#059669] placeholder:text-[var(--text-tertiary)]" />
         </div>
-        <div className="flex-1 overflow-y-auto space-y-0.5">
+        <div className="flex-1 overflow-y-auto space-y-1.5">
           {activeLifts.map(l => {
             const st = getEstadoInfo(l.estado);
             return (
               <button key={l.id} onClick={() => setSelectedLiftId(l.id)}
-                className={cn('w-full text-left px-2 py-1.5 rounded-lg transition-all text-[8px]',
+                className={cn('w-full text-left px-3 py-2.5 rounded-xl transition-all text-sm',
                   selectedLiftId === l.id
-                    ? 'bg-[#059669]/15 ring-1 ring-[#059669]/30'
+                    ? 'bg-[#059669]/15 ring-1 ring-[#059669]/30 shadow-sm'
                     : 'hover:bg-[var(--bg-secondary)]'
                 )}>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
                   <span className="font-bold truncate">{l.liftCompRef}</span>
                 </div>
-                <p className="text-[6px] text-[var(--text-muted)] truncate pl-3">
+                <p className="text-sm text-[var(--text-muted)] truncate pl-3">
                   {l.city || l.descripcion || '—'}
                 </p>
               </button>
             );
           })}
         </div>
-        <p className="text-[6px] text-[var(--text-muted)] text-center">
+        <p className="text-sm text-[var(--text-muted)] text-center">
           {activeLifts.length} ascenseur{activeLifts.length > 1 ? 's' : ''}
         </p>
       </div>
@@ -803,11 +803,11 @@ function MonitorTab({ selectedLiftId, setSelectedLiftId, onLiftChange }: {
         ) : (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
-              <Monitor className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-2 opacity-30" />
-              <p className="text-[10px] text-[var(--text-muted)]">
+              <Monitor className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-3 opacity-30" />
+              <p className="text-sm text-[var(--text-muted)]">
                 Sélectionnez un ascenseur pour accéder au Monitor Online
               </p>
-              <p className="text-[7px] text-[var(--text-muted)] mt-1">
+              <p className="text-xs text-[var(--text-muted)] mt-1">
                 Supervision temps réel : position, portes, sécurité, voyages, commandes à distance
               </p>
             </div>
@@ -942,8 +942,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
             <div className="w-12 h-12 rounded-2xl bg-[#059669]/10 flex items-center justify-center mx-auto mb-3">
               <Monitor className="w-6 h-6 text-[#059669]" />
             </div>
-            <h3 className="text-[12px] font-extrabold">Connexion au Monitor</h3>
-            <p className="text-[8px] text-[var(--text-muted)] mt-0.5">{lift?.liftCompRef || `#${liftId}`}</p>
+            <h3 className="text-base font-extrabold">Connexion au Monitor</h3>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">{lift?.liftCompRef || `#${liftId}`}</p>
           </div>
 
           <div className="space-y-2">
@@ -956,7 +956,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 )}>
                   {isDone ? (
                     <div className="w-4 h-4 rounded-full bg-[#059669] flex items-center justify-center flex-shrink-0">
-                      <Check className="w-2.5 h-2.5 text-white" />
+                      <Check className="w-3.5 h-3.5 text-white" />
                     </div>
                   ) : isActive ? (
                     <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
@@ -965,7 +965,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                   ) : (
                     <div className="w-4 h-4 rounded-full bg-[var(--bg-tertiary)] flex-shrink-0" />
                   )}
-                  <span className={cn('text-[8px] font-semibold',
+                  <span className={cn('text-xs font-semibold',
                     isActive ? 'text-[#059669]' : isDone ? 'text-[var(--text-secondary)]' : 'text-[var(--text-muted)]'
                   )}>{step.label}</span>
                 </div>
@@ -992,20 +992,20 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           {is404 ? (
             <>
               <Monitor className="w-8 h-8 text-[var(--text-muted)] mx-auto opacity-50" />
-              <p className="text-[10px] font-bold text-[var(--text-muted)]">Monitor non disponible</p>
-              <p className="text-[8px] text-[var(--text-muted)]">
+              <p className="text-sm font-bold text-[var(--text-muted)]">Monitor non disponible</p>
+              <p className="text-xs text-[var(--text-muted)]">
                 L'ascenseur <strong>{lift?.liftCompRef}</strong> ne supporte pas le monitoring temps réel.
               </p>
             </>
           ) : (
             <>
               <XCircle className="w-8 h-8 text-[#DC2626] mx-auto" />
-              <p className="text-[10px] font-bold text-[#DC2626]">Échec de connexion</p>
-              <p className="text-[8px] text-[var(--text-muted)]">{connectionError}</p>
+              <p className="text-sm font-bold text-[#DC2626]">Échec de connexion</p>
+              <p className="text-xs text-[var(--text-muted)]">{connectionError}</p>
             </>
           )}
           <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); setInitialMonitorData(null); }}
-            className="px-4 py-1.5 rounded bg-[#059669] text-white text-[9px] font-bold hover:bg-[#059669]/90">
+            className="px-4 py-1.5 rounded bg-[#059669] text-white text-sm font-bold hover:bg-[#059669]/90">
             Réessayer
           </button>
         </CardBody></Card>
@@ -1020,10 +1020,10 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
       <div className="h-full flex items-center justify-center">
         <Card className="w-64"><CardBody className="p-5 text-center space-y-3">
           <XCircle className="w-8 h-8 text-[#DC2626] mx-auto" />
-          <p className="text-[10px] font-bold text-[#DC2626]">Connexion perdue</p>
-          <p className="text-[8px] text-[var(--text-muted)]">{msg}</p>
+          <p className="text-sm font-bold text-[#DC2626]">Connexion perdue</p>
+          <p className="text-xs text-[var(--text-muted)]">{msg}</p>
           <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); setInitialMonitorData(null); }}
-            className="px-4 py-1.5 rounded bg-[#059669] text-white text-[9px] font-bold hover:bg-[#059669]/90">
+            className="px-4 py-1.5 rounded bg-[#059669] text-white text-sm font-bold hover:bg-[#059669]/90">
             Reconnecter
           </button>
         </CardBody></Card>
@@ -1064,19 +1064,19 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
             <Monitor className="w-3.5 h-3.5 text-white" />
           </div>
           <div>
-            <h3 className="text-[12px] font-extrabold">{lift?.liftCompRef || `#${liftId}`}</h3>
-            <p className="text-[7px] text-[var(--text-muted)]">
+            <h3 className="text-base font-extrabold">{lift?.liftCompRef || `#${liftId}`}</h3>
+            <p className="text-xs text-[var(--text-muted)]">
               {lift?.city}{lift?.city && lift?.descripcion ? ' · ' : ''}{lift?.descripcion}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#059669] animate-pulse" />
-          <span className="text-[7px] text-[var(--text-muted)]">
+          <div className="w-2 h-2 rounded-full bg-[#059669] animate-pulse" />
+          <span className="text-xs text-[var(--text-muted)]">
             {dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString('fr-FR') : 'Live'}
           </span>
           {updatedAt && (
-            <span className="text-[6px] text-[var(--text-muted)] opacity-60" title="Dernière mise à jour de l'ascenseur">
+            <span className="text-sm text-[var(--text-muted)] opacity-60" title="Dernière mise à jour de l'ascenseur">
               (S4L: {updatedAt})
             </span>
           )}
@@ -1094,8 +1094,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
             <Card className="ring-1 ring-[#DC2626]/30"><CardBody className="p-2 flex items-center gap-2 bg-[#DC2626]/5">
               <AlertTriangle className="w-4 h-4 text-[#DC2626] flex-shrink-0" />
               <div>
-                <p className="text-[9px] font-extrabold text-[#DC2626]">Erreur active : {errorStr}</p>
-                <p className="text-[7px] text-[var(--text-muted)]">
+                <p className="text-sm font-extrabold text-[#DC2626]">Erreur active : {errorStr}</p>
+                <p className="text-xs text-[var(--text-muted)]">
                   Famille {monitor.codigoFamiliaError} · Code {monitor.codigoError} · Sous-code {monitor.codigoSubError}
                   {monitor.codigoErrorString && ` · ${monitor.codigoErrorString}`}
                 </p>
@@ -1103,8 +1103,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
             </CardBody></Card>
           ) : (
             <Card><CardBody className="p-1.5 flex items-center gap-1.5 bg-[#059669]/5">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#059669]" />
-              <p className="text-[8px] text-[#059669] font-semibold">L'ascenseur fonctionne correctement</p>
+              <div className="w-2 h-2 rounded-full bg-[#059669]" />
+              <p className="text-xs text-[#059669] font-semibold">L'ascenseur fonctionne correctement</p>
             </CardBody></Card>
           )}
 
@@ -1114,8 +1114,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               <Layers className="w-3.5 h-3.5" style={{ color: getModeColor(monitor.modoFuncionamiento) }} />
             </div>
             <div>
-              <p className="text-[6px] text-[var(--text-muted)] font-semibold uppercase">État</p>
-              <p className="text-[11px] font-extrabold" style={{ color: getModeColor(monitor.modoFuncionamiento) }}>{getModeLabel(monitor.modoFuncionamiento)}</p>
+              <p className="text-sm text-[var(--text-muted)] font-semibold uppercase">État</p>
+              <p className="text-sm font-extrabold" style={{ color: getModeColor(monitor.modoFuncionamiento) }}>{getModeLabel(monitor.modoFuncionamiento)}</p>
             </div>
           </CardBody></Card>
 
@@ -1132,8 +1132,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           <div className="grid grid-cols-2 gap-1.5">
             {/* ── Portes ── */}
             <Card><CardBody className="p-2 space-y-1.5">
-              <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
-                <DoorOpen className="w-2.5 h-2.5" /> Portes
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
+                <DoorOpen className="w-3.5 h-3.5" /> Portes
               </p>
               <div className="grid grid-cols-2 gap-1">
                 <MonitorBadge label="Porte 1" value={doorLabel} color={doorColor} />
@@ -1153,23 +1153,23 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 </div>
               )}
               {monitor.flechaSubida && (
-                <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3 text-[#059669]" /><span className="text-[7px] text-[#059669] font-bold">Montée</span></div>
+                <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3 text-[#059669]" /><span className="text-xs text-[#059669] font-bold">Montée</span></div>
               )}
               {monitor.flechaBajada && (
-                <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3 text-[#3B82F6]" /><span className="text-[7px] text-[#3B82F6] font-bold">Descente</span></div>
+                <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3 text-[#3B82F6]" /><span className="text-xs text-[#3B82F6] font-bold">Descente</span></div>
               )}
             </CardBody></Card>
 
             {/* ── Chaîne de sécurité (Série) ── */}
             <Card><CardBody className="p-2 space-y-1.5">
-              <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
-                <Shield className="w-2.5 h-2.5" /> Série
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
+                <Shield className="w-3.5 h-3.5" /> Série
               </p>
               {/* Points optionnels 85, 95 au-dessus (comme S4L) */}
               <div className="flex justify-center gap-6">
                 {([['85', monitor.serieSeguridad85], ['95', monitor.serieSeguridad95]] as [string, boolean | null][]).map(([id, ok]) => (
                   <div key={id}
-                    className="w-7 h-5 rounded flex items-center justify-center text-[8px] font-extrabold"
+                    className="w-7 h-5 rounded flex items-center justify-center text-xs font-extrabold"
                     style={{
                       backgroundColor: ok === true ? '#5cb85c' : '#9e9e9e',
                       color: 'white',
@@ -1189,7 +1189,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                   ['90', monitor.serieSeguridad90],
                 ] as [string, boolean | null][]).map(([id, ok]) => (
                   <div key={id}
-                    className="w-8 h-6 rounded flex items-center justify-center text-[9px] font-extrabold"
+                    className="w-8 h-6 rounded flex items-center justify-center text-sm font-extrabold"
                     style={{
                       backgroundColor: ok === true ? '#5cb85c' : '#9e9e9e',
                       color: 'white',
@@ -1203,8 +1203,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
 
           {/* ── Alimentation ── */}
           <Card><CardBody className="p-2">
-            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1.5 flex items-center gap-1">
-              <Zap className="w-2.5 h-2.5" /> Alimentation
+            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1.5 flex items-center gap-1">
+              <Zap className="w-3.5 h-3.5" /> Alimentation
             </p>
             {/* Grille 3 colonnes fidèle au layout S4L */}
             <div className="grid grid-cols-3 gap-1.5">
@@ -1227,13 +1227,13 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                         backgroundColor: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#5cb85c',
                       }} />
                   </div>
-                  <span className="text-[13px] font-extrabold" style={{
+                  <span className="text-base font-extrabold" style={{
                     color: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#5cb85c'
                   }}>{monitor.cargaBateria} %</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className={cn('w-2 h-2 rounded-full', monitor.conectadoARed ? 'bg-[#5cb85c]' : 'bg-[#DC2626]')} />
-                  <span className="text-[8px] font-bold text-[var(--text-secondary)]">
+                  <div className={cn('w-3 h-3 rounded-full', monitor.conectadoARed ? 'bg-[#5cb85c]' : 'bg-[#DC2626]')} />
+                  <span className="text-xs font-bold text-[var(--text-secondary)]">
                     {monitor.conectadoARed ? 'Connecté au réseau' : 'Déconnecté'}
                   </span>
                 </div>
@@ -1243,8 +1243,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
 
           {/* ── Variateur & Bus ── */}
           <Card><CardBody className="p-2">
-            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
-              <Activity className="w-2.5 h-2.5" /> Variateur
+            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
+              <Activity className="w-3.5 h-3.5" /> Variateur
             </p>
             <div className="grid grid-cols-4 gap-1">
               <MonitorBadge label="Phase" value={getDrivePhaseLabel(monitor.faseVariador)} color={getDrivePhaseColor(monitor.faseVariador)} />
@@ -1260,17 +1260,17 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
 
           {/* ── Appels (Envoi de cabine / Palier montée / Palier descente) ── */}
           <Card><CardBody className="p-2">
-            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1.5">Appel / Envoi</p>
+            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1.5">Appel / Envoi</p>
             <div className="grid grid-cols-3 gap-2">
               {/* Envoi de cabine (cliquable → envoie Comando) */}
               <div>
-                <p className="text-[6px] font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Envoi de cabine</p>
-                <div className="flex flex-wrap gap-0.5">
+                <p className="text-sm font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Envoi de cabine</p>
+                <div className="flex flex-wrap gap-1.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeCabinCalls.includes(f);
                     return <button key={f} onClick={() => handleComando(f, 'LlamadasCabina')}
                       title={`Envoyer cabine à l'étage ${f}`}
-                      className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#8B5CF6]',
+                      className={cn('w-5 h-5 rounded flex items-center justify-center text-xs font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#8B5CF6]',
                       active ? 'bg-[#8B5CF6] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#8B5CF6]/20'
                     )}>{f}</button>;
                   })}
@@ -1278,13 +1278,13 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               </div>
               {/* Appel palier en montée (cliquable) */}
               <div>
-                <p className="text-[6px] font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en montée</p>
-                <div className="flex flex-wrap gap-0.5">
+                <p className="text-sm font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en montée</p>
+                <div className="flex flex-wrap gap-1.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeUpCalls.includes(f);
                     return <button key={f} onClick={() => handleComando(f, 'LlamadasExterioresSubida')}
                       title={`Appel montée étage ${f}`}
-                      className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#059669]',
+                      className={cn('w-5 h-5 rounded flex items-center justify-center text-xs font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#059669]',
                       active ? 'bg-[#059669] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#059669]/20'
                     )}>{f}</button>;
                   })}
@@ -1292,13 +1292,13 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               </div>
               {/* Appel palier en descente (cliquable) */}
               <div>
-                <p className="text-[6px] font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en descente</p>
-                <div className="flex flex-wrap gap-0.5">
+                <p className="text-sm font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en descente</p>
+                <div className="flex flex-wrap gap-1.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeDownCalls.includes(f);
                     return <button key={f} onClick={() => handleComando(f, 'LlamadasExterioresBajada')}
                       title={`Appel descente étage ${f}`}
-                      className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#DC2626]',
+                      className={cn('w-5 h-5 rounded flex items-center justify-center text-xs font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#DC2626]',
                       active ? 'bg-[#DC2626] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#DC2626]/20'
                     )}>{f}</button>;
                   })}
@@ -1309,7 +1309,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
 
           {/* ── Cartes détectées ── */}
           <Card><CardBody className="p-2">
-            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1">Cartes détectées</p>
+            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Cartes détectées</p>
             <div className="flex flex-wrap gap-1">
               {([
                 ['MIO', monitor.numPlacaMIO], ['RevMam', monitor.numPlacaRevMam], ['CAR', monitor.numPlacaCar],
@@ -1318,7 +1318,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 ['RevAux', monitor.numPlacaRevAux], ['Audio', monitor.numPlacaAudio], ['Interph.', monitor.numPlacaInterfono],
                 ['SynGO', monitor.numPlacaSyngo],
               ] as [string, number | null][]).map(([name, count]) => (
-                <span key={name} className={cn('text-[6px] px-1.5 py-0.5 rounded-full font-bold',
+                <span key={name} className={cn('text-sm px-1.5 py-0.5 rounded-full font-bold',
                   count && count > 0 ? 'bg-[#059669]/10 text-[#059669]' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
                 )}>
                   {name}{count != null && count > 0 ? ` ×${count}` : ''}
@@ -1330,8 +1330,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           {/* ── Actions à distance ── */}
           <Card><CardBody className="p-2">
             <button onClick={() => setShowActions(!showActions)} className="w-full flex items-center justify-between">
-              <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
-                <Send className="w-2.5 h-2.5" /> Actions à distance ({MONITOR_ACTIONS.length})
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
+                <Send className="w-3.5 h-3.5" /> Actions à distance ({MONITOR_ACTIONS.length})
               </p>
               {showActions
                 ? <ChevronUp className="w-3 h-3 text-[var(--text-muted)]" />
@@ -1342,12 +1342,12 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 {MONITOR_ACTIONS.map(a => (
                   <button key={a.key} onClick={() => handleAction(a.key)}
                     className={cn(
-                      'flex items-center gap-1 px-2 py-1.5 rounded text-[7px] font-bold transition-colors',
+                      'flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold transition-colors',
                       a.danger
                         ? 'bg-[#DC2626]/10 text-[#DC2626] hover:bg-[#DC2626]/20'
                         : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
                     )}>
-                    <span className="text-[9px]">{a.icon}</span>{a.label}
+                    <span className="text-sm">{a.icon}</span>{a.label}
                   </button>
                 ))}
               </div>
@@ -1356,7 +1356,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
         </>
       ) : (
         <div className="text-center py-8">
-          <p className="text-[10px] text-[var(--text-muted)]">Données monitor non disponibles</p>
+          <p className="text-sm text-[var(--text-muted)]">Données monitor non disponibles</p>
         </div>
       )}
     </div>
@@ -1376,8 +1376,8 @@ function busColor(v: number | null | undefined): string {
 function AliCard({ label, value, unit, decimals = 0 }: { label: string; value: number | null | undefined; unit: string; decimals?: number }) {
   return (
     <div className="bg-[var(--bg-secondary)] rounded p-1.5 text-center">
-      <p className="text-[5px] text-[var(--text-muted)] font-semibold truncate">{label}</p>
-      <p className="text-[12px] font-extrabold text-[var(--text-primary)]">
+      <p className="text-sm text-[var(--text-muted)] font-semibold truncate">{label}</p>
+      <p className="text-base font-extrabold text-[var(--text-primary)]">
         {value != null ? `${decimals > 0 ? value.toFixed(decimals) : value} ${unit}` : '—'}
       </p>
     </div>
@@ -1389,8 +1389,8 @@ function MiniKPI({ label, value, icon, color }: { label: string; value: string; 
     <Card className="flex-1"><CardBody className="p-2 flex items-center gap-2">
       <div className="flex-shrink-0" style={{ color }}>{icon}</div>
       <div>
-        <p className="text-[13px] font-extrabold font-mono" style={{ color }}>{value}</p>
-        <p className="text-[5px] text-[var(--text-muted)] font-semibold leading-tight">{label}</p>
+        <p className="text-base font-extrabold font-mono" style={{ color }}>{value}</p>
+        <p className="text-sm text-[var(--text-muted)] font-semibold leading-tight">{label}</p>
       </div>
     </CardBody></Card>
   );
@@ -1399,8 +1399,8 @@ function MiniKPI({ label, value, icon, color }: { label: string; value: string; 
 function MonitorBadge({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="p-1 rounded bg-[var(--bg-primary)]">
-      <p className="text-[5px] text-[var(--text-muted)] font-semibold">{label}</p>
-      <p className="text-[8px] font-bold truncate" style={{ color }}>{value}</p>
+      <p className="text-sm text-[var(--text-muted)] font-semibold">{label}</p>
+      <p className="text-xs font-bold truncate" style={{ color }}>{value}</p>
     </div>
   );
 }
@@ -1444,33 +1444,33 @@ function ErrorsTab({ selectedLiftId, selectedLift, setSelectedLiftId, onSwitchTo
     <div className="h-full flex flex-col gap-2 overflow-hidden">
       {/* Lift sélectionné info */}
       {selectedLiftId && selectedLift && (
-        <div className="flex items-center justify-between flex-shrink-0 px-2 py-1.5 rounded-lg bg-[#059669]/10 border border-[#059669]/20">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded bg-[#059669] flex items-center justify-center">
-              <Monitor className="w-3 h-3 text-white" />
+        <div className="flex items-center justify-between flex-shrink-0 px-4 py-3 rounded-2xl bg-[#059669]/10 border border-[#059669]/20">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-[#059669] flex items-center justify-center">
+              <Monitor className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-[9px] font-extrabold text-[#059669]">{selectedLift.liftCompRef}</p>
-              <p className="text-[6px] text-[var(--text-muted)]">{selectedLift.city}{selectedLift.city && selectedLift.descripcion ? ' · ' : ''}{selectedLift.descripcion}</p>
+              <p className="text-sm font-extrabold text-[#059669]">{selectedLift.liftCompRef}</p>
+              <p className="text-xs text-[var(--text-muted)]">{selectedLift.city}{selectedLift.city && selectedLift.descripcion ? ' · ' : ''}{selectedLift.descripcion}</p>
             </div>
           </div>
-          <button onClick={onSwitchToMonitor} className="text-[7px] font-bold text-[#059669] hover:underline flex items-center gap-0.5">
-            <Monitor className="w-2.5 h-2.5" /> Voir Monitor
+          <button onClick={onSwitchToMonitor} className="text-sm font-bold text-[#059669] hover:underline flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-[#059669]/10 transition-colors">
+            <Monitor className="w-4 h-4" /> Voir Monitor
           </button>
         </div>
       )}
 
       {!selectedLiftId && (
-        <div className="flex items-center gap-2 flex-shrink-0 px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
-          <AlertTriangle className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-          <p className="text-[8px] text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 flex-shrink-0 px-4 py-3 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
+          <AlertTriangle className="w-5 h-5 text-[var(--text-muted)]" />
+          <p className="text-sm text-[var(--text-muted)]">
             Sélectionnez un ascenseur dans l'onglet <strong className="text-[var(--text-primary)]">Monitor</strong> pour voir son historique d'erreurs
           </p>
         </div>
       )}
 
       {/* Sub-tabs */}
-      <div className="flex gap-0.5 flex-shrink-0 bg-[var(--bg-secondary)] rounded-lg p-0.5">
+      <div className="flex items-center gap-2 border-b border-[var(--border-primary)] pb-2 flex-shrink-0">
         {([
           ...(selectedLiftId ? [{ id: 'history' as const, label: 'Historique', icon: Clock }] : []),
           { id: 'search' as const, label: 'Catalogue', icon: Search },
@@ -1481,12 +1481,12 @@ function ErrorsTab({ selectedLiftId, selectedLift, setSelectedLiftId, onSwitchTo
           return (
             <button key={t.id} onClick={() => setSubTab(t.id)}
               className={cn(
-                'flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[8px] font-bold transition-all',
+                'flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all',
                 subTab === t.id
-                  ? 'bg-[var(--bg-primary)] text-[#EA580C] shadow-sm'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                  ? 'bg-[#EA580C]/15 text-[#EA580C]'
+                  : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)]'
               )}>
-              <Icon className="w-3 h-3" />{t.label}
+              <Icon className="w-4 h-4" />{t.label}
             </button>
           );
         })}
@@ -1736,32 +1736,32 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
     <div className="h-full flex flex-col gap-1.5 overflow-hidden">
       {/* KPI + Période */}
       <div className="flex gap-1 flex-shrink-0 items-end">
-        <Card className="flex-1"><CardBody className="p-1.5 text-center">
-          <p className="text-[14px] font-extrabold font-mono text-[#3B82F6]">{stats.total}</p>
-          <p className="text-[5px] text-[var(--text-muted)] font-semibold">messages</p>
+        <Card className="flex-1"><CardBody className="p-3 text-center">
+          <p className="text-xl font-extrabold font-mono text-[#3B82F6]">{stats.total}</p>
+          <p className="text-sm text-[var(--text-muted)] font-semibold">messages</p>
         </CardBody></Card>
-        <Card className="flex-1"><CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
+        <Card className="flex-1"><CardBody className="p-3 text-center cursor-pointer hover:opacity-80"
           onClick={() => setFilterSeverity(filterSeverity === '_errors' ? 'all' : '_errors')}>
-          <p className="text-[14px] font-extrabold font-mono text-[#DC2626]">{stats.errors}</p>
-          <p className="text-[5px] text-[var(--text-muted)] font-semibold">
+          <p className="text-xl font-extrabold font-mono text-[#DC2626]">{stats.errors}</p>
+          <p className="text-sm text-[var(--text-muted)] font-semibold">
             {filterSeverity === '_errors' ? '✓ erreurs' : 'erreurs'}
           </p>
         </CardBody></Card>
-        <Card className="flex-1"><CardBody className="p-1.5 text-center">
-          <p className="text-[14px] font-extrabold font-mono text-[#059669]">{stats.normals}</p>
-          <p className="text-[5px] text-[var(--text-muted)] font-semibold">retours OK</p>
+        <Card className="flex-1"><CardBody className="p-3 text-center">
+          <p className="text-xl font-extrabold font-mono text-[#059669]">{stats.normals}</p>
+          <p className="text-sm text-[var(--text-muted)] font-semibold">retours OK</p>
         </CardBody></Card>
         {/* Sévérités connues */}
         {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
           .filter(([key]) => (stats.bySeverity[key] || 0) > 0)
           .map(([key, sev]) => (
           <Card key={key} className="flex-1">
-            <CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
+            <CardBody className="p-3 text-center cursor-pointer hover:opacity-80"
               onClick={() => setFilterSeverity(filterSeverity === key ? 'all' : key)}>
-              <p className="text-[14px] font-extrabold font-mono" style={{ color: sev.color }}>
+              <p className="text-lg font-extrabold font-mono" style={{ color: sev.color }}>
                 {stats.bySeverity[key] || 0}
               </p>
-              <p className="text-[5px] text-[var(--text-muted)] font-semibold leading-tight">
+              <p className="text-sm text-[var(--text-muted)] font-semibold leading-tight">
                 {sev.icon} {sev.short}
               </p>
             </CardBody>
@@ -1771,10 +1771,10 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
 
       {/* Période + recherche */}
       <div className="flex gap-1 flex-shrink-0 items-center">
-        <div className="flex gap-0.5 bg-[var(--bg-secondary)] rounded-lg p-0.5">
+        <div className="flex gap-1 bg-[var(--bg-tertiary)] rounded-xl p-1">
           {[1, 3, 7, 14, 30].map(d => (
             <button key={d} onClick={() => setDays(d)}
-              className={cn('px-2 py-1 rounded text-[7px] font-bold transition-all',
+              className={cn('px-3 py-1.5 rounded-lg text-xs font-bold transition-all',
                 days === d ? 'bg-[var(--bg-primary)] text-[#059669] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
               )}>
               {d}j
@@ -1785,16 +1785,16 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
           <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             placeholder="Filtrer…"
-            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none focus:border-[#EA580C] transition-colors" />
+            className="w-full pl-8 pr-3 py-2 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm outline-none focus:border-[#EA580C] transition-colors placeholder:text-[var(--text-tertiary)]" />
         </div>
         {filterSeverity !== 'all' && (
           <button onClick={() => setFilterSeverity('all')}
-            className="px-2 py-1 rounded-lg bg-[#EA580C]/10 text-[#EA580C] text-[7px] font-bold whitespace-nowrap">
+            className="px-2 py-1 rounded-lg bg-[#EA580C]/10 text-[#EA580C] text-xs font-bold whitespace-nowrap">
             ✕ Filtre
           </button>
         )}
         <button onClick={() => setShowDebug(!showDebug)}
-          className={cn('text-[6px] px-1.5 py-1 rounded font-bold transition-colors',
+          className={cn('text-sm px-1.5 py-1 rounded font-bold transition-colors',
             showDebug ? 'bg-[#8B5CF6]/15 text-[#8B5CF6]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]'
           )}>
           🔍
@@ -1808,8 +1808,8 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
       {/* Debug panel */}
       {showDebug && (
         <Card className="flex-shrink-0 max-h-52 overflow-y-auto"><CardBody className="p-2">
-          <p className="text-[7px] font-extrabold text-[#8B5CF6] mb-1">🔍 Debug — /divide/lifts/{liftId}/messages ({days}j)</p>
-          <p className="text-[6px] text-[var(--text-secondary)] mb-1">
+          <p className="text-xs font-extrabold text-[#8B5CF6] mb-1">🔍 Debug — /divide/lifts/{liftId}/messages ({days}j)</p>
+          <p className="text-sm text-[var(--text-secondary)] mb-1">
             {rawMessages ? `${Array.isArray(rawMessages) ? rawMessages.length : '?'} items reçus` : 'Pas de données'}
           </p>
           {rawMessages && Array.isArray(rawMessages) && rawMessages.length > 0 && (() => {
@@ -1822,19 +1822,19 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
             dates.sort();
             return (
               <div className="space-y-1">
-                <div className="flex gap-2 text-[6px]">
+                <div className="flex gap-2 text-sm">
                   {Object.entries(dtypes).map(([k, v]) => (
                     <span key={k} className="px-1 py-0.5 rounded bg-[var(--bg-tertiary)]">
                       <span className="font-bold text-[#EA580C]">{k}</span>: {v}
                     </span>
                   ))}
                 </div>
-                <p className="text-[5px] text-[var(--text-muted)]">
+                <p className="text-sm text-[var(--text-muted)]">
                   Plage : {dates[0]?.slice(0, 16) || '?'} → {dates[dates.length - 1]?.slice(0, 16) || '?'}
                 </p>
-                <p className="text-[5px] font-bold text-[var(--text-muted)] uppercase mt-1">Derniers 8 messages bruts :</p>
+                <p className="text-sm font-bold text-[var(--text-muted)] uppercase mt-1">Derniers 8 messages bruts :</p>
                 {rawMessages.slice(0, 8).map((msg: any, i: number) => (
-                  <div key={i} className="text-[5px] font-mono bg-[var(--bg-tertiary)] rounded px-1 py-0.5 flex flex-wrap gap-x-2">
+                  <div key={i} className="text-sm font-mono bg-[var(--bg-tertiary)] rounded px-1 py-0.5 flex flex-wrap gap-x-2">
                     <span className="text-[#EA580C] font-bold">{msg.dtype}</span>
                     <span>type={msg.type} sub={msg.subtype}/{msg.subsubtype}</span>
                     <span className="text-[#059669] font-bold">content="{msg.content}"</span>
@@ -1849,14 +1849,14 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
         </CardBody></Card>
       )}
 
-      <p className="text-[7px] text-[var(--text-muted)] px-1 flex-shrink-0">
+      <p className="text-xs text-[var(--text-muted)] px-1 flex-shrink-0">
         {filteredErrors.length} résultat{filteredErrors.length > 1 ? 's' : ''} sur {days} jour{days > 1 ? 's' : ''}
         {searchQuery ? ` · "${searchQuery}"` : ''}
       </p>
 
       {/* Liste */}
       {filteredErrors.length > 0 ? (
-        <div className="flex-1 overflow-y-auto space-y-0.5">
+        <div className="flex-1 overflow-y-auto space-y-1.5">
           {filteredErrors.map((err: any, idx: number) => (
             <LiftMessageRow key={err.id || idx} msg={err} />
           ))}
@@ -1867,13 +1867,13 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
             {stats.total === 0 ? (
               <>
                 <Check className="w-8 h-8 text-[#059669] mx-auto mb-2 opacity-40" />
-                <p className="text-[10px] text-[var(--text-muted)] font-semibold">Aucun message sur les {days} derniers jours</p>
-                <p className="text-[7px] text-[var(--text-muted)] mt-1">Essayez une période plus longue</p>
+                <p className="text-sm text-[var(--text-muted)] font-semibold">Aucun message sur les {days} derniers jours</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">Essayez une période plus longue</p>
               </>
             ) : (
               <>
                 <Search className="w-6 h-6 text-[var(--text-muted)] mx-auto mb-2 opacity-30" />
-                <p className="text-[10px] text-[var(--text-muted)] font-semibold">Aucun résultat pour ce filtre</p>
+                <p className="text-sm text-[var(--text-muted)] font-semibold">Aucun résultat pour ce filtre</p>
               </>
             )}
           </div>
@@ -1905,80 +1905,80 @@ function LiftMessageRow({ msg }: { msg: any }) {
     <Card className={cn(isNoError && 'opacity-60')}>
       <CardBody className="p-0">
         <button onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center gap-1.5 p-1.5 text-left hover:bg-[var(--bg-secondary)]/50 rounded-lg transition-colors">
+          className="w-full flex items-center gap-2.5 p-3 text-left hover:bg-[var(--bg-secondary)]/50 rounded-xl transition-colors">
           {/* Icône sévérité ou type */}
-          <span className="text-[8px] flex-shrink-0" title={sev ? sev.label : typeInfo.label}>
+          <span className="text-xs flex-shrink-0" title={sev ? sev.label : typeInfo.label}>
             {sev ? sev.icon : typeInfo.icon}
           </span>
           {/* Code erreur */}
           <code className={cn(
-            'text-[8px] font-mono font-extrabold flex-shrink-0 w-20',
+            'text-sm font-mono font-extrabold flex-shrink-0 min-w-[80px]',
             isNoError ? 'text-[#059669]' : 'text-[#EA580C]'
           )}>
             {isNoError ? '✓ OK' : msg.displayCode}
           </code>
           {/* Description */}
-          <span className="text-[8px] font-semibold flex-1 truncate text-[var(--text-primary)]">
+          <span className="text-xs font-semibold flex-1 truncate text-[var(--text-primary)]">
             {msg.description}
           </span>
           {/* dtype badge */}
-          <span className="text-[5px] px-1 py-0.5 rounded-full font-bold flex-shrink-0"
+          <span className="text-sm px-1 py-0.5 rounded-full font-bold flex-shrink-0"
             style={{ backgroundColor: `${typeInfo.color}15`, color: typeInfo.color }}>
             {msg.dtype || typeInfo.label}
           </span>
           {/* Date */}
-          <span className="text-[6px] text-[var(--text-muted)] font-mono flex-shrink-0 flex items-center gap-0.5">
-            <Clock className="w-2 h-2" />{dateStr}
+          <span className="text-sm text-[var(--text-muted)] font-mono flex-shrink-0 flex items-center gap-1.5">
+            <Clock className="w-3 h-3" />{dateStr}
           </span>
           {(msg.cause || msg.help || msg.observations || msg.extraContent) && (
             <ChevronRight className={cn(
-              'w-2.5 h-2.5 text-[var(--text-muted)] transition-transform flex-shrink-0',
+              'w-3.5 h-3.5 text-[var(--text-muted)] transition-transform flex-shrink-0',
               expanded && 'rotate-90'
             )} />
           )}
         </button>
         {expanded && (
-          <div className="px-3 pb-2 space-y-1 border-t border-[var(--border-secondary)]">
+          <div className="px-4 pb-3 pt-2 space-y-2 border-t border-[var(--border-secondary)]">
             {/* Détails techniques */}
-            <div className="mt-1 grid grid-cols-5 gap-1">
-              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">ID:</span> <span className="font-mono">{msg.id}</span></div>
-              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Dtype:</span> <span className="font-mono text-[#8B5CF6]">{msg.dtype}</span></div>
-              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Type:</span> <span className="font-mono">{msg.type}/{msg.subtype}/{msg.subsubtype}</span></div>
-              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Content:</span> <span className="font-mono text-[#EA580C]">{msg.content}</span></div>
-              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">LiftId:</span> <span className="font-mono">{msg.liftId}</span></div>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">ID:</span> <span className="font-mono">{msg.id}</span></div>
+              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">Dtype:</span> <span className="font-mono text-[#8B5CF6]">{msg.dtype}</span></div>
+              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">Type:</span> <span className="font-mono">{msg.type}/{msg.subtype}/{msg.subsubtype}</span></div>
+              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">Content:</span> <span className="font-mono text-[#EA580C]">{msg.content}</span></div>
+              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">LiftId:</span> <span className="font-mono">{msg.liftId}</span></div>
             </div>
             {msg.cause && (
               <div>
-                <p className="text-[6px] font-bold text-[#EA580C] uppercase">Cause probable</p>
-                <p className="text-[7px] text-[var(--text-secondary)]">{msg.cause}</p>
+                <p className="text-sm font-bold text-[#EA580C] uppercase">Cause probable</p>
+                <p className="text-xs text-[var(--text-secondary)]">{msg.cause}</p>
               </div>
             )}
             {msg.help && (
               <div>
-                <p className="text-[6px] font-bold text-[#059669] uppercase">Aide diagnostic</p>
-                <p className="text-[7px] text-[var(--text-secondary)]">{msg.help}</p>
+                <p className="text-sm font-bold text-[#059669] uppercase">Aide diagnostic</p>
+                <p className="text-xs text-[var(--text-secondary)]">{msg.help}</p>
               </div>
             )}
             {msg.observations && (
               <div>
-                <p className="text-[6px] font-bold text-[#3B82F6] uppercase">Observations</p>
-                <p className="text-[7px] text-[var(--text-secondary)]">{msg.observations}</p>
+                <p className="text-sm font-bold text-[#3B82F6] uppercase">Observations</p>
+                <p className="text-xs text-[var(--text-secondary)]">{msg.observations}</p>
               </div>
             )}
             {msg.extraContent && (
               <div>
-                <p className="text-[6px] font-bold text-[#8B5CF6] uppercase">Extra</p>
-                <p className="text-[7px] text-[var(--text-secondary)] font-mono">{msg.extraCode} · {msg.extraContent}</p>
+                <p className="text-sm font-bold text-[#8B5CF6] uppercase">Extra</p>
+                <p className="text-xs text-[var(--text-secondary)] font-mono">{msg.extraCode} · {msg.extraContent}</p>
               </div>
             )}
             {sev && (
               <div className="flex items-center gap-1 pt-1">
-                <span className="text-[6px] font-bold text-[var(--text-muted)]">Sévérité :</span>
-                <span className="text-[7px] font-bold" style={{ color: sev.color }}>{sev.icon} {sev.label}</span>
+                <span className="text-sm font-bold text-[var(--text-muted)]">Sévérité :</span>
+                <span className="text-xs font-bold" style={{ color: sev.color }}>{sev.icon} {sev.label}</span>
               </div>
             )}
             {msg.closingDate && (
-              <div className="text-[6px] text-[var(--text-muted)]">
+              <div className="text-sm text-[var(--text-muted)]">
                 Clôturé : {new Date(msg.closingDate).toLocaleString('fr-FR')}
               </div>
             )}
@@ -2024,9 +2024,9 @@ function ErrorSearchPanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]; ap
     <div className="h-full flex flex-col gap-1.5 overflow-hidden">
       {/* Severity stats bar */}
       <div className="flex gap-1 flex-shrink-0">
-        <Card className="flex-1"><CardBody className="p-1.5 text-center">
-          <p className="text-[14px] font-extrabold font-mono text-[#3B82F6]">{stats.total}</p>
-          <p className="text-[5px] text-[var(--text-muted)] font-semibold">
+        <Card className="flex-1"><CardBody className="p-3 text-center">
+          <p className="text-xl font-extrabold font-mono text-[#3B82F6]">{stats.total}</p>
+          <p className="text-sm text-[var(--text-muted)] font-semibold">
             {apiCount > 0 ? `${apiCount} API + local` : 'codes en base'}
           </p>
         </CardBody></Card>
@@ -2034,12 +2034,12 @@ function ErrorSearchPanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]; ap
           .filter(([key]) => (stats.bySeverity[key] || 0) > 0 || ['fatal_local', 'fatal_remote', 'leve', 'info'].includes(key))
           .map(([key, sev]) => (
           <Card key={key} className="flex-1">
-            <CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
+            <CardBody className="p-3 text-center cursor-pointer hover:opacity-80"
               onClick={() => setFilterSeverity(filterSeverity === key ? 'all' : key)}>
-              <p className="text-[14px] font-extrabold font-mono" style={{ color: sev.color }}>
+              <p className="text-lg font-extrabold font-mono" style={{ color: sev.color }}>
                 {stats.bySeverity[key] || 0}
               </p>
-              <p className="text-[5px] text-[var(--text-muted)] font-semibold leading-tight">
+              <p className="text-sm text-[var(--text-muted)] font-semibold leading-tight">
                 {sev.icon} {sev.short}
               </p>
             </CardBody>
@@ -2053,23 +2053,23 @@ function ErrorSearchPanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]; ap
           <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input type="text" value={query} onChange={e => setQuery(e.target.value)}
             placeholder="Rechercher un code (F0102, ECO, MBA…) ou une description…"
-            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none focus:border-[#EA580C] transition-colors"
+            className="w-full pl-8 pr-3 py-2 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm outline-none focus:border-[#EA580C] transition-colors placeholder:text-[var(--text-tertiary)]"
             autoFocus />
         </div>
         {filterSeverity !== 'all' && (
           <button onClick={() => setFilterSeverity('all')}
-            className="px-2 py-1 rounded-lg bg-[#EA580C]/10 text-[#EA580C] text-[8px] font-bold">
+            className="px-2 py-1 rounded-lg bg-[#EA580C]/10 text-[#EA580C] text-xs font-bold">
             ✕ {SEVERITY_LEVELS[filterSeverity as SeverityKey]?.short}
           </button>
         )}
       </div>
 
-      <p className="text-[7px] text-[var(--text-muted)] px-1 flex-shrink-0">
+      <p className="text-xs text-[var(--text-muted)] px-1 flex-shrink-0">
         {results.length} résultat{results.length > 1 ? 's' : ''}{query ? ` pour "${query}"` : ''}
       </p>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto space-y-0.5">
+      <div className="flex-1 overflow-y-auto space-y-1.5">
         {results.map(err => <ErrorCodeRow key={err.code} error={err} />)}
       </div>
     </div>
@@ -2087,41 +2087,41 @@ function ErrorCodeRow({ error }: { error: S4LErrorCode }) {
       <CardBody className="p-0">
         <button onClick={() => setExpanded(!expanded)}
           className="w-full flex items-center gap-2 p-2 text-left hover:bg-[var(--bg-secondary)]/50 rounded-lg transition-colors">
-          {sev && <span className="text-[8px]" title={sev.label}>{sev.icon}</span>}
-          <code className="text-[9px] font-mono font-extrabold text-[#EA580C] flex-shrink-0 w-28">
+          {sev && <span className="text-xs" title={sev.label}>{sev.icon}</span>}
+          <code className="text-sm font-mono font-extrabold text-[#EA580C] flex-shrink-0 w-28">
             {error.code}
           </code>
-          <span className="text-[8px] font-semibold flex-1 truncate text-[var(--text-primary)]">
+          <span className="text-xs font-semibold flex-1 truncate text-[var(--text-primary)]">
             {error.description}
           </span>
-          <span className="text-[6px] px-1.5 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)] font-bold flex-shrink-0">
+          <span className="text-sm px-1.5 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)] font-bold flex-shrink-0">
             {error.family}
           </span>
           {(error.cause || error.help) && (
             <ChevronRight className={cn(
-              'w-2.5 h-2.5 text-[var(--text-muted)] transition-transform',
+              'w-3.5 h-3.5 text-[var(--text-muted)] transition-transform',
               expanded && 'rotate-90'
             )} />
           )}
         </button>
         {expanded && (error.cause || error.help || sev) && (
-          <div className="px-3 pb-2 space-y-1 border-t border-[var(--border-secondary)]">
+          <div className="px-4 pb-3 pt-2 space-y-2 border-t border-[var(--border-secondary)]">
             {error.cause && (
               <div className="mt-1">
-                <p className="text-[6px] font-bold text-[#EA580C] uppercase">Cause probable</p>
-                <p className="text-[7px] text-[var(--text-secondary)]">{error.cause}</p>
+                <p className="text-sm font-bold text-[#EA580C] uppercase">Cause probable</p>
+                <p className="text-xs text-[var(--text-secondary)]">{error.cause}</p>
               </div>
             )}
             {error.help && (
               <div>
-                <p className="text-[6px] font-bold text-[#059669] uppercase">Aide diagnostic</p>
-                <p className="text-[7px] text-[var(--text-secondary)]">{error.help}</p>
+                <p className="text-sm font-bold text-[#059669] uppercase">Aide diagnostic</p>
+                <p className="text-xs text-[var(--text-secondary)]">{error.help}</p>
               </div>
             )}
             {sev && (
               <div className="flex items-center gap-1 pt-1">
-                <span className="text-[6px] font-bold text-[var(--text-muted)]">Sévérité :</span>
-                <span className="text-[7px] font-bold" style={{ color: sev.color }}>{sev.icon} {sev.label}</span>
+                <span className="text-sm font-bold text-[var(--text-muted)]">Sévérité :</span>
+                <span className="text-xs font-bold" style={{ color: sev.color }}>{sev.icon} {sev.label}</span>
               </div>
             )}
           </div>
@@ -2162,11 +2162,11 @@ function ErrorFamiliesPanel({ allCodes }: { allCodes: S4LErrorCode[] }) {
             className={cn('cursor-pointer transition-all', selectedFamily === f.key && 'ring-1 ring-[var(--text-primary)]')}>
             <CardBody className="p-2 text-center"
               onClick={() => setSelectedFamily(selectedFamily === f.key ? null : f.key)}>
-              <p className="text-[16px] font-extrabold font-mono" style={{ color: f.color }}>
+              <p className="text-xl font-extrabold font-mono" style={{ color: f.color }}>
                 {stats.byFamily[f.key] || 0}
               </p>
-              <p className="text-[7px] font-bold">{f.key}</p>
-              <p className="text-[5px] text-[var(--text-muted)] leading-tight mt-0.5">{f.desc}</p>
+              <p className="text-xs font-bold">{f.key}</p>
+              <p className="text-sm text-[var(--text-muted)] leading-tight mt-0.5">{f.desc}</p>
             </CardBody>
           </Card>
         ))}
@@ -2174,10 +2174,10 @@ function ErrorFamiliesPanel({ allCodes }: { allCodes: S4LErrorCode[] }) {
 
       {selectedFamily ? (
         <>
-          <p className="text-[8px] font-bold text-[var(--text-muted)] flex-shrink-0">
+          <p className="text-xs font-bold text-[var(--text-muted)] flex-shrink-0">
             {ERROR_FAMILIES_META.find(f => f.key === selectedFamily)?.label} — {familyCodes.length} codes
           </p>
-          <div className="flex-1 overflow-y-auto space-y-0.5">
+          <div className="flex-1 overflow-y-auto space-y-1.5">
             {familyCodes.map(err => <ErrorCodeRow key={err.code} error={err} />)}
           </div>
         </>
@@ -2185,8 +2185,8 @@ function ErrorFamiliesPanel({ allCodes }: { allCodes: S4LErrorCode[] }) {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <BookOpen className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2 opacity-30" />
-            <p className="text-[9px] text-[var(--text-muted)]">Sélectionnez une famille pour voir ses codes</p>
-            <p className="text-[7px] text-[var(--text-muted)] mt-1">
+            <p className="text-sm text-[var(--text-muted)]">Sélectionnez une famille pour voir ses codes</p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
               Base complète : 8582 codes × 10 langues (sélection des plus courants en FR)
             </p>
           </div>
@@ -2228,8 +2228,8 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
           <TrendingUp className="w-4 h-4 text-white" />
         </div>
         <div>
-          <h3 className="text-[12px] font-extrabold">Smart Preventive</h3>
-          <p className="text-[7px] text-[var(--text-muted)]">
+          <h3 className="text-base font-extrabold">Smart Preventive</h3>
+          <p className="text-xs text-[var(--text-muted)]">
             Analyse prédictive — classification par sévérité et typologie des erreurs
           </p>
         </div>
@@ -2237,7 +2237,7 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
 
       {/* Classification par sévérité */}
       <Card><CardBody className="p-3">
-        <h4 className="text-[9px] font-extrabold mb-2 flex items-center gap-1">
+        <h4 className="text-sm font-extrabold mb-2 flex items-center gap-1">
           <AlertTriangle className="w-3 h-3 text-[#EA580C]" /> Classification par sévérité
         </h4>
         <div className="space-y-2">
@@ -2248,11 +2248,11 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
             const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
             return (
               <div key={key} className="flex items-center gap-2">
-                <span className="text-[10px] w-5 text-center">{sev.icon}</span>
+                <span className="text-sm w-5 text-center">{sev.icon}</span>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-[8px] font-bold" style={{ color: sev.color }}>{sev.label}</span>
-                    <span className="text-[8px] font-mono font-bold">
+                    <span className="text-xs font-bold" style={{ color: sev.color }}>{sev.label}</span>
+                    <span className="text-xs font-mono font-bold">
                       {count} <span className="text-[var(--text-muted)]">({pct.toFixed(0)}%)</span>
                     </span>
                   </div>
@@ -2266,7 +2266,7 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
           })}
         </div>
         <div className="mt-2 pt-2 border-t border-[var(--border-secondary)] text-center">
-          <p className="text-[7px] text-[var(--text-muted)]">
+          <p className="text-xs text-[var(--text-muted)]">
             <strong style={{ color: '#DC2626' }}>Niv. 4</strong> → réarmement local (intervention sur site) ·
             <strong style={{ color: '#EA580C' }}> Niv. 3</strong> → réarmement à distance (via S4L) ·
             <strong style={{ color: '#CA8A04' }}> Niv. 2</strong> → auto-reset ·
@@ -2278,20 +2278,20 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
 
       {/* Typologie des erreurs par domaine */}
       <Card><CardBody className="p-3">
-        <h4 className="text-[9px] font-extrabold mb-2 flex items-center gap-1">
+        <h4 className="text-sm font-extrabold mb-2 flex items-center gap-1">
           <Filter className="w-3 h-3 text-[#8B5CF6]" /> Typologie par cause ({Object.keys(CAUSA_CATEGORIES).length - 1} catégories)
         </h4>
         <div className="space-y-2">
           {domains.map(([domain, items]) => (
             <div key={domain}>
-              <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-0.5">{domain}</p>
-              <div className="grid grid-cols-2 gap-0.5">
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-0.5">{domain}</p>
+              <div className="grid grid-cols-2 gap-1.5">
                 {items.map(t => (
                   <div key={t.key} className="flex items-center gap-1.5 px-1.5 py-1 rounded bg-[var(--bg-secondary)]">
                     <div className="w-1 h-4 rounded-full bg-[#8B5CF6]/40 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[7px] font-bold truncate">{t.label}</p>
-                      <p className="text-[5px] text-[var(--text-muted)] font-mono">CAUSA_{t.key}</p>
+                      <p className="text-xs font-bold truncate">{t.label}</p>
+                      <p className="text-sm text-[var(--text-muted)] font-mono">CAUSA_{t.key}</p>
                     </div>
                   </div>
                 ))}
@@ -2304,10 +2304,10 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
       {/* Info Life Warning */}
       <Card><CardBody className="p-3">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#CA8A04]/15 flex items-center justify-center text-[16px]">⚠️</div>
+          <div className="w-8 h-8 rounded-lg bg-[#CA8A04]/15 flex items-center justify-center text-xl">⚠️</div>
           <div>
-            <h4 className="text-[9px] font-extrabold text-[#CA8A04]">Life Warning — Avertissement durée de vie</h4>
-            <p className="text-[7px] text-[var(--text-muted)]">
+            <h4 className="text-sm font-extrabold text-[#CA8A04]">Life Warning — Avertissement durée de vie</h4>
+            <p className="text-xs text-[var(--text-muted)]">
               Détection prédictive des composants en fin de vie : batteries, variateur (V8207),
               condensateurs, relais. Le Smart Preventive classe automatiquement les erreurs et
               alerte avant la panne.
@@ -2318,8 +2318,8 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
 
       {/* Points chaîne sécurité */}
       <Card><CardBody className="p-3">
-        <h4 className="text-[9px] font-extrabold mb-2">Nomenclature chaîne de sécurité (points Sigma)</h4>
-        <div className="grid grid-cols-4 gap-1 text-[7px]">
+        <h4 className="text-sm font-extrabold mb-2">Nomenclature chaîne de sécurité (points Sigma)</h4>
+        <div className="grid grid-cols-4 gap-1 text-xs">
           {[
             { pt: '1H-3C', desc: 'Chaîne primaire' },
             { pt: '40', desc: 'Point coupure MCB' },
@@ -2332,7 +2332,7 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
           ].map(p => (
             <div key={p.pt} className="p-1 rounded bg-[var(--bg-secondary)]">
               <code className="text-[#EA580C] font-mono font-bold">{p.pt}</code>
-              <p className="text-[5px] text-[var(--text-muted)]">{p.desc}</p>
+              <p className="text-sm text-[var(--text-muted)]">{p.desc}</p>
             </div>
           ))}
         </div>
@@ -2348,7 +2348,7 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
 function LoadingState({ text }: { text: string }) {
   return <div className="h-full flex items-center justify-center">
     <Loader2 className="w-6 h-6 animate-spin text-[#059669]" />
-    <span className="ml-2 text-[10px] text-[var(--text-muted)]">{text}</span>
+    <span className="ml-2 text-sm text-[var(--text-muted)]">{text}</span>
   </div>;
 }
 
@@ -2356,9 +2356,9 @@ function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void })
   return <div className="h-full flex items-center justify-center">
     <Card><CardBody className="p-4 text-center">
       <XCircle className="w-8 h-8 text-[#DC2626] mx-auto mb-2" />
-      <p className="text-[10px] font-bold text-[#DC2626]">Erreur de chargement</p>
-      <p className="text-[8px] text-[var(--text-muted)]">{(error as Error).message}</p>
-      <button onClick={onRetry} className="mt-2 px-3 py-1 rounded bg-[#059669] text-white text-[9px] font-bold">Réessayer</button>
+      <p className="text-sm font-bold text-[#DC2626]">Erreur de chargement</p>
+      <p className="text-xs text-[var(--text-muted)]">{(error as Error).message}</p>
+      <button onClick={onRetry} className="mt-2 px-3 py-1 rounded bg-[#059669] text-white text-sm font-bold">Réessayer</button>
     </CardBody></Card>
   </div>;
 }
