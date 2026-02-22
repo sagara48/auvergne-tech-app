@@ -1519,31 +1519,79 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
 
   // Construire le code erreur standard depuis content/type/subtype
   const buildErrorCode = (msg: Sigma4MessageEntry): string => {
-    const content = msg.content || '';
-    // content est souvent un code 4 chiffres comme "0017"
-    // On essaie plusieurs formats pour matcher le catalogue
-    if (content === '0000') return ''; // Pas d'erreur
+    const content = (msg.content || '').trim();
+    if (content === '0000' || content === '') return ''; // Pas d'erreur
     return content;
   };
 
-  // Lookup catalogue : essayer content brut, F+content, ECO+content, etc.
+  // Index rapide depuis allCodes (API + local)
+  const allCodesIndex = useMemo(() => {
+    const idx = new Map<string, S4LErrorCode>();
+    allCodes.forEach(c => idx.set(c.code, c));
+    return idx;
+  }, [allCodes]);
+
+  // Décodage intelligent d'un code S4L inconnu
+  // ECO025001020 → famille ECO, groupe 025, code 001, sous-code 020
+  // F0017 → famille F (armoire), code 0017
+  const decodeUnknownCode = (code: string): { family: string; desc: string } => {
+    // Format ECOxxxyyy[zzz] — ex: ECO025001020
+    const ecoMatch = code.match(/^(ECO|MBA|VSE|V)(\d{3})(\d{3})(\d{3})?$/);
+    if (ecoMatch) {
+      const [, fam, grp, cd, sub] = ecoMatch;
+      const grpN = parseInt(grp), cdN = parseInt(cd), subN = sub ? parseInt(sub) : 0;
+      return {
+        family: fam,
+        desc: `${fam} — Groupe ${grpN} · Code ${cdN}${subN ? ` · Sous-code ${subN}` : ''}`,
+      };
+    }
+    // Format Fxxxx — codes armoire courts
+    const fMatch = code.match(/^F?(\d{4,6})$/);
+    if (fMatch) {
+      return { family: 'NUM', desc: `Code armoire F${fMatch[1]}` };
+    }
+    return { family: '', desc: `Code ${code}` };
+  };
+
+  // Lookup catalogue : essayer plusieurs variantes
   const findInCatalog = (content: string): S4LErrorCode | undefined => {
     if (!content || content === '0000') return undefined;
-    // Essayer le code brut
-    let found = lookupErrorCode(content);
+
+    // 1. Exact match dans allCodes (API + local fusionnés)
+    let found = allCodesIndex.get(content);
     if (found) return found;
-    // Essayer avec préfixe F (codes armoire)
-    found = lookupErrorCode('F' + content);
+
+    // 2. lookupErrorCode (base locale avec logique F-prefix)
+    found = lookupErrorCode(content);
     if (found) return found;
-    // Essayer ECO + padding pour les codes courts
-    // ex: "0017" → chercher dans les descriptions
-    const q = content.replace(/^0+/, '');
-    if (q) {
-      const match = allCodes.find(c =>
-        c.code.includes(content) || c.code.endsWith(content)
-      );
-      if (match) return match;
+
+    // 3. Avec préfixe F pour codes numériques purs
+    if (/^\d+$/.test(content)) {
+      found = allCodesIndex.get('F' + content) || lookupErrorCode('F' + content);
+      if (found) return found;
     }
+
+    // 4. Sans trailing zeros — ECO025001020 → ECO025001
+    if (content.length > 9 && content.match(/0{3}$/)) {
+      const trimmed = content.slice(0, -3);
+      found = allCodesIndex.get(trimmed);
+      if (found) return found;
+    }
+
+    // 5. Avec trailing zeros — ECO001002 → ECO001002000
+    if (content.match(/^[A-Z]+\d{6}$/) && !content.match(/\d{9}$/)) {
+      found = allCodesIndex.get(content + '000');
+      if (found) return found;
+    }
+
+    // 6. Recherche partielle : code se termine par content ou contient content
+    const match = allCodes.find(c =>
+      c.code === content ||
+      c.code.endsWith(content) ||
+      (content.length >= 6 && c.code.includes(content))
+    );
+    if (match) return match;
+
     return undefined;
   };
 
@@ -1562,17 +1610,18 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
     return rawMessages.map((msg: Sigma4MessageEntry) => {
       const code = buildErrorCode(msg);
       const catalog = findInCatalog(code);
+      const decoded = code && !catalog ? decodeUnknownCode(code) : null;
       const msgType = MSG_TYPES[msg.type] || { label: `Type ${msg.type}`, color: '#64748B', icon: '⚪' };
 
       return {
         ...msg,
         errorCode: code || '—',
-        displayCode: code ? (catalog ? catalog.code : `F${code}`) : '—',
-        description: catalog?.description || (code === '' ? 'Retour à la normale' : `Code ${code}`),
+        displayCode: code ? (catalog ? catalog.code : code) : '—',
+        description: catalog?.description || (code === '' ? 'Retour à la normale' : decoded?.desc || `Code ${code}`),
         cause: catalog?.cause || '',
         help: catalog?.help || '',
         severity: catalog?.severity,
-        family: catalog?.family || '',
+        family: catalog?.family || decoded?.family || '',
         msgType,
         date: msg.messageDate,
         dateEnd: msg.closingDate || '',
