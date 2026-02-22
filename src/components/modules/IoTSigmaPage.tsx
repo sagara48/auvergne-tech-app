@@ -812,7 +812,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
   const { data: monitor, isLoading, error, dataUpdatedAt } = useQuery({
     queryKey: ['sigma4', 'monitor', liftId],
     queryFn: () => getMonitorOnline(liftId),
-    refetchInterval: 10000,   // /status = polling REST, pas WebSocket
+    refetchInterval: 10000,
     retry: 1,
     retryDelay: 5000,
   });
@@ -832,7 +832,6 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
 
   if (isLoading) return <LoadingState text="Connexion au monitor..." />;
 
-  // En cas d'erreur (404 = endpoint pas supporté pour cet ascenseur)
   if (error) {
     const msg = (error as Error).message || '';
     const is404 = msg.includes('404') || msg.includes('Not Found');
@@ -844,13 +843,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               <Monitor className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2 opacity-50" />
               <p className="text-[10px] font-bold text-[var(--text-muted)]">Monitor non disponible</p>
               <p className="text-[8px] text-[var(--text-muted)] mt-1">
-                L'ascenseur <strong>{lift?.liftCompRef}</strong> ne supporte pas le monitoring temps réel,
-                ou le module Monitor Online n'est pas activé sur cette installation.
+                L'ascenseur <strong>{lift?.liftCompRef}</strong> ne supporte pas le monitoring temps réel.
               </p>
-              <a href={`${getSigma4FrontUrl()}lift/${liftId}`} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 mt-2 px-3 py-1 rounded bg-[#059669]/10 text-[#059669] text-[8px] font-bold hover:bg-[#059669]/20">
-                <ExternalLink className="w-2.5 h-2.5" />Voir sur Sigma4Lifts
-              </a>
             </>
           ) : (
             <>
@@ -865,6 +859,30 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
       </div>
     );
   }
+
+  // Helpers
+  const updatedAt = monitor?.fechaActualizacion
+    ? new Date(monitor.fechaActualizacion).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null;
+
+  const hasError = monitor && (monitor.codigoError !== 0 || monitor.codigoFamiliaError !== 0);
+  const errorStr = hasError ? `F${String(monitor!.codigoFamiliaError || 0).padStart(2,'0')}${String(monitor!.codigoError || 0).padStart(2,'0')}` : null;
+
+  // Nombre de paliers réels (depuis lift ou fallback)
+  const numStops = lift?.numeroParadas || 32;
+
+  // Extraire les étages avec appels actifs (seulement étages existants)
+  const activeCabinCalls = monitor?.llamadasCabina?.reduce<number[]>((acc, v, i) => { if (v && i < numStops) acc.push(i + 1); return acc; }, []) || [];
+  const activeUpCalls = monitor?.llamadasExterioresSubida?.reduce<number[]>((acc, v, i) => { if (v && i < numStops) acc.push(i + 1); return acc; }, []) || [];
+  const activeDownCalls = monitor?.llamadasExterioresBajada?.reduce<number[]>((acc, v, i) => { if (v && i < numStops) acc.push(i + 1); return acc; }, []) || [];
+
+  // Embarque principal (porte 1)
+  const door = monitor?.embarques?.[0];
+  const doorLabel = door ? (['Fermée', 'Ouverture…', 'Ouverte', 'Fermeture…'][door.estado] || `État ${door.estado}`) : '—';
+  const doorColor = door ? (['#059669', '#CA8A04', '#EA580C', '#CA8A04'][door.estado] || '#64748B') : '#64748B';
+
+  // Conversion intensités (API renvoie en centièmes d'ampère)
+  const fmtA = (v: number | null | undefined) => v != null ? `${(v / 100).toFixed(2)} A` : '—';
 
   return (
     <div className="h-full overflow-y-auto space-y-2">
@@ -884,7 +902,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
         <div className="flex items-center gap-1">
           <div className="w-1.5 h-1.5 rounded-full bg-[#059669] animate-pulse" />
           <span className="text-[7px] text-[var(--text-muted)]">
-            Live{dataUpdatedAt ? ` · ${new Date(dataUpdatedAt).toLocaleTimeString('fr-FR')}` : ''}
+            {updatedAt || 'Live'}
           </span>
           <button onClick={() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] })}
             className="p-1 rounded hover:bg-[var(--bg-tertiary)]">
@@ -895,121 +913,213 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
 
       {monitor ? (
         <>
-          {/* ── KPIs principaux ── */}
+          {/* ── Dernier événement / Erreur ── */}
+          {hasError ? (
+            <Card className="ring-1 ring-[#DC2626]/30"><CardBody className="p-2 flex items-center gap-2 bg-[#DC2626]/5">
+              <AlertTriangle className="w-4 h-4 text-[#DC2626] flex-shrink-0" />
+              <div>
+                <p className="text-[9px] font-extrabold text-[#DC2626]">Erreur active : {errorStr}</p>
+                <p className="text-[7px] text-[var(--text-muted)]">
+                  Famille {monitor.codigoFamiliaError} · Code {monitor.codigoError} · Sous-code {monitor.codigoSubError}
+                  {monitor.codigoErrorString && ` · ${monitor.codigoErrorString}`}
+                </p>
+              </div>
+            </CardBody></Card>
+          ) : (
+            <Card><CardBody className="p-1.5 flex items-center gap-1.5 bg-[#059669]/5">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#059669]" />
+              <p className="text-[8px] text-[#059669] font-semibold">L'ascenseur fonctionne correctement</p>
+            </CardBody></Card>
+          )}
+
+          {/* ── Moniteur ECO — Position, Poids, Destination ── */}
           <div className="grid grid-cols-4 gap-1.5">
-            <MiniKPI label="Position" value={monitor.posicion != null ? String(monitor.posicion) : '—'}
+            <MiniKPI label="Position" value={monitor.posicionMilimetros != null ? `${monitor.posicionMilimetros} mm` : '—'}
               icon={<MapPin className="w-3.5 h-3.5" />} color="#3B82F6" />
             <MiniKPI label="Destination" value={monitor.destino != null ? String(monitor.destino) : '—'}
               icon={<Navigation className="w-3.5 h-3.5" />} color="#8B5CF6" />
-            <MiniKPI label="Étages" value={monitor.plantas != null ? String(monitor.plantas) : '—'}
+            <MiniKPI label="Poids" value={monitor.peso != null ? `${monitor.peso} Kg` : '—'}
+              icon={<Weight className="w-3.5 h-3.5" />} color="#EA580C" />
+            <MiniKPI label="Mode" value={monitor.modoFuncionamiento != null ? String(monitor.modoFuncionamiento) : '—'}
               icon={<Layers className="w-3.5 h-3.5" />} color="#059669" />
-            <MiniKPI label="Poids" value={monitor.peso != null ? `${monitor.peso} kg` : '—'}
-              icon={<Weight className="w-3.5 h-3.5" />} color={monitor.sobrecarga ? '#DC2626' : '#EA580C'} />
           </div>
 
-          {/* ── Portes & Sécurité / Variateur & Bus CAN ── */}
           <div className="grid grid-cols-2 gap-1.5">
-            {/* Portes & Sécurité */}
+            {/* ── Portes ── */}
             <Card><CardBody className="p-2 space-y-1.5">
               <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
-                <DoorOpen className="w-2.5 h-2.5" /> Portes & Sécurité
+                <DoorOpen className="w-2.5 h-2.5" /> Portes
               </p>
               <div className="grid grid-cols-2 gap-1">
-                <MonitorBadge label="Porte"
-                  value={monitor.puerta === 'ABIERTA' ? 'Ouverte' : monitor.puerta === 'CERRADA' ? 'Fermée' : monitor.puerta || '—'}
-                  color={monitor.puerta === 'ABIERTA' ? '#EA580C' : '#059669'} />
-                <MonitorBadge label="Cellule photo"
-                  value={monitor.fotocelula ? 'Activée' : 'Libre'}
-                  color={monitor.fotocelula ? '#CA8A04' : '#059669'} />
-                <MonitorBadge label="Surcharge"
-                  value={monitor.sobrecarga ? '⚠️ OUI' : 'Non'}
-                  color={monitor.sobrecarga ? '#DC2626' : '#059669'} />
-                <MonitorBadge label="Chaîne sécu."
-                  value={monitor.serieSeguridad || monitor.serie || '—'}
-                  color={monitor.serie === 'OK' ? '#059669' : '#CA8A04'} />
+                <MonitorBadge label="Porte 1" value={doorLabel} color={doorColor} />
+                <MonitorBadge label="Cellule photo" value={door?.fotocelula ? '⚠️ Activée' : 'Libre'} color={door?.fotocelula ? '#CA8A04' : '#059669'} />
+                <MonitorBadge label="À niveau" value={monitor.nivel ? '✅ Oui' : 'Non'} color={monitor.nivel ? '#059669' : '#CA8A04'} />
+                <MonitorBadge label="État" value={String(monitor.estado ?? '—')} color="#64748B" />
               </div>
-              {monitor.ultimoEvento && (
+              {monitor.embarques && monitor.embarques.length > 1 && monitor.embarques[1].habilitado && (
                 <div className="pt-1 border-t border-[var(--border-secondary)]">
-                  <p className="text-[6px] text-[var(--text-muted)]">Dernier événement</p>
-                  <p className="text-[7px] font-mono font-bold truncate">{monitor.ultimoEvento}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    <MonitorBadge label="Porte 2"
+                      value={['Fermée', 'Ouverture…', 'Ouverte', 'Fermeture…'][monitor.embarques[1].estado] || `État ${monitor.embarques[1].estado}`}
+                      color={['#059669', '#CA8A04', '#EA580C', '#CA8A04'][monitor.embarques[1].estado] || '#64748B'} />
+                    <MonitorBadge label="Cellule 2" value={monitor.embarques[1].fotocelula ? '⚠️ Activée' : 'Libre'}
+                      color={monitor.embarques[1].fotocelula ? '#CA8A04' : '#059669'} />
+                  </div>
                 </div>
               )}
+              {monitor.flechaSubida && (
+                <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3 text-[#059669]" /><span className="text-[7px] text-[#059669] font-bold">Montée</span></div>
+              )}
+              {monitor.flechaBajada && (
+                <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3 text-[#3B82F6]" /><span className="text-[7px] text-[#3B82F6] font-bold">Descente</span></div>
+              )}
             </CardBody></Card>
 
-            {/* Variateur & Bus CAN */}
+            {/* ── Chaîne de sécurité (Série) ── */}
             <Card><CardBody className="p-2 space-y-1.5">
               <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
-                <Zap className="w-2.5 h-2.5" /> Variateur & Bus CAN
+                <Shield className="w-2.5 h-2.5" /> Série (chaîne de sécurité)
               </p>
-              <div className="grid grid-cols-2 gap-1">
-                <MonitorBadge label="Variateur" value={monitor.variador || '—'} color="#3B82F6" />
-                <MonitorBadge label="Tension bus"
-                  value={monitor.tensionBus != null ? `${monitor.tensionBus} V` : '—'} color="#8B5CF6" />
-                <MonitorBadge label="CAN A" value={monitor.canA || '—'} color="#64748B" />
-                <MonitorBadge label="CAN B" value={monitor.canB || '—'} color="#64748B" />
-                <MonitorBadge label="CAN H (gaine)" value={monitor.canH || '—'} color="#64748B" />
-                <MonitorBadge label="CAN M (manœuvre)" value={monitor.canM || '—'} color="#64748B" />
+              <div className="flex flex-wrap gap-1 justify-center">
+                {([
+                  ['00', monitor.serieSeguridad00],
+                  ['40', monitor.serieSeguridad40],
+                  ['60', monitor.serieSeguridad60],
+                  ['70', monitor.serieSeguridad70],
+                  ['80', monitor.serieSeguridad80],
+                  ['85', monitor.serieSeguridad85],
+                  ['90', monitor.serieSeguridad90],
+                  ['95', monitor.serieSeguridad95],
+                ] as [string, boolean | null][]).map(([id, ok]) => (
+                  <div key={id}
+                    className={cn('w-8 h-6 rounded flex items-center justify-center text-[9px] font-extrabold',
+                      ok === true  ? 'bg-[#059669] text-white' :
+                      ok === false ? 'bg-[#64748B] text-white' :
+                                     'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+                    )}>
+                    {id}
+                  </div>
+                ))}
               </div>
+              <p className="text-[5px] text-[var(--text-muted)] text-center">
+                🟢 Fermé (OK) · ⚫ Ouvert / Non applicable
+              </p>
             </CardBody></Card>
           </div>
 
-          {/* ── Appels extérieurs ── */}
-          {(monitor.exteriorSubida || monitor.exteriorBajada) && (
-            <Card><CardBody className="p-2">
-              <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1">Appels paliers</p>
-              <div className="flex gap-3">
-                {monitor.exteriorSubida && monitor.exteriorSubida.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <ArrowUp className="w-3 h-3 text-[#059669]" />
-                    <span className="text-[7px] font-mono">{monitor.exteriorSubida.join(', ')}</span>
-                  </div>
-                )}
-                {monitor.exteriorBajada && monitor.exteriorBajada.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <ArrowDown className="w-3 h-3 text-[#DC2626]" />
-                    <span className="text-[7px] font-mono">{monitor.exteriorBajada.join(', ')}</span>
-                  </div>
-                )}
-                {(!monitor.exteriorSubida?.length && !monitor.exteriorBajada?.length) && (
-                  <span className="text-[7px] text-[var(--text-muted)]">Aucun appel en cours</span>
-                )}
-              </div>
-            </CardBody></Card>
-          )}
-
-          {/* ── Stats voyages & température ── */}
-          {(monitor.viajes != null || monitor.viajesHoy != null || monitor.temperatura != null) && (
-            <div className="flex gap-1.5">
-              {monitor.viajesHoy != null && (
-                <MiniKPI label="Voyages auj." value={String(monitor.viajesHoy)}
-                  icon={<TrendingUp className="w-3.5 h-3.5" />} color="#059669" />
-              )}
-              {monitor.viajes != null && (
-                <MiniKPI label="Compteur total" value={monitor.viajes.toLocaleString('fr-FR')}
-                  icon={<Activity className="w-3.5 h-3.5" />} color="#3B82F6" />
-              )}
-              {monitor.temperatura != null && (
-                <MiniKPI label="Température" value={`${monitor.temperatura}°C`}
-                  icon={<Thermometer className="w-3.5 h-3.5" />}
-                  color={monitor.temperatura > 40 ? '#DC2626' : '#64748B'} />
-              )}
+          {/* ── Alimentation ── */}
+          <Card><CardBody className="p-2">
+            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
+              <Zap className="w-2.5 h-2.5" /> Alimentation
+            </p>
+            <div className="grid grid-cols-3 gap-1">
+              <MonitorBadge label="Tension d'entrée" value={monitor.tensionEntrada != null ? `${monitor.tensionEntrada} V` : '—'} color="#3B82F6" />
+              <MonitorBadge label="Tension (batterie)" value={monitor.tensionBateria != null ? `${(monitor.tensionBateria / 10).toFixed(0)} V` : '—'} color="#8B5CF6" />
+              <MonitorBadge label="Tension (circuit contrôleur)" value={monitor.tensionManiobra != null ? `${monitor.tensionManiobra} V` : '—'} color="#3B82F6" />
+              <MonitorBadge label="Courant (circuit contrôleur)" value={fmtA(monitor.intensidadManiobra)} color="#64748B" />
+              <MonitorBadge label="Tension (circuit auxiliaire)" value={monitor.tensionCircuitoAux != null ? `${monitor.tensionCircuitoAux} V` : '—'} color="#3B82F6" />
+              <MonitorBadge label="Courant (circuit auxiliaire)" value={fmtA(monitor.intensidadCircuitoAux)} color="#64748B" />
             </div>
-          )}
-
-          {/* ── Communication ── */}
-          {(monitor.operador || monitor.paquetesEnviados != null) && (
-            <Card><CardBody className="p-2">
-              <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
-                <Wifi className="w-2.5 h-2.5" /> Communication
-              </p>
-              <div className="grid grid-cols-4 gap-1">
-                {monitor.operador && <MonitorBadge label="Opérateur" value={monitor.operador} color="#3B82F6" />}
-                {monitor.paquetesEnviados != null && <MonitorBadge label="Paquets envoyés" value={String(monitor.paquetesEnviados)} color="#059669" />}
-                {monitor.paquetesErroneos != null && <MonitorBadge label="Paquets erreur" value={String(monitor.paquetesErroneos)} color={monitor.paquetesErroneos > 0 ? '#DC2626' : '#059669'} />}
-                {monitor.porcentajeErrores != null && <MonitorBadge label="% erreurs" value={`${monitor.porcentajeErrores}%`} color={monitor.porcentajeErrores > 5 ? '#DC2626' : '#059669'} />}
+            {/* Batterie */}
+            {monitor.cargaBateria != null && (
+              <div className="mt-1.5 pt-1 border-t border-[var(--border-secondary)] flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-5 h-8 rounded border-2 border-[var(--text-muted)] relative overflow-hidden">
+                    <div className="absolute bottom-0 w-full transition-all rounded-sm"
+                      style={{
+                        height: `${monitor.cargaBateria}%`,
+                        backgroundColor: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#059669',
+                      }} />
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-1 bg-[var(--text-muted)] rounded-t" />
+                  </div>
+                  <span className="text-[11px] font-extrabold" style={{
+                    color: monitor.cargaBateria < 30 ? '#DC2626' : monitor.cargaBateria < 60 ? '#CA8A04' : '#059669'
+                  }}>{monitor.cargaBateria} %</span>
+                </div>
+                <MonitorBadge label="Réseau" value={monitor.conectadoARed ? '✅ Connecté' : '❌ Déconnecté'} color={monitor.conectadoARed ? '#059669' : '#DC2626'} />
               </div>
-            </CardBody></Card>
-          )}
+            )}
+          </CardBody></Card>
+
+          {/* ── Variateur & Bus ── */}
+          <Card><CardBody className="p-2">
+            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
+              <Activity className="w-2.5 h-2.5" /> Variateur
+            </p>
+            <div className="grid grid-cols-4 gap-1">
+              <MonitorBadge label="Phase" value={String(monitor.faseVariador ?? '—')} color="#64748B" />
+              <MonitorBadge label="Contacteurs" value={String(monitor.variadorContactores ?? '—')} color="#64748B" />
+              <MonitorBadge label="Frein" value={String(monitor.variadorFreno ?? '—')} color="#64748B" />
+              <MonitorBadge label="TSO" value={monitor.variadorTSO ? 'Actif' : 'Inactif'} color={monitor.variadorTSO ? '#DC2626' : '#059669'} />
+              <MonitorBadge label="V bus" value={monitor.tensionBus != null ? `${monitor.tensionBus} V` : '—'} color="#3B82F6" />
+              <MonitorBadge label="I bus" value={monitor.intensidadBus != null ? `${monitor.intensidadBus}` : '—'} color="#3B82F6" />
+              <MonitorBadge label="Bus manœuvre" value={busLabel(monitor.usoBusManiobra)} color={busColor(monitor.usoBusManiobra)} />
+              <MonitorBadge label="Bus gaine" value={busLabel(monitor.usoBusHueco)} color={busColor(monitor.usoBusHueco)} />
+            </div>
+          </CardBody></Card>
+
+          {/* ── Appels (Envoi de cabine / Palier montée / Palier descente) ── */}
+          <Card><CardBody className="p-2">
+            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1.5">Appel / Envoi</p>
+            <div className="grid grid-cols-3 gap-2">
+              {/* Cabine */}
+              <div>
+                <p className="text-[6px] font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Envoi de cabine</p>
+                <div className="flex flex-wrap gap-0.5">
+                  {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
+                    const active = activeCabinCalls.includes(f);
+                    return <span key={f} className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold',
+                      active ? 'bg-[#8B5CF6] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+                    )}>{f}</span>;
+                  })}
+                </div>
+              </div>
+              {/* Montée */}
+              <div>
+                <p className="text-[6px] font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en montée</p>
+                <div className="flex flex-wrap gap-0.5">
+                  {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
+                    const active = activeUpCalls.includes(f);
+                    return <span key={f} className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold',
+                      active ? 'bg-[#059669] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+                    )}>{f}</span>;
+                  })}
+                </div>
+              </div>
+              {/* Descente */}
+              <div>
+                <p className="text-[6px] font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en descente</p>
+                <div className="flex flex-wrap gap-0.5">
+                  {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
+                    const active = activeDownCalls.includes(f);
+                    return <span key={f} className={cn('w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold',
+                      active ? 'bg-[#DC2626] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+                    )}>{f}</span>;
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardBody></Card>
+
+          {/* ── Cartes détectées ── */}
+          <Card><CardBody className="p-2">
+            <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase mb-1">Cartes détectées</p>
+            <div className="flex flex-wrap gap-1">
+              {([
+                ['MIO', monitor.numPlacaMIO], ['RevMam', monitor.numPlacaRevMam], ['CAR', monitor.numPlacaCar],
+                ['Drive', monitor.numPlacaDrive], ['DOC', monitor.numPlacaDoc], ['LOB', monitor.numPlacaLob],
+                ['Tel', monitor.numPlacaTel], ['Link', monitor.numPlacaLink], ['Alim', monitor.numPlacaAlim],
+                ['RevAux', monitor.numPlacaRevAux], ['Audio', monitor.numPlacaAudio], ['Interph.', monitor.numPlacaInterfono],
+                ['SynGO', monitor.numPlacaSyngo],
+              ] as [string, number | null][]).map(([name, count]) => (
+                <span key={name} className={cn('text-[6px] px-1.5 py-0.5 rounded-full font-bold',
+                  count && count > 0 ? 'bg-[#059669]/10 text-[#059669]' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+                )}>
+                  {name}{count != null && count > 0 ? ` ×${count}` : ''}
+                </span>
+              ))}
+            </div>
+          </CardBody></Card>
 
           {/* ── Actions à distance ── */}
           <Card><CardBody className="p-2">
@@ -1041,13 +1151,19 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
       ) : (
         <div className="text-center py-8">
           <p className="text-[10px] text-[var(--text-muted)]">Données monitor non disponibles</p>
-          <p className="text-[8px] text-[var(--text-muted)] mt-1">
-            L'ascenseur doit être connecté et configuré pour le monitoring temps réel
-          </p>
         </div>
       )}
     </div>
   );
+}
+
+function busLabel(v: number | null | undefined): string {
+  if (v == null) return '—';
+  switch (v) { case 0: return 'OK'; case 1: return 'Warning'; case 2: return 'Error'; default: return String(v); }
+}
+function busColor(v: number | null | undefined): string {
+  if (v == null) return '#64748B';
+  switch (v) { case 0: return '#059669'; case 1: return '#CA8A04'; case 2: return '#DC2626'; default: return '#64748B'; }
 }
 
 function MiniKPI({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color: string }) {

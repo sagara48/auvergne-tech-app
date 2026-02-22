@@ -241,48 +241,113 @@ export async function getLiftServices(liftId: number): Promise<Sigma4ServiceEntr
 
 // ═══════════════════════════════════════════════════════════════
 // MONITOR ONLINE — Types données temps réel
+// Source : GET /divide/lifts/{id}/status — réponse réelle S4L
 // ═══════════════════════════════════════════════════════════════
 
+export interface Sigma4Embarque {
+  fotocelula: boolean;
+  estado: number;         // 0=fermée, 1=en ouverture, 2=ouverte, 3=en fermeture
+  orden: number;          // 0=aucun, 1=ouvrir, 2=fermer
+  habilitado: boolean;
+}
+
 export interface Sigma4MonitorData {
+  // Timestamps
+  fechaActualizacion: string | null;
+  fechaError: string | null;
+  fechaComando: string | null;
+
   // Position & mouvement
-  posicion: number | null;
+  posicionDecimal: number | null;
+  posicionMilimetros: number | null;
   destino: number | null;
-  plantas: number | null;
-  nivel?: string | null;
-  // Portes
-  puerta: string | null;           // 'ABIERTA' | 'CERRADA'
-  fotocelula: boolean | null;
-  ordenAbrir?: boolean | null;
-  ordenCerrar?: boolean | null;
-  // Charge
+  planta: number | null;
+  nivel: boolean | null;            // à niveau (true = au palier)
+  flechaSubida: boolean | null;
+  flechaBajada: boolean | null;
+
+  // État ascenseur
+  estado: number | null;            // état fonctionnement
+  modoFuncionamiento: number | null;
+  motivoNoArranque: number | null;
   peso: number | null;
-  sobrecarga: boolean | null;
-  // Sécurité
-  serie: string | null;
-  serieSeguridad: string | null;
-  // Variateur & Bus
+
+  // Portes (embarques)
+  embarques: Sigma4Embarque[] | null;
+
+  // Chaîne de sécurité (true = fermé/OK, false = ouvert/défaut)
+  serieSeguridad00: boolean | null;  // Chaîne primaire
+  serieSeguridad40: boolean | null;  // Point 40 (MCB)
+  serieSeguridad60: boolean | null;  // Inspection (60H)
+  serieSeguridad70: boolean | null;  // Shunts portes (70H)
+  serieSeguridad80: boolean | null;  // Verrouillages paliers (80H)
+  serieSeguridad85: boolean | null;  // Verrouillages cabine (85)
+  serieSeguridad90: boolean | null;  // Verrouillages (90H)
+  serieSeguridad95: boolean | null;  // Contact 95
+
+  // Erreur courante
+  codigoFamiliaError: number | null;
+  codigoError: number | null;
+  codigoSubError: number | null;
+  codigoErrorString: string | null;
+
+  // Alimentation & Batterie
+  tensionEntrada: number | null;       // Tension réseau (V)
+  tensionManiobra: number | null;      // Tension manœuvre (V)
+  intensidadManiobra: number | null;
+  tensionCircuitoAux: number | null;
+  intensidadCircuitoAux: number | null;
+  tensionBateria: number | null;       // ×10 (260 = 26.0V)
+  conectadoARed: boolean | null;
+  cargaBateria: number | null;         // %
+  nivelCargaBateria: number | null;
+  estadoCargador: number | null;
+
+  // Variateur
+  faseVariador: number | null;
+  variadorContactores: number | null;
+  variadorFreno: number | null;
+  variadorTSO: boolean | null;
   tensionBus: number | null;
-  variador: string | null;
-  estadoAscensor: string | null;
-  canA: string | null;
-  canB: string | null;
-  canH: string | null;             // CAN gaine (hueco)
-  canM: string | null;             // CAN manœuvre
-  // Appels
-  comandos: string | null;
-  exteriorSubida: number[] | null;
-  exteriorBajada: number[] | null;
-  ultimoEvento: string | null;
-  // Stats
-  cabina: number | null;
-  viajes?: number | null;
-  viajesHoy?: number | null;
-  temperatura?: number | null;
-  // Communication
-  operador?: string | null;
-  paquetesEnviados?: number | null;
-  paquetesErroneos?: number | null;
-  porcentajeErrores?: number | null;
+  intensidadBus: number | null;
+
+  // Bus (0=OK, 1=warning, 2=error...)
+  usoBusManiobra: number | null;
+  usoBusAuxiliar: number | null;
+  usoBusHueco: number | null;
+  usoBusMultiplex: number | null;
+
+  // Cartes détectées
+  numPlacaMIO: number | null;
+  numPlacaRevMam: number | null;
+  numPlacaCar: number | null;
+  numPlacaDrive: number | null;
+  numPlacaDoc: number | null;
+  numPlacaLob: number | null;
+  numPlacaInterfono: number | null;
+  numPlacaTel: number | null;
+  numPlacaAudio: number | null;
+  numPlacaLink: number | null;
+  numPlacaAlim: number | null;
+  numPlacaRevAux: number | null;
+  numPlacaSyngo: number | null;
+
+  // Appels (tableaux de booleans, index = n° palier)
+  llamadasCabina: boolean[] | null;
+  llamadasExterioresSubida: boolean[] | null;
+  llamadasExterioresBajada: boolean[] | null;
+
+  // Commande en cours
+  comando: string | null;
+  plantaLlamada: number | null;
+  numFuncionEspecial: number | null;
+  activarFuncionEspecial: boolean | null;
+  usuario: string | null;
+
+  // Trame brute
+  ecoGoNumSeq: number | null;
+  ecoGoTrama: string | null;
+  ascensor: any;
 }
 
 // Actions Monitor Online (29 commandes extraites du bundle)
