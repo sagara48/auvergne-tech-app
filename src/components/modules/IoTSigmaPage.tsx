@@ -873,7 +873,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
   const { data: monitor, error, dataUpdatedAt } = useQuery({
     queryKey: ['sigma4', 'monitor', liftId],
     queryFn: () => getMonitorOnline(liftId),
-    refetchInterval: 1000,
+    refetchInterval: 2000,
     retry: 1,
     retryDelay: 5000,
     enabled: connectionState === 'connected',
