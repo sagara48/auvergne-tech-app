@@ -18,11 +18,11 @@ import toast from 'react-hot-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Sigma4Chart, Sigma4ChartItem, Sigma4Dashboard, Sigma4Lift, Sigma4ServiceEntry,
-  Sigma4MonitorData, MonitorAction,
+  Sigma4MonitorData, Sigma4MessageEntry, MonitorAction,
   getDashboard, getLifts, getLiftServices, getMonitorOnline, sendMonitorAction, activateMonitor, keepAliveMonitor,
-  getErrorInfo, getLiftErrors, getTracs, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
+  getErrorInfo, getLiftErrors, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
   getDrivePhaseLabel, getDrivePhaseColor, getContactorLabel, getContactorColor, getBrakeLabel, getBrakeColor,
-  isConnectedToSigma4, loginSigma4, logoutSigma4, sigma4Request,
+  isConnectedToSigma4, loginSigma4, logoutSigma4,
   MONITOR_ACTIONS,
 } from '@/services/sigma4liftsApi';
 import {
@@ -1507,269 +1507,237 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
   const [showDebug, setShowDebug] = useState(false);
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [days, setDays] = useState(7);
 
-  // Essayer plusieurs endpoints en parallèle
-  const { data: messagesData, isLoading: loadingMsg, error: errorMsg, refetch: refetchMsg } = useQuery({
-    queryKey: ['sigma4', 'lift-messages', liftId],
-    queryFn: () => getLiftErrors(liftId),
+  // Récupérer les messages avec plage de dates
+  const { data: rawMessages, isLoading, error, refetch } = useQuery({
+    queryKey: ['sigma4', 'lift-messages', liftId, days],
+    queryFn: () => getLiftErrors(liftId, days),
     staleTime: 30000,
-    retry: 0,
+    retry: 1,
   });
 
-  const { data: tracsData, isLoading: loadingTracs, error: errorTracs, refetch: refetchTracs } = useQuery({
-    queryKey: ['sigma4', 'lift-tracs', liftId],
-    queryFn: () => getTracs(liftId),
-    staleTime: 30000,
-    retry: 0,
-  });
-
-  // Essayer aussi /divide/lifts/{id}/errors directement
-  const { data: errorsData, isLoading: loadingErrors, error: errorErrors, refetch: refetchErrors } = useQuery({
-    queryKey: ['sigma4', 'lift-errors-alt', liftId],
-    queryFn: () => sigma4Request(`/divide/lifts/${liftId}/errors`),
-    staleTime: 30000,
-    retry: 0,
-  });
-
-  const isLoading = loadingMsg && loadingTracs && loadingErrors;
-
-  const refetchAll = () => { refetchMsg(); refetchTracs(); refetchErrors(); };
-
-  // Extraire les items d'une réponse (gère array, objet avec .content/.items/.data/.list, etc.)
-  const extractItems = (raw: any): any[] => {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw;
-    if (typeof raw === 'object') {
-      // Chercher un tableau dans les clés courantes
-      for (const key of ['content', 'items', 'data', 'list', 'results', 'errors', 'messages', 'tracs', 'events']) {
-        if (Array.isArray(raw[key])) return raw[key];
-      }
-      // Si l'objet a des clés numériques, c'est peut-être un pseudo-array
-      const keys = Object.keys(raw);
-      if (keys.length > 0 && keys.every(k => !isNaN(Number(k)))) {
-        return Object.values(raw);
-      }
-    }
-    return [];
+  // Construire le code erreur standard depuis content/type/subtype
+  const buildErrorCode = (msg: Sigma4MessageEntry): string => {
+    const content = msg.content || '';
+    // content est souvent un code 4 chiffres comme "0017"
+    // On essaie plusieurs formats pour matcher le catalogue
+    if (content === '0000') return ''; // Pas d'erreur
+    return content;
   };
 
-  // Fusionner et dédupliquer toutes les sources
-  const rawItems = useMemo(() => {
-    const fromMessages = extractItems(messagesData);
-    const fromTracs = extractItems(tracsData);
-    const fromErrors = extractItems(errorsData);
+  // Lookup catalogue : essayer content brut, F+content, ECO+content, etc.
+  const findInCatalog = (content: string): S4LErrorCode | undefined => {
+    if (!content || content === '0000') return undefined;
+    // Essayer le code brut
+    let found = lookupErrorCode(content);
+    if (found) return found;
+    // Essayer avec préfixe F (codes armoire)
+    found = lookupErrorCode('F' + content);
+    if (found) return found;
+    // Essayer ECO + padding pour les codes courts
+    // ex: "0017" → chercher dans les descriptions
+    const q = content.replace(/^0+/, '');
+    if (q) {
+      const match = allCodes.find(c =>
+        c.code.includes(content) || c.code.endsWith(content)
+      );
+      if (match) return match;
+    }
+    return undefined;
+  };
 
-    // Tout concaténer
-    const all = [...fromMessages, ...fromTracs, ...fromErrors];
+  // Message types S4L
+  const MSG_TYPES: Record<number, { label: string; color: string; icon: string }> = {
+    1: { label: 'Alarme', color: '#DC2626', icon: '🔴' },
+    2: { label: 'Pré-alarme', color: '#EA580C', icon: '🟠' },
+    3: { label: 'Info', color: '#3B82F6', icon: '🔵' },
+    4: { label: 'Événement', color: '#059669', icon: '🟢' },
+    5: { label: 'Commande', color: '#8B5CF6', icon: '🟣' },
+  };
 
-    // Dédupliquer par une clé composite (id ou code+date)
-    const seen = new Set<string>();
-    return all.filter(item => {
-      const key = String(item.id || item.errorId || '') + '|' +
-        String(item.errorCode || item.codigoError || item.idEstandar || item.code || '') + '|' +
-        String(item.date || item.fecha || item.timestamp || item.fechaInicio || item.startDate || '');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [messagesData, tracsData, errorsData]);
-
-  // Enrichir avec le catalogue
+  // Enrichir les messages
   const enrichedErrors = useMemo(() => {
-    return rawItems.map((err: any) => {
-      const code = err.errorCode || err.codigoError || err.idEstandar || err.code || err.errorString || '';
-      const catalogEntry = code ? lookupErrorCode(code) : undefined;
-      const catalogFromAll = code ? allCodes.find(c => c.code === code) : undefined;
-      const matched = catalogEntry || catalogFromAll;
+    if (!rawMessages || !Array.isArray(rawMessages)) return [];
+    return rawMessages.map((msg: Sigma4MessageEntry) => {
+      const code = buildErrorCode(msg);
+      const catalog = findInCatalog(code);
+      const msgType = MSG_TYPES[msg.type] || { label: `Type ${msg.type}`, color: '#64748B', icon: '⚪' };
 
       return {
-        ...err,
-        _raw: err, // garder l'original pour le debug
-        errorCode: code,
-        description: err.description || err.descripcion || err.text || err.shortText || err.message || matched?.description || code || '(sans description)',
-        cause: err.causa || err.cause || matched?.cause || '',
-        help: matched?.help || '',
-        severity: err.severity != null ? severityFromApi(typeof err.severity === 'number' ? err.severity : null) : matched?.severity,
-        family: matched?.family || (code ? code.replace(/\d.*/,'') : ''),
-        date: err.date || err.fecha || err.timestamp || err.fechaInicio || err.startDate || err.created || '',
-        dateEnd: err.fechaFin || err.dateEnd || err.endDate || '',
-        origin: err.origin || err.origen || err.source || '',
+        ...msg,
+        errorCode: code || '—',
+        displayCode: code ? (catalog ? catalog.code : `F${code}`) : '—',
+        description: catalog?.description || (code === '' ? 'Retour à la normale' : `Code ${code}`),
+        cause: catalog?.cause || '',
+        help: catalog?.help || '',
+        severity: catalog?.severity,
+        family: catalog?.family || '',
+        msgType,
+        date: msg.messageDate,
+        dateEnd: msg.closingDate || '',
+        isNoError: !code || code === '0000' || code === '',
       };
     }).sort((a: any, b: any) => {
-      const dateA = a.date ? new Date(a.date).getTime() : 0;
-      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      const dateA = new Date(a.date).getTime() || 0;
+      const dateB = new Date(b.date).getTime() || 0;
       return dateB - dateA;
     });
-  }, [rawItems, allCodes]);
+  }, [rawMessages, allCodes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filtrage
   const filteredErrors = useMemo(() => {
     let list = enrichedErrors;
-    if (filterSeverity !== 'all') list = list.filter((e: any) => e.severity === filterSeverity);
+    if (filterSeverity === '_errors') {
+      list = list.filter((e: any) => !e.isNoError);
+    } else if (filterSeverity !== 'all') {
+      list = list.filter((e: any) => e.severity === filterSeverity);
+    }
     if (searchQuery.length >= 2) {
       const q = searchQuery.toLowerCase();
       list = list.filter((e: any) =>
         (e.errorCode || '').toLowerCase().includes(q) ||
+        (e.displayCode || '').toLowerCase().includes(q) ||
         (e.description || '').toLowerCase().includes(q) ||
-        (e.cause || '').toLowerCase().includes(q)
+        (e.cause || '').toLowerCase().includes(q) ||
+        (e.dtype || '').toLowerCase().includes(q) ||
+        (e.content || '').toLowerCase().includes(q)
       );
     }
     return list;
   }, [enrichedErrors, filterSeverity, searchQuery]);
 
-  // Stats par sévérité
-  const severityStats = useMemo(() => {
-    const stats: Record<string, number> = {};
+  // Stats
+  const stats = useMemo(() => {
+    const total = enrichedErrors.length;
+    const errors = enrichedErrors.filter((e: any) => !e.isNoError).length;
+    const normals = total - errors;
+    const bySeverity: Record<string, number> = {};
     enrichedErrors.forEach((e: any) => {
-      if (e.severity) stats[e.severity] = (stats[e.severity] || 0) + 1;
+      if (e.severity) bySeverity[e.severity] = (bySeverity[e.severity] || 0) + 1;
     });
-    return stats;
+    const byType: Record<number, number> = {};
+    enrichedErrors.forEach((e: any) => {
+      byType[e.type] = (byType[e.type] || 0) + 1;
+    });
+    return { total, errors, normals, bySeverity, byType };
   }, [enrichedErrors]);
 
-  if (isLoading) return <LoadingState text={`Chargement des erreurs de ${lift?.liftCompRef || '#' + liftId}…`} />;
-
-  // Debug: résumé des sources
-  const debugInfo = {
-    messages: { count: extractItems(messagesData).length, error: errorMsg ? (errorMsg as Error).message : null, raw: messagesData },
-    tracs: { count: extractItems(tracsData).length, error: errorTracs ? (errorTracs as Error).message : null, raw: tracsData },
-    errors: { count: extractItems(errorsData).length, error: errorErrors ? (errorErrors as Error).message : null, raw: errorsData },
-  };
+  if (isLoading) return <LoadingState text={`Chargement des messages de ${lift?.liftCompRef || '#' + liftId}…`} />;
+  if (error) return <ErrorState error={error} onRetry={() => refetch()} />;
 
   return (
     <div className="h-full flex flex-col gap-1.5 overflow-hidden">
-      {/* Sources debug info compact */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <div className="flex gap-1 flex-1">
-          {(['messages', 'tracs', 'errors'] as const).map(src => {
-            const info = debugInfo[src];
-            const ok = info.count > 0;
-            const fail = !!info.error;
-            return (
-              <span key={src} className={cn(
-                'text-[6px] px-1.5 py-0.5 rounded-full font-bold',
-                ok ? 'bg-[#059669]/10 text-[#059669]' : fail ? 'bg-[#DC2626]/10 text-[#DC2626]' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+      {/* KPI + Période */}
+      <div className="flex gap-1 flex-shrink-0 items-end">
+        <Card className="flex-1"><CardBody className="p-1.5 text-center">
+          <p className="text-[14px] font-extrabold font-mono text-[#3B82F6]">{stats.total}</p>
+          <p className="text-[5px] text-[var(--text-muted)] font-semibold">messages</p>
+        </CardBody></Card>
+        <Card className="flex-1"><CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
+          onClick={() => setFilterSeverity(filterSeverity === '_errors' ? 'all' : '_errors')}>
+          <p className="text-[14px] font-extrabold font-mono text-[#DC2626]">{stats.errors}</p>
+          <p className="text-[5px] text-[var(--text-muted)] font-semibold">
+            {filterSeverity === '_errors' ? '✓ erreurs' : 'erreurs'}
+          </p>
+        </CardBody></Card>
+        <Card className="flex-1"><CardBody className="p-1.5 text-center">
+          <p className="text-[14px] font-extrabold font-mono text-[#059669]">{stats.normals}</p>
+          <p className="text-[5px] text-[var(--text-muted)] font-semibold">retours OK</p>
+        </CardBody></Card>
+        {/* Sévérités connues */}
+        {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
+          .filter(([key]) => (stats.bySeverity[key] || 0) > 0)
+          .map(([key, sev]) => (
+          <Card key={key} className="flex-1">
+            <CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
+              onClick={() => setFilterSeverity(filterSeverity === key ? 'all' : key)}>
+              <p className="text-[14px] font-extrabold font-mono" style={{ color: sev.color }}>
+                {stats.bySeverity[key] || 0}
+              </p>
+              <p className="text-[5px] text-[var(--text-muted)] font-semibold leading-tight">
+                {sev.icon} {sev.short}
+              </p>
+            </CardBody>
+          </Card>
+        ))}
+      </div>
+
+      {/* Période + recherche */}
+      <div className="flex gap-1 flex-shrink-0 items-center">
+        <div className="flex gap-0.5 bg-[var(--bg-secondary)] rounded-lg p-0.5">
+          {[1, 3, 7, 14, 30].map(d => (
+            <button key={d} onClick={() => setDays(d)}
+              className={cn('px-2 py-1 rounded text-[7px] font-bold transition-all',
+                days === d ? 'bg-[var(--bg-primary)] text-[#059669] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
               )}>
-                {src}: {ok ? `${info.count}` : fail ? '✕' : '0'}
-              </span>
-            );
-          })}
+              {d}j
+            </button>
+          ))}
         </div>
+        <div className="flex-1 relative">
+          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Filtrer…"
+            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none focus:border-[#EA580C] transition-colors" />
+        </div>
+        {filterSeverity !== 'all' && (
+          <button onClick={() => setFilterSeverity('all')}
+            className="px-2 py-1 rounded-lg bg-[#EA580C]/10 text-[#EA580C] text-[7px] font-bold whitespace-nowrap">
+            ✕ Filtre
+          </button>
+        )}
         <button onClick={() => setShowDebug(!showDebug)}
-          className={cn('text-[6px] px-1.5 py-0.5 rounded font-bold transition-colors',
+          className={cn('text-[6px] px-1.5 py-1 rounded font-bold transition-colors',
             showDebug ? 'bg-[#8B5CF6]/15 text-[#8B5CF6]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]'
           )}>
-          🔍 Debug
+          🔍
         </button>
-        <button onClick={refetchAll}
-          className="p-1 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
+        <button onClick={() => refetch()}
+          className="p-1 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors">
           <RefreshCw className="w-3 h-3 text-[var(--text-muted)]" />
         </button>
       </div>
 
       {/* Debug panel */}
       {showDebug && (
-        <Card className="flex-shrink-0 max-h-48 overflow-y-auto"><CardBody className="p-2">
-          <p className="text-[7px] font-extrabold text-[#8B5CF6] mb-1">🔍 Debug — Réponses brutes API (lift #{liftId})</p>
-          {(['messages', 'tracs', 'errors'] as const).map(src => {
-            const info = debugInfo[src];
-            const endpoint = src === 'messages' ? `/divide/lifts/${liftId}/messages`
-              : src === 'tracs' ? `/divide/tracs?liftId=${liftId}`
-              : `/divide/lifts/${liftId}/errors`;
-            return (
-              <div key={src} className="mb-2">
-                <p className="text-[6px] font-bold text-[var(--text-secondary)]">
-                  <code className="text-[#EA580C]">{endpoint}</code>
-                  {info.error && <span className="text-[#DC2626] ml-1">⚠ {info.error}</span>}
-                  {!info.error && <span className="text-[#059669] ml-1">✓ {info.count} items</span>}
-                </p>
-                <pre className="text-[5px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] rounded p-1 mt-0.5 overflow-x-auto max-h-20 whitespace-pre-wrap break-all">
-                  {JSON.stringify(info.raw, null, 1)?.substring(0, 2000) || 'null'}
-                </pre>
-              </div>
-            );
-          })}
-          {/* Première entrée brute (pour voir les clés) */}
-          {rawItems.length > 0 && (
-            <div className="mt-1 pt-1 border-t border-[var(--border-secondary)]">
-              <p className="text-[6px] font-bold text-[var(--text-secondary)]">📋 Premier item (clés disponibles) :</p>
-              <pre className="text-[5px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] rounded p-1 mt-0.5 overflow-x-auto max-h-20 whitespace-pre-wrap break-all">
-                {JSON.stringify(rawItems[0], null, 1)?.substring(0, 1500)}
-              </pre>
-            </div>
+        <Card className="flex-shrink-0 max-h-40 overflow-y-auto"><CardBody className="p-2">
+          <p className="text-[7px] font-extrabold text-[#8B5CF6] mb-1">🔍 Debug — /divide/lifts/{liftId}/messages ({days}j)</p>
+          <p className="text-[6px] text-[var(--text-secondary)] mb-1">
+            {rawMessages ? `${Array.isArray(rawMessages) ? rawMessages.length : '?'} items reçus` : 'Pas de données'}
+          </p>
+          {rawMessages && Array.isArray(rawMessages) && rawMessages.length > 0 && (
+            <pre className="text-[5px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] rounded p-1 overflow-x-auto max-h-24 whitespace-pre-wrap break-all">
+              {JSON.stringify(rawMessages.slice(0, 3), null, 1)}
+            </pre>
           )}
         </CardBody></Card>
       )}
 
-      {/* KPI ligne */}
-      {enrichedErrors.length > 0 && (
-        <div className="flex gap-1 flex-shrink-0">
-          <Card className="flex-1"><CardBody className="p-1.5 text-center">
-            <p className="text-[14px] font-extrabold font-mono text-[#3B82F6]">{enrichedErrors.length}</p>
-            <p className="text-[5px] text-[var(--text-muted)] font-semibold">événements</p>
-          </CardBody></Card>
-          {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
-            .filter(([key]) => (severityStats[key] || 0) > 0)
-            .map(([key, sev]) => (
-            <Card key={key} className="flex-1">
-              <CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
-                onClick={() => setFilterSeverity(filterSeverity === key ? 'all' : key)}>
-                <p className="text-[14px] font-extrabold font-mono" style={{ color: sev.color }}>
-                  {severityStats[key] || 0}
-                </p>
-                <p className="text-[5px] text-[var(--text-muted)] font-semibold leading-tight">
-                  {sev.icon} {sev.short}
-                </p>
-              </CardBody>
-            </Card>
-          ))}
-        </div>
-      )}
+      <p className="text-[7px] text-[var(--text-muted)] px-1 flex-shrink-0">
+        {filteredErrors.length} résultat{filteredErrors.length > 1 ? 's' : ''} sur {days} jour{days > 1 ? 's' : ''}
+        {searchQuery ? ` · "${searchQuery}"` : ''}
+      </p>
 
-      {/* Barre de recherche */}
-      {enrichedErrors.length > 0 && (
-        <div className="flex gap-1 flex-shrink-0">
-          <div className="flex-1 relative">
-            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Filtrer les erreurs…"
-              className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none focus:border-[#EA580C] transition-colors" />
-          </div>
-          {filterSeverity !== 'all' && (
-            <button onClick={() => setFilterSeverity('all')}
-              className="px-2 py-1 rounded-lg bg-[#EA580C]/10 text-[#EA580C] text-[8px] font-bold">
-              ✕ {SEVERITY_LEVELS[filterSeverity as SeverityKey]?.short}
-            </button>
-          )}
-        </div>
-      )}
-
-      {enrichedErrors.length > 0 && (
-        <p className="text-[7px] text-[var(--text-muted)] px-1 flex-shrink-0">
-          {filteredErrors.length} erreur{filteredErrors.length > 1 ? 's' : ''}{searchQuery ? ` pour "${searchQuery}"` : ''}
-        </p>
-      )}
-
-      {/* Liste des erreurs */}
+      {/* Liste */}
       {filteredErrors.length > 0 ? (
         <div className="flex-1 overflow-y-auto space-y-0.5">
           {filteredErrors.map((err: any, idx: number) => (
-            <LiftErrorRow key={`${err.errorCode}-${err.date}-${idx}`} error={err} />
+            <LiftMessageRow key={err.id || idx} msg={err} />
           ))}
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            {enrichedErrors.length === 0 ? (
+            {stats.total === 0 ? (
               <>
-                <AlertTriangle className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2 opacity-30" />
-                <p className="text-[10px] text-[var(--text-muted)] font-semibold">Aucun événement trouvé</p>
-                <p className="text-[7px] text-[var(--text-muted)] mt-1">
-                  Cliquez sur <strong className="text-[#8B5CF6]">🔍 Debug</strong> pour inspecter les réponses API
-                </p>
+                <Check className="w-8 h-8 text-[#059669] mx-auto mb-2 opacity-40" />
+                <p className="text-[10px] text-[var(--text-muted)] font-semibold">Aucun message sur les {days} derniers jours</p>
+                <p className="text-[7px] text-[var(--text-muted)] mt-1">Essayez une période plus longue</p>
               </>
             ) : (
               <>
-                <Check className="w-8 h-8 text-[#059669] mx-auto mb-2 opacity-40" />
+                <Search className="w-6 h-6 text-[var(--text-muted)] mx-auto mb-2 opacity-30" />
                 <p className="text-[10px] text-[var(--text-muted)] font-semibold">Aucun résultat pour ce filtre</p>
               </>
             )}
@@ -1780,51 +1748,54 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
   );
 }
 
-function LiftErrorRow({ error }: { error: any }) {
+/** Ligne d'un message/erreur du lift */
+function LiftMessageRow({ msg }: { msg: any }) {
   const [expanded, setExpanded] = useState(false);
-  const sev = error.severity && error.severity in SEVERITY_LEVELS
-    ? SEVERITY_LEVELS[error.severity as SeverityKey]
+  const sev = msg.severity && msg.severity in SEVERITY_LEVELS
+    ? SEVERITY_LEVELS[msg.severity as SeverityKey]
     : null;
 
-  const dateStr = error.date ? (() => {
+  const dateStr = msg.date ? (() => {
     try {
-      const d = new Date(error.date);
-      return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
-        ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    } catch { return error.date; }
+      const d = new Date(msg.date);
+      return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) +
+        ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch { return msg.date; }
   })() : '';
 
-  const dateEndStr = error.dateEnd ? (() => {
-    try {
-      const d = new Date(error.dateEnd);
-      return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    } catch { return ''; }
-  })() : '';
+  const isNoError = msg.isNoError;
+  const typeInfo = msg.msgType || { label: msg.dtype, color: '#64748B', icon: '⚪' };
 
   return (
-    <Card>
+    <Card className={cn(isNoError && 'opacity-60')}>
       <CardBody className="p-0">
         <button onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center gap-2 p-2 text-left hover:bg-[var(--bg-secondary)]/50 rounded-lg transition-colors">
-          {sev && <span className="text-[8px]" title={sev.label}>{sev.icon}</span>}
-          <code className="text-[8px] font-mono font-extrabold text-[#EA580C] flex-shrink-0 w-24">
-            {error.errorCode || '—'}
-          </code>
-          <span className="text-[8px] font-semibold flex-1 truncate text-[var(--text-primary)]">
-            {error.description}
+          className="w-full flex items-center gap-1.5 p-1.5 text-left hover:bg-[var(--bg-secondary)]/50 rounded-lg transition-colors">
+          {/* Icône sévérité ou type */}
+          <span className="text-[8px] flex-shrink-0" title={sev ? sev.label : typeInfo.label}>
+            {sev ? sev.icon : typeInfo.icon}
           </span>
-          {dateStr && (
-            <span className="text-[6px] text-[var(--text-muted)] font-mono flex-shrink-0 flex items-center gap-0.5">
-              <Clock className="w-2 h-2" />{dateStr}
-              {dateEndStr && <span className="text-[var(--text-muted)]">→ {dateEndStr}</span>}
-            </span>
-          )}
-          {error.family && (
-            <span className="text-[6px] px-1.5 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)] font-bold flex-shrink-0">
-              {error.family}
-            </span>
-          )}
-          {(error.cause || error.help || error.origin) && (
+          {/* Code erreur */}
+          <code className={cn(
+            'text-[8px] font-mono font-extrabold flex-shrink-0 w-20',
+            isNoError ? 'text-[#059669]' : 'text-[#EA580C]'
+          )}>
+            {isNoError ? '✓ OK' : msg.displayCode}
+          </code>
+          {/* Description */}
+          <span className="text-[8px] font-semibold flex-1 truncate text-[var(--text-primary)]">
+            {msg.description}
+          </span>
+          {/* dtype badge */}
+          <span className="text-[5px] px-1 py-0.5 rounded-full font-bold flex-shrink-0"
+            style={{ backgroundColor: `${typeInfo.color}15`, color: typeInfo.color }}>
+            {msg.dtype || typeInfo.label}
+          </span>
+          {/* Date */}
+          <span className="text-[6px] text-[var(--text-muted)] font-mono flex-shrink-0 flex items-center gap-0.5">
+            <Clock className="w-2 h-2" />{dateStr}
+          </span>
+          {(msg.cause || msg.help || msg.observations || msg.extraContent) && (
             <ChevronRight className={cn(
               'w-2.5 h-2.5 text-[var(--text-muted)] transition-transform flex-shrink-0',
               expanded && 'rotate-90'
@@ -1833,28 +1804,46 @@ function LiftErrorRow({ error }: { error: any }) {
         </button>
         {expanded && (
           <div className="px-3 pb-2 space-y-1 border-t border-[var(--border-secondary)]">
-            {error.cause && (
-              <div className="mt-1">
+            {/* Détails techniques */}
+            <div className="mt-1 grid grid-cols-4 gap-1">
+              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">ID:</span> <span className="font-mono">{msg.id}</span></div>
+              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Type:</span> <span className="font-mono">{msg.type}/{msg.subtype}/{msg.subsubtype}</span></div>
+              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Content:</span> <span className="font-mono text-[#EA580C]">{msg.content}</span></div>
+              <div className="text-[6px]"><span className="font-bold text-[var(--text-muted)]">Archivé:</span> {msg.archivado ? 'Oui' : 'Non'}</div>
+            </div>
+            {msg.cause && (
+              <div>
                 <p className="text-[6px] font-bold text-[#EA580C] uppercase">Cause probable</p>
-                <p className="text-[7px] text-[var(--text-secondary)]">{error.cause}</p>
+                <p className="text-[7px] text-[var(--text-secondary)]">{msg.cause}</p>
               </div>
             )}
-            {error.help && (
+            {msg.help && (
               <div>
                 <p className="text-[6px] font-bold text-[#059669] uppercase">Aide diagnostic</p>
-                <p className="text-[7px] text-[var(--text-secondary)]">{error.help}</p>
+                <p className="text-[7px] text-[var(--text-secondary)]">{msg.help}</p>
               </div>
             )}
-            {error.origin && (
+            {msg.observations && (
               <div>
-                <p className="text-[6px] font-bold text-[#3B82F6] uppercase">Origine</p>
-                <p className="text-[7px] text-[var(--text-secondary)]">{error.origin}</p>
+                <p className="text-[6px] font-bold text-[#3B82F6] uppercase">Observations</p>
+                <p className="text-[7px] text-[var(--text-secondary)]">{msg.observations}</p>
+              </div>
+            )}
+            {msg.extraContent && (
+              <div>
+                <p className="text-[6px] font-bold text-[#8B5CF6] uppercase">Extra</p>
+                <p className="text-[7px] text-[var(--text-secondary)] font-mono">{msg.extraCode} · {msg.extraContent}</p>
               </div>
             )}
             {sev && (
               <div className="flex items-center gap-1 pt-1">
                 <span className="text-[6px] font-bold text-[var(--text-muted)]">Sévérité :</span>
                 <span className="text-[7px] font-bold" style={{ color: sev.color }}>{sev.icon} {sev.label}</span>
+              </div>
+            )}
+            {msg.closingDate && (
+              <div className="text-[6px] text-[var(--text-muted)]">
+                Clôturé : {new Date(msg.closingDate).toLocaleString('fr-FR')}
               </div>
             )}
           </div>
