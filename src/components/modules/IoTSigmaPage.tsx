@@ -815,6 +815,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [connectionStep, setConnectionStep] = useState(0);
   const [connectionError, setConnectionError] = useState('');
+  const [initialMonitorData, setInitialMonitorData] = useState<Sigma4MonitorData | null>(null);
 
   const CONNECTION_STEPS = [
     { label: 'Établissement de la connexion…', icon: '📡' },
@@ -849,13 +850,13 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
         // Étape 3 — Premier fetch des données
         if (cancelled) return;
         setConnectionStep(2);
-        await getMonitorOnline(liftId);
-        await new Promise(r => setTimeout(r, 400));
+        const firstData = await getMonitorOnline(liftId);
+        if (!cancelled) setInitialMonitorData(firstData);
 
-        // Étape 4 — Connecté
+        // Étape 4 — Connecté (transition rapide)
         if (cancelled) return;
         setConnectionStep(3);
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 200));
 
         if (!cancelled) setConnectionState('connected');
       } catch (e: any) {
@@ -867,7 +868,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
     })();
 
     return () => { cancelled = true; };
-  }, [liftId]);
+  }, [liftId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Polling (uniquement quand connecté) ──
   const { data: monitor, error, dataUpdatedAt } = useQuery({
@@ -877,6 +878,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
     retry: 1,
     retryDelay: 5000,
     enabled: connectionState === 'connected',
+    initialData: initialMonitorData ?? undefined,
   });
   useQuery({ queryKey: ['sigma4', 'modes'], queryFn: fetchModesXML, staleTime: Infinity, retry: false });
   const [showActions, setShowActions] = useState(false);
@@ -979,7 +981,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               <p className="text-[8px] text-[var(--text-muted)]">{connectionError}</p>
             </>
           )}
-          <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); }}
+          <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); setInitialMonitorData(null); }}
             className="px-4 py-1.5 rounded bg-[#059669] text-white text-[9px] font-bold hover:bg-[#059669]/90">
             Réessayer
           </button>
@@ -997,7 +999,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           <XCircle className="w-8 h-8 text-[#DC2626] mx-auto" />
           <p className="text-[10px] font-bold text-[#DC2626]">Connexion perdue</p>
           <p className="text-[8px] text-[var(--text-muted)]">{msg}</p>
-          <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); }}
+          <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); setInitialMonitorData(null); }}
             className="px-4 py-1.5 rounded bg-[#059669] text-white text-[9px] font-bold hover:bg-[#059669]/90">
             Reconnecter
           </button>
