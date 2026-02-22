@@ -455,6 +455,27 @@ export interface Sigma4ErrorEntry {
   causa?: string;
 }
 
+/** Format réel de la réponse /divide/lifts/{id}/messages */
+export interface Sigma4MessageEntry {
+  id: number;
+  dtype: string;             // "SUCESO", "ALARMA", etc.
+  messageDate: string;       // ISO date
+  liftId: number;
+  systemDate: string;
+  type: number;              // 4 = erreur, etc.
+  archivado: boolean;
+  closingDate: string | null;
+  observations: string | null;
+  subtype: number;
+  subsubtype: number;
+  content: string;           // Code erreur ex: "0017", "0000"
+  manual: boolean;
+  extraCode: string | null;
+  extraDate: string | null;
+  extraContent: string | null;
+  tag: string | null;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // OPERATING STATES (extrait du bundle)
 // ═══════════════════════════════════════════════════════════════
@@ -508,9 +529,13 @@ export async function sendMonitorAction(
   return sigma4Put(`/divide/lifts/${liftId}/control/${cabina}/ecogo/${action}`, params || {});
 }
 
-/** Historique d'erreurs / messages d'un ascenseur */
-export async function getLiftErrors(liftId: number): Promise<Sigma4ErrorEntry[]> {
-  return sigma4Get(`/divide/lifts/${liftId}/messages`);
+/** Historique d'erreurs / messages d'un ascenseur (7 derniers jours par défaut) */
+export async function getLiftErrors(liftId: number, days = 7): Promise<Sigma4MessageEntry[]> {
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 86400_000);
+  const fmt = (d: Date) => `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}+${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const qs = `?startDate=${encodeURIComponent(fmt(start))}&endDate=${encodeURIComponent(fmt(end))}`;
+  return sigma4Get(`/divide/lifts/${liftId}/messages${qs}`);
 }
 
 /** Catalogue erreurs S4L — /info/errores (avec params optionnels) */
