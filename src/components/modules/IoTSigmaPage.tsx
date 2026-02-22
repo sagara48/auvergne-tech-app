@@ -11,7 +11,6 @@ import {
   ChevronRight, Shield, Layers, Navigation, Wifi, Activity, TrendingUp,
   Monitor, AlertTriangle, BookOpen, ArrowUp, ArrowDown, DoorOpen,
   Weight, Thermometer, Zap, Send, Filter, Clock,
-  PanelLeftClose, PanelLeft,
 } from 'lucide-react';
 import { Card, CardBody, Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -151,8 +150,8 @@ function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden">
         {tab === 'dashboard' && <DashboardTab />}
-        {tab === 'lifts' && <LiftsTab />}
-        {tab === 'monitor' && <MonitorTab selectedLiftId={selectedLiftId} setSelectedLiftId={setSelectedLiftId} onLiftChange={setSelectedLift} />}
+        {tab === 'lifts' && <LiftsTab onOpenMonitor={(id) => { setSelectedLiftId(id); setTab('monitor'); }} />}
+        {tab === 'monitor' && <MonitorTab selectedLiftId={selectedLiftId} onLiftChange={setSelectedLift} onBackToLifts={() => setTab('lifts')} />}
         {tab === 'catalog' && <CatalogTab />}
       </div>
     </div>
@@ -190,7 +189,7 @@ function DashboardTab() {
 // TAB: ASCENSEURS (LIFTS)
 // ═══════════════════════════════════════════════════════════════
 
-function LiftsTab() {
+function LiftsTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => void }) {
   const { data: lifts, isLoading, error } = useQuery({
     queryKey: ['sigma4', 'lifts'],
     queryFn: getLifts,
@@ -337,6 +336,7 @@ function LiftsTab() {
             lift={lift}
             isExpanded={selectedLift === lift.id}
             onToggle={() => setSelectedLift(selectedLift === lift.id ? null : lift.id)}
+            onOpenMonitor={() => onOpenMonitor(lift.id)}
           />
         ))}
       </div>
@@ -346,7 +346,7 @@ function LiftsTab() {
 
 // ═══ LIFT CARD ═══
 
-function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded: boolean; onToggle: () => void }) {
+function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4Lift; isExpanded: boolean; onToggle: () => void; onOpenMonitor: () => void }) {
   const hasCoords = lift.latitude !== 0 && lift.longitude !== 0;
   const hasAddress = lift.address || lift.city;
   const status = getEstadoInfo(lift.estado);
@@ -355,13 +355,13 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
     <Card className={cn('transition-all', isExpanded && 'ring-1 ring-[#059669]/30')}>
       <CardBody className="p-0">
         {/* Summary Row */}
-        <button onClick={onToggle} className="w-full flex items-center gap-2 p-2 text-left hover:bg-[var(--bg-secondary)]/50 transition-colors rounded-lg">
+        <div className="flex items-center gap-2 p-2">
           {/* Status indicator bar */}
           <div className={cn('w-1 h-8 rounded-full flex-shrink-0')}
             style={{ backgroundColor: status.color }} />
 
-          {/* Main info */}
-          <div className="flex-1 min-w-0">
+          {/* Main info — clickable to expand */}
+          <button onClick={onToggle} className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-extrabold text-[var(--text-primary)]">{lift.liftCompRef}</span>
               <span className="px-1 py-0.5 rounded text-sm font-bold" style={{ backgroundColor: status.color + '18', color: status.color }}>{status.label}</span>
@@ -379,10 +379,10 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
                 {[lift.address, lift.zipCode, lift.city].filter(Boolean).join(', ')}
               </p>
             )}
-          </div>
+          </button>
 
-          {/* Right side: tech info */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Right side: tech info + Monitor button */}
+          <div className="flex items-center gap-3 flex-shrink-0">
             {lift.numeroParadas != null && lift.numeroParadas > 0 && (
               <div className="text-center">
                 <p className="text-sm font-bold font-mono text-[var(--text-primary)]">{lift.numeroParadas}</p>
@@ -395,15 +395,16 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
                 <p className="text-sm text-[var(--text-muted)]">kg</p>
               </div>
             )}
-            {lift.numeroPersonas > 0 && (
-              <div className="text-center">
-                <p className="text-sm font-bold font-mono text-[var(--text-primary)]">{lift.numeroPersonas}</p>
-                <p className="text-sm text-[var(--text-muted)]">pers.</p>
-              </div>
-            )}
-            <ChevronRight className={cn('w-3 h-3 text-[var(--text-muted)] transition-transform', isExpanded && 'rotate-90')} />
+            <button onClick={onOpenMonitor}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#059669]/10 text-[#059669] text-xs font-bold hover:bg-[#059669]/20 transition-colors"
+              title="Ouvrir le Monitor">
+              <Activity className="w-3.5 h-3.5" />Monitor
+            </button>
+            <button onClick={onToggle}>
+              <ChevronRight className={cn('w-3.5 h-3.5 text-[var(--text-muted)] transition-transform', isExpanded && 'rotate-90')} />
+            </button>
           </div>
-        </button>
+        </div>
 
         {/* Expanded Details */}
         {isExpanded && (
@@ -459,7 +460,11 @@ function LiftCard({ lift, isExpanded, onToggle }: { lift: Sigma4Lift; isExpanded
             <LiftTrafficSection liftId={lift.id} />
 
             {/* Actions */}
-            <div className="flex gap-1">
+            <div className="flex gap-1.5">
+              <button onClick={onOpenMonitor}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#059669]/10 text-[#059669] text-xs font-bold hover:bg-[#059669]/20 transition-colors">
+                <Activity className="w-3.5 h-3.5" />Monitor temps réel
+              </button>
               {hasCoords && (
                 <a href={`https://www.google.com/maps?q=${lift.latitude},${lift.longitude}`}
                   target="_blank" rel="noopener noreferrer"
@@ -723,18 +728,17 @@ function BarViz({ items }: { items: Sigma4ChartItem[] }) {
 // TAB: MONITOR ONLINE — Supervision temps réel
 // ═══════════════════════════════════════════════════════════════
 
-function MonitorTab({ selectedLiftId, setSelectedLiftId, onLiftChange }: {
+function MonitorTab({ selectedLiftId, onLiftChange, onBackToLifts }: {
   selectedLiftId: number | null;
-  setSelectedLiftId: (id: number | null) => void;
   onLiftChange: (lift: Sigma4Lift | undefined) => void;
+  onBackToLifts: () => void;
 }) {
-  const { data: lifts, isLoading } = useQuery({
+  const { data: lifts } = useQuery({
     queryKey: ['sigma4', 'lifts'],
     queryFn: getLifts,
     staleTime: 120000,
     retry: 1,
   });
-  const [search, setSearch] = useState('');
   const [monitorView, setMonitorView] = useState<'realtime' | 'errors' | 'preventive'>('realtime');
 
   // Charger le catalogue d'erreurs pour les sous-vues Erreurs & Préventif
@@ -750,35 +754,16 @@ function MonitorTab({ selectedLiftId, setSelectedLiftId, onLiftChange }: {
   }, [apiErrors]);
   const apiCount = apiErrors?.length || 0;
 
-  const activeLifts = useMemo(() => {
-    if (!lifts) return [];
-    let list = lifts.filter(l => !l.baja);
-    if (search) {
-      const q = search.toLowerCase();
-      list = list.filter(l =>
-        l.liftCompRef.toLowerCase().includes(q) ||
-        l.city.toLowerCase().includes(q) ||
-        l.descripcion.toLowerCase().includes(q)
-      );
-    }
-    return list.sort((a, b) => a.liftCompRef.localeCompare(b.liftCompRef));
-  }, [lifts, search]);
+  const selectedLift = useMemo(() => lifts?.find(l => l.id === selectedLiftId), [lifts, selectedLiftId]);
 
-  const selectedLift = activeLifts.find(l => l.id === selectedLiftId);
-
-  // Notifier le parent quand le lift sélectionné change
   useEffect(() => {
     onLiftChange(selectedLift);
-  }, [selectedLiftId, activeLifts]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedLift]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset sur temps réel quand on change d'ascenseur
   useEffect(() => {
     setMonitorView('realtime');
   }, [selectedLiftId]);
-
-  const [sidebarOpen, setSidebarOpen] = useState(!selectedLiftId);
-
-  if (isLoading) return <LoadingState text="Chargement des ascenseurs..." />;
 
   const monitorSubTabs: { id: 'realtime' | 'errors' | 'preventive'; label: string; icon: any }[] = [
     { id: 'realtime', label: 'Temps réel', icon: Activity },
@@ -786,138 +771,75 @@ function MonitorTab({ selectedLiftId, setSelectedLiftId, onLiftChange }: {
     { id: 'preventive', label: 'Préventif', icon: TrendingUp },
   ];
 
+  // Pas d'ascenseur sélectionné → message + redirection
+  if (!selectedLiftId || !selectedLift) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <Monitor className="w-12 h-12 text-[var(--text-muted)] mx-auto opacity-30" />
+          <p className="text-sm font-semibold text-[var(--text-muted)]">Aucun ascenseur sélectionné</p>
+          <button onClick={onBackToLifts}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#059669]/10 text-[#059669] text-sm font-bold hover:bg-[#059669]/20 transition-colors mx-auto">
+            <Building2 className="w-4 h-4" />Choisir un ascenseur
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const status = getEstadoInfo(selectedLift.estado);
+
   return (
-    <div className="h-full flex overflow-hidden">
-      {/* ── Sidebar rétractable ── */}
-      <div className={cn(
-        'flex-shrink-0 flex flex-col border-r border-[var(--border-secondary)] transition-all duration-300 overflow-hidden',
-        sidebarOpen ? 'w-60' : 'w-11'
-      )}>
-        {/* Toggle button */}
-        <button onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="flex items-center gap-2 px-3 py-2.5 text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] transition-colors flex-shrink-0"
-          title={sidebarOpen ? 'Réduire' : 'Liste ascenseurs'}>
-          {sidebarOpen ? <PanelLeftClose className="w-4 h-4 flex-shrink-0" /> : <PanelLeft className="w-4 h-4 flex-shrink-0" />}
-          {sidebarOpen && <span className="text-xs font-semibold truncate">{activeLifts.length} ascenseur{activeLifts.length > 1 ? 's' : ''}</span>}
+    <div className="h-full flex flex-col gap-2 overflow-hidden">
+      {/* Header : lift info + sub-tabs + changer */}
+      <div className="flex items-center gap-3 flex-shrink-0">
+        {/* Bouton retour */}
+        <button onClick={onBackToLifts}
+          className="p-2 rounded-xl text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] transition-colors flex-shrink-0"
+          title="Changer d'ascenseur">
+          <Building2 className="w-4 h-4" />
         </button>
 
-        {sidebarOpen ? (
-          <>
-            {/* Recherche */}
-            <div className="px-2 pb-2 flex-shrink-0">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Rechercher..."
-                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm outline-none focus:border-[#059669] placeholder:text-[var(--text-tertiary)]" />
-              </div>
-            </div>
-            {/* Liste */}
-            <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
-              {activeLifts.map(l => {
-                const st = getEstadoInfo(l.estado);
-                const isSelected = selectedLiftId === l.id;
-                return (
-                  <button key={l.id} onClick={() => { setSelectedLiftId(l.id); setSidebarOpen(false); }}
-                    className={cn('w-full text-left px-2.5 py-2 rounded-xl transition-all',
-                      isSelected
-                        ? 'bg-[#059669]/15 ring-1 ring-[#059669]/30'
-                        : 'hover:bg-[var(--bg-secondary)]'
-                    )}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
-                      <span className="text-sm font-bold truncate">{l.liftCompRef}</span>
-                    </div>
-                    <p className="text-xs text-[var(--text-muted)] truncate pl-4">{l.city || l.descripcion || '—'}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          /* Mode réduit — pastilles statut des ascenseurs avec lift sélectionné visible */
-          <div className="flex-1 overflow-y-auto flex flex-col items-center gap-1 py-1">
-            {activeLifts.map(l => {
-              const st = getEstadoInfo(l.estado);
-              const isSelected = selectedLiftId === l.id;
-              return (
-                <button key={l.id} onClick={() => { setSelectedLiftId(l.id); }}
-                  title={`${l.liftCompRef} — ${l.city || l.descripcion || ''}`}
-                  className={cn('w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0',
-                    isSelected
-                      ? 'bg-[#059669]/20 ring-1 ring-[#059669]/40'
-                      : 'hover:bg-[var(--bg-secondary)]'
-                  )}>
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: st.color }} />
-                </button>
-              );
-            })}
+        {/* Lift info */}
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: status.color }} />
+          <div>
+            <h3 className="text-sm font-extrabold text-[var(--text-primary)] leading-tight">{selectedLift.liftCompRef}</h3>
+            <p className="text-xs text-[var(--text-muted)] leading-tight">{selectedLift.city}{selectedLift.city && selectedLift.descripcion ? ' · ' : ''}{selectedLift.descripcion}</p>
           </div>
-        )}
+        </div>
+
+        <div className="h-5 w-px bg-[var(--border-primary)]" />
+
+        {/* Sub-tabs */}
+        {monitorSubTabs.map(t => {
+          const Icon = t.icon;
+          const active = monitorView === t.id;
+          return (
+            <button key={t.id} onClick={() => setMonitorView(t.id)}
+              className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                active
+                  ? t.id === 'errors' ? 'bg-[#EA580C]/15 text-[#EA580C]'
+                    : t.id === 'preventive' ? 'bg-[#8B5CF6]/15 text-[#8B5CF6]'
+                    : 'bg-[#059669]/15 text-[#059669]'
+                  : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]'
+              )}>
+              <Icon className="w-3.5 h-3.5" />{t.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── Main — Monitor + sub-views ── */}
-      <div className="flex-1 flex flex-col gap-2 overflow-hidden pl-3">
-        {selectedLiftId && selectedLift ? (
-          <>
-            {/* Lift header + sub-tabs sur la même ligne */}
-            <div className="flex items-center gap-4 flex-shrink-0 pt-1">
-              <div className="flex items-center gap-2.5 flex-shrink-0">
-                <div className="w-7 h-7 rounded-lg bg-[#059669] flex items-center justify-center">
-                  <Monitor className="w-3.5 h-3.5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-[var(--text-primary)] leading-tight">{selectedLift.liftCompRef}</h3>
-                  <p className="text-xs text-[var(--text-muted)] leading-tight">{selectedLift.city}{selectedLift.city && selectedLift.descripcion ? ' · ' : ''}{selectedLift.descripcion}</p>
-                </div>
-              </div>
-
-              <div className="h-6 w-px bg-[var(--border-primary)]" />
-
-              {/* Sub-tabs inline */}
-              {monitorSubTabs.map(t => {
-                const Icon = t.icon;
-                const active = monitorView === t.id;
-                return (
-                  <button key={t.id} onClick={() => setMonitorView(t.id)}
-                    className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
-                      active
-                        ? t.id === 'errors' ? 'bg-[#EA580C]/15 text-[#EA580C]'
-                          : t.id === 'preventive' ? 'bg-[#8B5CF6]/15 text-[#8B5CF6]'
-                          : 'bg-[#059669]/15 text-[#059669]'
-                        : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]'
-                    )}>
-                    <Icon className="w-3.5 h-3.5" />{t.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Sub-view content */}
-            <div className="flex-1 overflow-hidden">
-              {monitorView === 'realtime' && (
-                <MonitorPanel liftId={selectedLiftId} lift={selectedLift} />
-              )}
-              {monitorView === 'errors' && (
-                <LiftErrorHistoryPanel liftId={selectedLiftId} lift={selectedLift} allCodes={allCodes} />
-              )}
-              {monitorView === 'preventive' && (
-                <LiftPreventivePanel liftId={selectedLiftId} lift={selectedLift} allCodes={allCodes} apiCount={apiCount} />
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <Monitor className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-semibold text-[var(--text-muted)]">
-                Sélectionnez un ascenseur pour accéder au Monitor
-              </p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                Supervision temps réel · Historique erreurs · Analyse préventive
-              </p>
-            </div>
-          </div>
+      {/* Content */}
+      <div className="flex-1 overflow-hidden">
+        {monitorView === 'realtime' && (
+          <MonitorPanel liftId={selectedLiftId} lift={selectedLift} />
+        )}
+        {monitorView === 'errors' && (
+          <LiftErrorHistoryPanel liftId={selectedLiftId} lift={selectedLift} allCodes={allCodes} />
+        )}
+        {monitorView === 'preventive' && (
+          <LiftPreventivePanel liftId={selectedLiftId} lift={selectedLift} allCodes={allCodes} apiCount={apiCount} />
         )}
       </div>
     </div>
