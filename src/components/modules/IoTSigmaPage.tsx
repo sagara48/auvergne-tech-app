@@ -47,16 +47,16 @@ export function IoTSigmaPage() {
 // ═══ LOGIN VIEW ═══
 
 function LoginView({ onConnected }: { onConnected: () => void }) {
-  const [email, setEmail] = useState('');
+  const [loginName, setLoginName] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleLogin = async () => {
-    if (!email || !password) { setError('Email et mot de passe requis'); return; }
+    if (!loginName || !password) { setError('Identifiant et mot de passe requis'); return; }
     setLoading(true); setError('');
     try {
-      await loginSigma4(email, password);
+      await loginSigma4(loginName, password);
       toast.success('Connecté à Sigma4Lifts');
       onConnected();
     } catch (e: any) {
@@ -79,12 +79,12 @@ function LoginView({ onConnected }: { onConnected: () => void }) {
         {/* Form */}
         <div className="space-y-2">
           <div>
-            <label className="text-[8px] font-bold text-[var(--text-muted)] uppercase">Email / Identifiant</label>
+            <label className="text-[8px] font-bold text-[var(--text-muted)] uppercase">Identifiant Sigma4</label>
             <Input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="votre-email@auvergne-ascenseurs.fr"
+              type="text"
+              value={loginName}
+              onChange={e => setLoginName(e.target.value)}
+              placeholder="Auver015"
               className="text-[10px] mt-0.5"
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
               autoFocus
@@ -109,7 +109,7 @@ function LoginView({ onConnected }: { onConnected: () => void }) {
 
           <button
             onClick={handleLogin}
-            disabled={loading || !email || !password}
+            disabled={loading || !loginName || !password}
             className="w-full py-2 rounded-lg bg-gradient-to-r from-[#059669] to-[#047857] text-white text-[11px] font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 hover:opacity-90 transition-opacity"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}

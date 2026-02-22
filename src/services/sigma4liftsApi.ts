@@ -146,30 +146,54 @@ export function getSigma4FrontUrl(): string {
 
 // ═══ AUTH — Login / Logout / Refresh ═══
 
-export async function loginSigma4(email: string, password: string): Promise<Sigma4Session> {
-  const res = await fetch(`${SIGMA4_API}/auth/login`, {
+export async function loginSigma4(username: string, password: string): Promise<Sigma4Session> {
+  // POST /divide/login → retourne le token
+  const res = await fetch(`${SIGMA4_API}/divide/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username, password }),
   });
 
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) throw new Error('Identifiants incorrects');
+    if (res.status === 404) throw new Error('Utilisateur non trouvé');
     const err = await res.text().catch(() => '');
-    if (res.status === 401) throw new Error('Identifiants incorrects');
-    if (res.status === 403) throw new Error('Accès refusé — contactez MP Ascensores');
     throw new Error(`Erreur Sigma4Lifts (${res.status}): ${err}`);
   }
 
   const data = await res.json();
 
-  // L'API Sigma4 renvoie un token JWT + user info
+  // Extraire le token — peut être à la racine ou dans un sous-objet
+  const token = data.token || data.access_token || data.accessToken
+    || data.sessionId || data.session_id || data.key
+    || (typeof data === 'string' ? data : '');
+
+  if (!token) throw new Error('Token non reçu — vérifiez vos identifiants');
+
+  // Récupérer les infos utilisateur avec le token
+  let userName = username;
+  let company = '';
+  let userId = username;
+  try {
+    const userRes = await fetch(`${SIGMA4_API}/divide/users?loginName=${encodeURIComponent(username)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (userRes.ok) {
+      const userData = await userRes.json();
+      const user = Array.isArray(userData) ? userData[0] : userData;
+      userName = user?.name || user?.userName || user?.loginName || username;
+      company = user?.company || user?.companyName || user?.divide || '';
+      userId = String(user?.id || user?.userId || username);
+    }
+  } catch {}
+
   const session: Sigma4Session = {
-    token: data.token || data.access_token || data.accessToken,
-    refreshToken: data.refreshToken || data.refresh_token,
-    userId: data.userId || data.user?.id || '',
-    userName: data.userName || data.user?.name || email,
-    company: data.company || data.user?.company || '',
-    expiresAt: Date.now() + (data.expiresIn || 86400) * 1000, // défaut 24h
+    token,
+    refreshToken: undefined,
+    userId,
+    userName,
+    company,
+    expiresAt: Date.now() + 86400 * 1000, // 24h
   };
 
   storeSession(session);
