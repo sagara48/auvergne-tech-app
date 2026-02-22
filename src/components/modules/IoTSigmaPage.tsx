@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Building2, Search, MapPin, Check,
   ChevronRight, Shield, Layers, Navigation, Wifi, Activity, TrendingUp,
   Monitor, AlertTriangle, BookOpen, ArrowUp, ArrowDown, DoorOpen,
-  Weight, Thermometer, Zap, Send, Filter,
+  Weight, Thermometer, Zap, Send, Filter, Clock, List,
 } from 'lucide-react';
 import { Card, CardBody, Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -20,14 +20,14 @@ import {
   Sigma4Chart, Sigma4ChartItem, Sigma4Dashboard, Sigma4Lift, Sigma4ServiceEntry,
   Sigma4MonitorData, MonitorAction,
   getDashboard, getLifts, getLiftServices, getMonitorOnline, sendMonitorAction, activateMonitor, keepAliveMonitor,
-  getErrorInfo, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
+  getErrorInfo, getLiftErrors, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
   getDrivePhaseLabel, getDrivePhaseColor, getContactorLabel, getContactorColor, getBrakeLabel, getBrakeColor,
   isConnectedToSigma4, loginSigma4, logoutSigma4,
   MONITOR_ACTIONS,
 } from '@/services/sigma4liftsApi';
 import {
   searchErrorCodes, getAllErrorCodes, getErrorStats, getErrorsByFamily,
-  mergeApiErrors, severityInfo, severityFromApi,
+  mergeApiErrors, severityInfo, severityFromApi, lookupErrorCode,
   SEVERITY_LEVELS, CAUSA_CATEGORIES, S4LErrorCode, SeverityKey, S4LApiErrorEntry,
 } from '@/services/sigma4ErrorCodes';
 
@@ -102,6 +102,8 @@ function LoginView({ onConnected }: { onConnected: () => void }) {
 // ═══ CONNECTED VIEW WITH TABS ═══
 function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
   const [tab, setTab] = useState<Tab>('dashboard');
+  const [selectedLiftId, setSelectedLiftId] = useState<number | null>(null);
+  const [selectedLift, setSelectedLift] = useState<Sigma4Lift | undefined>(undefined);
   const session = getSigma4Session();
   const qc = useQueryClient();
 
@@ -148,8 +150,8 @@ function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
       <div className="flex-1 overflow-hidden">
         {tab === 'dashboard' && <DashboardTab />}
         {tab === 'lifts' && <LiftsTab />}
-        {tab === 'monitor' && <MonitorTab />}
-        {tab === 'errors' && <ErrorsTab />}
+        {tab === 'monitor' && <MonitorTab selectedLiftId={selectedLiftId} setSelectedLiftId={setSelectedLiftId} onLiftChange={setSelectedLift} />}
+        {tab === 'errors' && <ErrorsTab selectedLiftId={selectedLiftId} selectedLift={selectedLift} setSelectedLiftId={setSelectedLiftId} onSwitchToMonitor={() => setTab('monitor')} />}
       </div>
     </div>
   );
@@ -719,15 +721,38 @@ function BarViz({ items }: { items: Sigma4ChartItem[] }) {
 // TAB: MONITOR ONLINE — Supervision temps réel
 // ═══════════════════════════════════════════════════════════════
 
-function MonitorTab() {
+function MonitorTab({ selectedLiftId, setSelectedLiftId, onLiftChange }: {
+  selectedLiftId: number | null;
+  setSelectedLiftId: (id: number | null) => void;
+  onLiftChange: (lift: Sigma4Lift | undefined) => void;
+}) {
   const { data: lifts, isLoading } = useQuery({
     queryKey: ['sigma4', 'lifts'],
     queryFn: getLifts,
     staleTime: 120000,
     retry: 1,
   });
-  const [selectedLiftId, setSelectedLiftId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
+
+  const activeLifts = useMemo(() => {
+    if (!lifts) return [];
+    let list = lifts.filter(l => !l.baja);
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(l =>
+        l.liftCompRef.toLowerCase().includes(q) ||
+        l.city.toLowerCase().includes(q) ||
+        l.descripcion.toLowerCase().includes(q)
+      );
+    }
+    return list.sort((a, b) => a.liftCompRef.localeCompare(b.liftCompRef));
+  }, [lifts, search]);
+
+  // Notifier le parent quand le lift sélectionné change
+  useEffect(() => {
+    const lift = activeLifts.find(l => l.id === selectedLiftId);
+    onLiftChange(lift);
+  }, [selectedLiftId, activeLifts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeLifts = useMemo(() => {
     if (!lifts) return [];
@@ -1397,8 +1422,13 @@ function MonitorBadge({ label, value, color }: { label: string; value: string; c
 // TAB: ERREURS — Recherche codes + Familles + Smart Preventive
 // ═══════════════════════════════════════════════════════════════
 
-function ErrorsTab() {
-  const [subTab, setSubTab] = useState<'search' | 'families' | 'preventive'>('search');
+function ErrorsTab({ selectedLiftId, selectedLift, setSelectedLiftId, onSwitchToMonitor }: {
+  selectedLiftId: number | null;
+  selectedLift?: Sigma4Lift;
+  setSelectedLiftId: (id: number | null) => void;
+  onSwitchToMonitor: () => void;
+}) {
+  const [subTab, setSubTab] = useState<'history' | 'search' | 'families' | 'preventive'>(selectedLiftId ? 'history' : 'search');
 
   // Charger le catalogue d'erreurs depuis l'API S4L
   const { data: apiErrors } = useQuery({
@@ -1418,12 +1448,45 @@ function ErrorsTab() {
 
   const apiCount = apiErrors?.length || 0;
 
+  // Basculer automatiquement sur history quand un lift est sélectionné
+  useEffect(() => {
+    if (selectedLiftId) setSubTab('history');
+  }, [selectedLiftId]);
+
   return (
     <div className="h-full flex flex-col gap-2 overflow-hidden">
+      {/* Lift sélectionné info */}
+      {selectedLiftId && selectedLift && (
+        <div className="flex items-center justify-between flex-shrink-0 px-2 py-1.5 rounded-lg bg-[#059669]/10 border border-[#059669]/20">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded bg-[#059669] flex items-center justify-center">
+              <Monitor className="w-3 h-3 text-white" />
+            </div>
+            <div>
+              <p className="text-[9px] font-extrabold text-[#059669]">{selectedLift.liftCompRef}</p>
+              <p className="text-[6px] text-[var(--text-muted)]">{selectedLift.city}{selectedLift.city && selectedLift.descripcion ? ' · ' : ''}{selectedLift.descripcion}</p>
+            </div>
+          </div>
+          <button onClick={onSwitchToMonitor} className="text-[7px] font-bold text-[#059669] hover:underline flex items-center gap-0.5">
+            <Monitor className="w-2.5 h-2.5" /> Voir Monitor
+          </button>
+        </div>
+      )}
+
+      {!selectedLiftId && (
+        <div className="flex items-center gap-2 flex-shrink-0 px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
+          <AlertTriangle className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+          <p className="text-[8px] text-[var(--text-muted)]">
+            Sélectionnez un ascenseur dans l'onglet <strong className="text-[var(--text-primary)]">Monitor</strong> pour voir son historique d'erreurs
+          </p>
+        </div>
+      )}
+
       {/* Sub-tabs */}
       <div className="flex gap-0.5 flex-shrink-0 bg-[var(--bg-secondary)] rounded-lg p-0.5">
         {([
-          { id: 'search' as const, label: 'Recherche codes', icon: Search },
+          ...(selectedLiftId ? [{ id: 'history' as const, label: 'Historique', icon: Clock }] : []),
+          { id: 'search' as const, label: 'Catalogue', icon: Search },
           { id: 'families' as const, label: 'Par famille', icon: Layers },
           { id: 'preventive' as const, label: 'Smart Preventive', icon: TrendingUp },
         ]).map(t => {
@@ -1443,11 +1506,242 @@ function ErrorsTab() {
       </div>
 
       <div className="flex-1 overflow-hidden">
+        {subTab === 'history' && selectedLiftId && <LiftErrorHistoryPanel liftId={selectedLiftId} lift={selectedLift} allCodes={allCodes} />}
         {subTab === 'search' && <ErrorSearchPanel allCodes={allCodes} apiCount={apiCount} />}
         {subTab === 'families' && <ErrorFamiliesPanel allCodes={allCodes} />}
         {subTab === 'preventive' && <SmartPreventivePanel allCodes={allCodes} apiCount={apiCount} />}
       </div>
     </div>
+  );
+}
+
+// ── HISTORIQUE ERREURS D'UN ASCENSEUR ──
+
+function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lift?: Sigma4Lift; allCodes: S4LErrorCode[] }) {
+  const qc = useQueryClient();
+
+  // Récupérer les erreurs/messages de l'ascenseur
+  const { data: liftErrors, isLoading, error, refetch } = useQuery({
+    queryKey: ['sigma4', 'lift-errors', liftId],
+    queryFn: () => getLiftErrors(liftId),
+    staleTime: 30000,
+    retry: 1,
+  });
+
+  const [filterSeverity, setFilterSeverity] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Enrichir les erreurs avec les infos du catalogue
+  const enrichedErrors = useMemo(() => {
+    if (!liftErrors || !Array.isArray(liftErrors)) return [];
+    return liftErrors.map((err: any) => {
+      // Essayer de trouver le code dans le catalogue
+      const code = err.errorCode || err.codigoError || err.idEstandar || err.code || '';
+      const catalogEntry = code ? lookupErrorCode(code) : undefined;
+      // Chercher aussi par idEstandar dans allCodes
+      const catalogFromAll = code ? allCodes.find(c => c.code === code) : undefined;
+      const matched = catalogEntry || catalogFromAll;
+
+      return {
+        ...err,
+        errorCode: code,
+        description: err.description || err.descripcion || err.text || matched?.description || code,
+        cause: err.causa || err.cause || matched?.cause || '',
+        help: matched?.help || '',
+        severity: err.severity != null ? severityFromApi(typeof err.severity === 'number' ? err.severity : null) : matched?.severity,
+        family: matched?.family || (code ? code.replace(/\d.*/,'') : ''),
+        date: err.date || err.fecha || err.timestamp || err.fechaInicio || '',
+        dateEnd: err.fechaFin || err.dateEnd || '',
+        origin: err.origin || err.origen || '',
+      };
+    }).sort((a: any, b: any) => {
+      // Plus récent en premier
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [liftErrors, allCodes]);
+
+  // Filtrage
+  const filteredErrors = useMemo(() => {
+    let list = enrichedErrors;
+    if (filterSeverity !== 'all') {
+      list = list.filter((e: any) => e.severity === filterSeverity);
+    }
+    if (searchQuery.length >= 2) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((e: any) =>
+        (e.errorCode || '').toLowerCase().includes(q) ||
+        (e.description || '').toLowerCase().includes(q) ||
+        (e.cause || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [enrichedErrors, filterSeverity, searchQuery]);
+
+  // Stats par sévérité
+  const severityStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    enrichedErrors.forEach((e: any) => {
+      if (e.severity) stats[e.severity] = (stats[e.severity] || 0) + 1;
+    });
+    return stats;
+  }, [enrichedErrors]);
+
+  if (isLoading) return <LoadingState text={`Chargement des erreurs de ${lift?.liftCompRef || '#' + liftId}…`} />;
+  if (error) return <ErrorState error={error} onRetry={() => refetch()} />;
+
+  return (
+    <div className="h-full flex flex-col gap-1.5 overflow-hidden">
+      {/* KPI ligne */}
+      <div className="flex gap-1 flex-shrink-0">
+        <Card className="flex-1"><CardBody className="p-1.5 text-center">
+          <p className="text-[14px] font-extrabold font-mono text-[#3B82F6]">{enrichedErrors.length}</p>
+          <p className="text-[5px] text-[var(--text-muted)] font-semibold">événements</p>
+        </CardBody></Card>
+        {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
+          .filter(([key]) => (severityStats[key] || 0) > 0)
+          .map(([key, sev]) => (
+          <Card key={key} className="flex-1">
+            <CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
+              onClick={() => setFilterSeverity(filterSeverity === key ? 'all' : key)}>
+              <p className="text-[14px] font-extrabold font-mono" style={{ color: sev.color }}>
+                {severityStats[key] || 0}
+              </p>
+              <p className="text-[5px] text-[var(--text-muted)] font-semibold leading-tight">
+                {sev.icon} {sev.short}
+              </p>
+            </CardBody>
+          </Card>
+        ))}
+      </div>
+
+      {/* Barre de recherche + filtre actif */}
+      <div className="flex gap-1 flex-shrink-0">
+        <div className="flex-1 relative">
+          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Filtrer les erreurs…"
+            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none focus:border-[#EA580C] transition-colors" />
+        </div>
+        {filterSeverity !== 'all' && (
+          <button onClick={() => setFilterSeverity('all')}
+            className="px-2 py-1 rounded-lg bg-[#EA580C]/10 text-[#EA580C] text-[8px] font-bold">
+            ✕ {SEVERITY_LEVELS[filterSeverity as SeverityKey]?.short}
+          </button>
+        )}
+        <button onClick={() => refetch()}
+          className="p-1.5 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
+          <RefreshCw className="w-3 h-3 text-[var(--text-muted)]" />
+        </button>
+      </div>
+
+      <p className="text-[7px] text-[var(--text-muted)] px-1 flex-shrink-0">
+        {filteredErrors.length} erreur{filteredErrors.length > 1 ? 's' : ''}{searchQuery ? ` pour "${searchQuery}"` : ''}
+      </p>
+
+      {/* Liste des erreurs */}
+      {filteredErrors.length > 0 ? (
+        <div className="flex-1 overflow-y-auto space-y-0.5">
+          {filteredErrors.map((err: any, idx: number) => (
+            <LiftErrorRow key={`${err.errorCode}-${err.date}-${idx}`} error={err} />
+          ))}
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Check className="w-8 h-8 text-[#059669] mx-auto mb-2 opacity-40" />
+            <p className="text-[10px] text-[var(--text-muted)] font-semibold">
+              {enrichedErrors.length === 0 ? 'Aucun événement enregistré' : 'Aucun résultat pour ce filtre'}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LiftErrorRow({ error }: { error: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const sev = error.severity && error.severity in SEVERITY_LEVELS
+    ? SEVERITY_LEVELS[error.severity as SeverityKey]
+    : null;
+
+  const dateStr = error.date ? (() => {
+    try {
+      const d = new Date(error.date);
+      return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
+        ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    } catch { return error.date; }
+  })() : '';
+
+  const dateEndStr = error.dateEnd ? (() => {
+    try {
+      const d = new Date(error.dateEnd);
+      return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
+  })() : '';
+
+  return (
+    <Card>
+      <CardBody className="p-0">
+        <button onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center gap-2 p-2 text-left hover:bg-[var(--bg-secondary)]/50 rounded-lg transition-colors">
+          {sev && <span className="text-[8px]" title={sev.label}>{sev.icon}</span>}
+          <code className="text-[8px] font-mono font-extrabold text-[#EA580C] flex-shrink-0 w-24">
+            {error.errorCode || '—'}
+          </code>
+          <span className="text-[8px] font-semibold flex-1 truncate text-[var(--text-primary)]">
+            {error.description}
+          </span>
+          {dateStr && (
+            <span className="text-[6px] text-[var(--text-muted)] font-mono flex-shrink-0 flex items-center gap-0.5">
+              <Clock className="w-2 h-2" />{dateStr}
+              {dateEndStr && <span className="text-[var(--text-muted)]">→ {dateEndStr}</span>}
+            </span>
+          )}
+          {error.family && (
+            <span className="text-[6px] px-1.5 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)] font-bold flex-shrink-0">
+              {error.family}
+            </span>
+          )}
+          {(error.cause || error.help || error.origin) && (
+            <ChevronRight className={cn(
+              'w-2.5 h-2.5 text-[var(--text-muted)] transition-transform flex-shrink-0',
+              expanded && 'rotate-90'
+            )} />
+          )}
+        </button>
+        {expanded && (
+          <div className="px-3 pb-2 space-y-1 border-t border-[var(--border-secondary)]">
+            {error.cause && (
+              <div className="mt-1">
+                <p className="text-[6px] font-bold text-[#EA580C] uppercase">Cause probable</p>
+                <p className="text-[7px] text-[var(--text-secondary)]">{error.cause}</p>
+              </div>
+            )}
+            {error.help && (
+              <div>
+                <p className="text-[6px] font-bold text-[#059669] uppercase">Aide diagnostic</p>
+                <p className="text-[7px] text-[var(--text-secondary)]">{error.help}</p>
+              </div>
+            )}
+            {error.origin && (
+              <div>
+                <p className="text-[6px] font-bold text-[#3B82F6] uppercase">Origine</p>
+                <p className="text-[7px] text-[var(--text-secondary)]">{error.origin}</p>
+              </div>
+            )}
+            {sev && (
+              <div className="flex items-center gap-1 pt-1">
+                <span className="text-[6px] font-bold text-[var(--text-muted)]">Sévérité :</span>
+                <span className="text-[7px] font-bold" style={{ color: sev.color }}>{sev.icon} {sev.label}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 
