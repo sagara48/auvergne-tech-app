@@ -142,6 +142,10 @@ export default function AtelierToleriePage() {
   // Feature 53: Auto-save offline
   useEffect(() => { if (piece.id) savePieceOffline(piece).catch(() => {}); }, [piece]);
 
+  // DB (must be above useEffects that reference savedPieces)
+  const { data: savedPieces = [] } = useQuery({ queryKey: ['tolerie-pieces'], queryFn: getPieces, enabled: showSaved });
+  const { data: travauxList = [] } = useQuery({ queryKey: ['travaux-list'], queryFn: getTravauxListe });
+
   // Feature 53: Cache server pieces locally when online
   useEffect(() => { if (online && savedPieces.length > 0) cacheAllPieces(savedPieces).catch(() => {}); }, [savedPieces, online]);
 
@@ -167,9 +171,7 @@ export default function AtelierToleriePage() {
     return () => cancelAnimationFrame(frame);
   }, [animPlaying]);
 
-  // DB
-  const { data: savedPieces = [] } = useQuery({ queryKey: ['tolerie-pieces'], queryFn: getPieces, enabled: showSaved });
-  const { data: travauxList = [] } = useQuery({ queryKey: ['travaux-list'], queryFn: getTravauxListe });
+  // DB mutations
   const saveMut = useMutation({
     mutationFn: async (p: PieceConfig) => p.id ? updatePiece(p.id, p) : createPiece(p),
     onSuccess: (s) => { push({ ...piece, id: s.id, created_at: s.created_at, updated_at: s.updated_at }); qc.invalidateQueries({ queryKey: ['tolerie-pieces'] }); toast.success('Sauvegardé'); },
