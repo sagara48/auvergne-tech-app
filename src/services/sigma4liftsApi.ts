@@ -204,7 +204,7 @@ export async function loginSigma4(username: string, password: string): Promise<S
     await supabase.from('sigma4_connections').upsert({
       user_id: user.id,
       sigma4_user_id: session.userId,
-      sigma4_email: email,
+      sigma4_email: username,
       sigma4_company: session.company,
       last_login: new Date().toISOString(),
     }, { onConflict: 'user_id' }).catch(() => {});
