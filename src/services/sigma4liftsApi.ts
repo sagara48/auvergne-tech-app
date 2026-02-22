@@ -533,8 +533,13 @@ export async function sendMonitorAction(
 export async function getLiftErrors(liftId: number, days = 7): Promise<Sigma4MessageEntry[]> {
   const end = new Date();
   const start = new Date(end.getTime() - days * 86400_000);
-  const fmt = (d: Date) => `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}+${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return sigma4Get(`/divide/lifts/${liftId}/messages?startDate=${fmt(start)}&endDate=${fmt(end)}`);
+  // Format Quasar/S4L : YYYY/MM/DD HH:mm
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ` +
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const sd = encodeURIComponent(fmt(start));
+  const ed = encodeURIComponent(fmt(end));
+  return sigma4Get(`/divide/lifts/${liftId}/messages?startDate=${sd}&endDate=${ed}`);
 }
 
 /** Catalogue erreurs S4L — /info/errores (avec params optionnels) */
