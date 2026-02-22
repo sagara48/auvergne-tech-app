@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Building2, Search, MapPin, Check,
   ChevronRight, Shield, Layers, Navigation, Wifi, Activity, TrendingUp,
   Monitor, AlertTriangle, BookOpen, ArrowUp, ArrowDown, DoorOpen,
-  Weight, Thermometer, Zap, Send, Filter, Clock, List,
+  Weight, Thermometer, Zap, Send, Filter, Clock,
 } from 'lucide-react';
 import { Card, CardBody, Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -20,9 +20,9 @@ import {
   Sigma4Chart, Sigma4ChartItem, Sigma4Dashboard, Sigma4Lift, Sigma4ServiceEntry,
   Sigma4MonitorData, MonitorAction,
   getDashboard, getLifts, getLiftServices, getMonitorOnline, sendMonitorAction, activateMonitor, keepAliveMonitor,
-  getErrorInfo, getLiftErrors, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
+  getErrorInfo, getLiftErrors, getTracs, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
   getDrivePhaseLabel, getDrivePhaseColor, getContactorLabel, getContactorColor, getBrakeLabel, getBrakeColor,
-  isConnectedToSigma4, loginSigma4, logoutSigma4,
+  isConnectedToSigma4, loginSigma4, logoutSigma4, sigma4Request,
   MONITOR_ACTIONS,
 } from '@/services/sigma4liftsApi';
 import {
@@ -1504,56 +1504,108 @@ function ErrorsTab({ selectedLiftId, selectedLift, setSelectedLiftId, onSwitchTo
 // ── HISTORIQUE ERREURS D'UN ASCENSEUR ──
 
 function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lift?: Sigma4Lift; allCodes: S4LErrorCode[] }) {
-  const qc = useQueryClient();
-
-  // Récupérer les erreurs/messages de l'ascenseur
-  const { data: liftErrors, isLoading, error, refetch } = useQuery({
-    queryKey: ['sigma4', 'lift-errors', liftId],
-    queryFn: () => getLiftErrors(liftId),
-    staleTime: 30000,
-    retry: 1,
-  });
-
+  const [showDebug, setShowDebug] = useState(false);
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Enrichir les erreurs avec les infos du catalogue
+  // Essayer plusieurs endpoints en parallèle
+  const { data: messagesData, isLoading: loadingMsg, error: errorMsg, refetch: refetchMsg } = useQuery({
+    queryKey: ['sigma4', 'lift-messages', liftId],
+    queryFn: () => getLiftErrors(liftId),
+    staleTime: 30000,
+    retry: 0,
+  });
+
+  const { data: tracsData, isLoading: loadingTracs, error: errorTracs, refetch: refetchTracs } = useQuery({
+    queryKey: ['sigma4', 'lift-tracs', liftId],
+    queryFn: () => getTracs(liftId),
+    staleTime: 30000,
+    retry: 0,
+  });
+
+  // Essayer aussi /divide/lifts/{id}/errors directement
+  const { data: errorsData, isLoading: loadingErrors, error: errorErrors, refetch: refetchErrors } = useQuery({
+    queryKey: ['sigma4', 'lift-errors-alt', liftId],
+    queryFn: () => sigma4Request(`/divide/lifts/${liftId}/errors`),
+    staleTime: 30000,
+    retry: 0,
+  });
+
+  const isLoading = loadingMsg && loadingTracs && loadingErrors;
+
+  const refetchAll = () => { refetchMsg(); refetchTracs(); refetchErrors(); };
+
+  // Extraire les items d'une réponse (gère array, objet avec .content/.items/.data/.list, etc.)
+  const extractItems = (raw: any): any[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'object') {
+      // Chercher un tableau dans les clés courantes
+      for (const key of ['content', 'items', 'data', 'list', 'results', 'errors', 'messages', 'tracs', 'events']) {
+        if (Array.isArray(raw[key])) return raw[key];
+      }
+      // Si l'objet a des clés numériques, c'est peut-être un pseudo-array
+      const keys = Object.keys(raw);
+      if (keys.length > 0 && keys.every(k => !isNaN(Number(k)))) {
+        return Object.values(raw);
+      }
+    }
+    return [];
+  };
+
+  // Fusionner et dédupliquer toutes les sources
+  const rawItems = useMemo(() => {
+    const fromMessages = extractItems(messagesData);
+    const fromTracs = extractItems(tracsData);
+    const fromErrors = extractItems(errorsData);
+
+    // Tout concaténer
+    const all = [...fromMessages, ...fromTracs, ...fromErrors];
+
+    // Dédupliquer par une clé composite (id ou code+date)
+    const seen = new Set<string>();
+    return all.filter(item => {
+      const key = String(item.id || item.errorId || '') + '|' +
+        String(item.errorCode || item.codigoError || item.idEstandar || item.code || '') + '|' +
+        String(item.date || item.fecha || item.timestamp || item.fechaInicio || item.startDate || '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [messagesData, tracsData, errorsData]);
+
+  // Enrichir avec le catalogue
   const enrichedErrors = useMemo(() => {
-    if (!liftErrors || !Array.isArray(liftErrors)) return [];
-    return liftErrors.map((err: any) => {
-      // Essayer de trouver le code dans le catalogue
-      const code = err.errorCode || err.codigoError || err.idEstandar || err.code || '';
+    return rawItems.map((err: any) => {
+      const code = err.errorCode || err.codigoError || err.idEstandar || err.code || err.errorString || '';
       const catalogEntry = code ? lookupErrorCode(code) : undefined;
-      // Chercher aussi par idEstandar dans allCodes
       const catalogFromAll = code ? allCodes.find(c => c.code === code) : undefined;
       const matched = catalogEntry || catalogFromAll;
 
       return {
         ...err,
+        _raw: err, // garder l'original pour le debug
         errorCode: code,
-        description: err.description || err.descripcion || err.text || matched?.description || code,
+        description: err.description || err.descripcion || err.text || err.shortText || err.message || matched?.description || code || '(sans description)',
         cause: err.causa || err.cause || matched?.cause || '',
         help: matched?.help || '',
         severity: err.severity != null ? severityFromApi(typeof err.severity === 'number' ? err.severity : null) : matched?.severity,
         family: matched?.family || (code ? code.replace(/\d.*/,'') : ''),
-        date: err.date || err.fecha || err.timestamp || err.fechaInicio || '',
-        dateEnd: err.fechaFin || err.dateEnd || '',
-        origin: err.origin || err.origen || '',
+        date: err.date || err.fecha || err.timestamp || err.fechaInicio || err.startDate || err.created || '',
+        dateEnd: err.fechaFin || err.dateEnd || err.endDate || '',
+        origin: err.origin || err.origen || err.source || '',
       };
     }).sort((a: any, b: any) => {
-      // Plus récent en premier
       const dateA = a.date ? new Date(a.date).getTime() : 0;
       const dateB = b.date ? new Date(b.date).getTime() : 0;
       return dateB - dateA;
     });
-  }, [liftErrors, allCodes]);
+  }, [rawItems, allCodes]);
 
   // Filtrage
   const filteredErrors = useMemo(() => {
     let list = enrichedErrors;
-    if (filterSeverity !== 'all') {
-      list = list.filter((e: any) => e.severity === filterSeverity);
-    }
+    if (filterSeverity !== 'all') list = list.filter((e: any) => e.severity === filterSeverity);
     if (searchQuery.length >= 2) {
       const q = searchQuery.toLowerCase();
       list = list.filter((e: any) =>
@@ -1575,56 +1627,127 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
   }, [enrichedErrors]);
 
   if (isLoading) return <LoadingState text={`Chargement des erreurs de ${lift?.liftCompRef || '#' + liftId}…`} />;
-  if (error) return <ErrorState error={error} onRetry={() => refetch()} />;
+
+  // Debug: résumé des sources
+  const debugInfo = {
+    messages: { count: extractItems(messagesData).length, error: errorMsg ? (errorMsg as Error).message : null, raw: messagesData },
+    tracs: { count: extractItems(tracsData).length, error: errorTracs ? (errorTracs as Error).message : null, raw: tracsData },
+    errors: { count: extractItems(errorsData).length, error: errorErrors ? (errorErrors as Error).message : null, raw: errorsData },
+  };
 
   return (
     <div className="h-full flex flex-col gap-1.5 overflow-hidden">
-      {/* KPI ligne */}
-      <div className="flex gap-1 flex-shrink-0">
-        <Card className="flex-1"><CardBody className="p-1.5 text-center">
-          <p className="text-[14px] font-extrabold font-mono text-[#3B82F6]">{enrichedErrors.length}</p>
-          <p className="text-[5px] text-[var(--text-muted)] font-semibold">événements</p>
-        </CardBody></Card>
-        {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
-          .filter(([key]) => (severityStats[key] || 0) > 0)
-          .map(([key, sev]) => (
-          <Card key={key} className="flex-1">
-            <CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
-              onClick={() => setFilterSeverity(filterSeverity === key ? 'all' : key)}>
-              <p className="text-[14px] font-extrabold font-mono" style={{ color: sev.color }}>
-                {severityStats[key] || 0}
-              </p>
-              <p className="text-[5px] text-[var(--text-muted)] font-semibold leading-tight">
-                {sev.icon} {sev.short}
-              </p>
-            </CardBody>
-          </Card>
-        ))}
-      </div>
-
-      {/* Barre de recherche + filtre actif */}
-      <div className="flex gap-1 flex-shrink-0">
-        <div className="flex-1 relative">
-          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Filtrer les erreurs…"
-            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none focus:border-[#EA580C] transition-colors" />
+      {/* Sources debug info compact */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex gap-1 flex-1">
+          {(['messages', 'tracs', 'errors'] as const).map(src => {
+            const info = debugInfo[src];
+            const ok = info.count > 0;
+            const fail = !!info.error;
+            return (
+              <span key={src} className={cn(
+                'text-[6px] px-1.5 py-0.5 rounded-full font-bold',
+                ok ? 'bg-[#059669]/10 text-[#059669]' : fail ? 'bg-[#DC2626]/10 text-[#DC2626]' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+              )}>
+                {src}: {ok ? `${info.count}` : fail ? '✕' : '0'}
+              </span>
+            );
+          })}
         </div>
-        {filterSeverity !== 'all' && (
-          <button onClick={() => setFilterSeverity('all')}
-            className="px-2 py-1 rounded-lg bg-[#EA580C]/10 text-[#EA580C] text-[8px] font-bold">
-            ✕ {SEVERITY_LEVELS[filterSeverity as SeverityKey]?.short}
-          </button>
-        )}
-        <button onClick={() => refetch()}
-          className="p-1.5 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
+        <button onClick={() => setShowDebug(!showDebug)}
+          className={cn('text-[6px] px-1.5 py-0.5 rounded font-bold transition-colors',
+            showDebug ? 'bg-[#8B5CF6]/15 text-[#8B5CF6]' : 'text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]'
+          )}>
+          🔍 Debug
+        </button>
+        <button onClick={refetchAll}
+          className="p-1 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
           <RefreshCw className="w-3 h-3 text-[var(--text-muted)]" />
         </button>
       </div>
 
-      <p className="text-[7px] text-[var(--text-muted)] px-1 flex-shrink-0">
-        {filteredErrors.length} erreur{filteredErrors.length > 1 ? 's' : ''}{searchQuery ? ` pour "${searchQuery}"` : ''}
-      </p>
+      {/* Debug panel */}
+      {showDebug && (
+        <Card className="flex-shrink-0 max-h-48 overflow-y-auto"><CardBody className="p-2">
+          <p className="text-[7px] font-extrabold text-[#8B5CF6] mb-1">🔍 Debug — Réponses brutes API (lift #{liftId})</p>
+          {(['messages', 'tracs', 'errors'] as const).map(src => {
+            const info = debugInfo[src];
+            const endpoint = src === 'messages' ? `/divide/lifts/${liftId}/messages`
+              : src === 'tracs' ? `/divide/tracs?liftId=${liftId}`
+              : `/divide/lifts/${liftId}/errors`;
+            return (
+              <div key={src} className="mb-2">
+                <p className="text-[6px] font-bold text-[var(--text-secondary)]">
+                  <code className="text-[#EA580C]">{endpoint}</code>
+                  {info.error && <span className="text-[#DC2626] ml-1">⚠ {info.error}</span>}
+                  {!info.error && <span className="text-[#059669] ml-1">✓ {info.count} items</span>}
+                </p>
+                <pre className="text-[5px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] rounded p-1 mt-0.5 overflow-x-auto max-h-20 whitespace-pre-wrap break-all">
+                  {JSON.stringify(info.raw, null, 1)?.substring(0, 2000) || 'null'}
+                </pre>
+              </div>
+            );
+          })}
+          {/* Première entrée brute (pour voir les clés) */}
+          {rawItems.length > 0 && (
+            <div className="mt-1 pt-1 border-t border-[var(--border-secondary)]">
+              <p className="text-[6px] font-bold text-[var(--text-secondary)]">📋 Premier item (clés disponibles) :</p>
+              <pre className="text-[5px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] rounded p-1 mt-0.5 overflow-x-auto max-h-20 whitespace-pre-wrap break-all">
+                {JSON.stringify(rawItems[0], null, 1)?.substring(0, 1500)}
+              </pre>
+            </div>
+          )}
+        </CardBody></Card>
+      )}
+
+      {/* KPI ligne */}
+      {enrichedErrors.length > 0 && (
+        <div className="flex gap-1 flex-shrink-0">
+          <Card className="flex-1"><CardBody className="p-1.5 text-center">
+            <p className="text-[14px] font-extrabold font-mono text-[#3B82F6]">{enrichedErrors.length}</p>
+            <p className="text-[5px] text-[var(--text-muted)] font-semibold">événements</p>
+          </CardBody></Card>
+          {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
+            .filter(([key]) => (severityStats[key] || 0) > 0)
+            .map(([key, sev]) => (
+            <Card key={key} className="flex-1">
+              <CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
+                onClick={() => setFilterSeverity(filterSeverity === key ? 'all' : key)}>
+                <p className="text-[14px] font-extrabold font-mono" style={{ color: sev.color }}>
+                  {severityStats[key] || 0}
+                </p>
+                <p className="text-[5px] text-[var(--text-muted)] font-semibold leading-tight">
+                  {sev.icon} {sev.short}
+                </p>
+              </CardBody>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Barre de recherche */}
+      {enrichedErrors.length > 0 && (
+        <div className="flex gap-1 flex-shrink-0">
+          <div className="flex-1 relative">
+            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Filtrer les erreurs…"
+              className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[9px] outline-none focus:border-[#EA580C] transition-colors" />
+          </div>
+          {filterSeverity !== 'all' && (
+            <button onClick={() => setFilterSeverity('all')}
+              className="px-2 py-1 rounded-lg bg-[#EA580C]/10 text-[#EA580C] text-[8px] font-bold">
+              ✕ {SEVERITY_LEVELS[filterSeverity as SeverityKey]?.short}
+            </button>
+          )}
+        </div>
+      )}
+
+      {enrichedErrors.length > 0 && (
+        <p className="text-[7px] text-[var(--text-muted)] px-1 flex-shrink-0">
+          {filteredErrors.length} erreur{filteredErrors.length > 1 ? 's' : ''}{searchQuery ? ` pour "${searchQuery}"` : ''}
+        </p>
+      )}
 
       {/* Liste des erreurs */}
       {filteredErrors.length > 0 ? (
@@ -1636,10 +1759,20 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
       ) : (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <Check className="w-8 h-8 text-[#059669] mx-auto mb-2 opacity-40" />
-            <p className="text-[10px] text-[var(--text-muted)] font-semibold">
-              {enrichedErrors.length === 0 ? 'Aucun événement enregistré' : 'Aucun résultat pour ce filtre'}
-            </p>
+            {enrichedErrors.length === 0 ? (
+              <>
+                <AlertTriangle className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2 opacity-30" />
+                <p className="text-[10px] text-[var(--text-muted)] font-semibold">Aucun événement trouvé</p>
+                <p className="text-[7px] text-[var(--text-muted)] mt-1">
+                  Cliquez sur <strong className="text-[#8B5CF6]">🔍 Debug</strong> pour inspecter les réponses API
+                </p>
+              </>
+            ) : (
+              <>
+                <Check className="w-8 h-8 text-[#059669] mx-auto mb-2 opacity-40" />
+                <p className="text-[10px] text-[var(--text-muted)] font-semibold">Aucun résultat pour ce filtre</p>
+              </>
+            )}
           </div>
         </div>
       )}
