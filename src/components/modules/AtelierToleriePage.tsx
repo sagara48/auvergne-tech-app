@@ -60,11 +60,17 @@ type CanvasTool = 'select' | 'measure' | 'annotate';
 function useHistory(initial: PieceConfig) {
   const [h, setH] = useState<PieceConfig[]>([initial]);
   const [i, setI] = useState(0);
-  const push = useCallback((n: PieceConfig) => { setH(x => [...x.slice(0, i + 1), n].slice(-40)); setI(x => x + 1); }, [i]);
+  const push = useCallback((n: PieceConfig) => {
+    setH(prev => {
+      const next = [...prev.slice(0, i + 1), n].slice(-40);
+      return next;
+    });
+    setI(prev => prev + 1);
+  }, [i]);
   const undo = useCallback(() => { if (i > 0) setI(x => x - 1); }, [i]);
   const redo = useCallback(() => { if (i < h.length - 1) setI(x => x + 1); }, [i, h.length]);
   const reset = useCallback((p: PieceConfig) => { setH([p]); setI(0); }, []);
-  return { piece: h[i], push, undo, redo, reset, canUndo: i > 0, canRedo: i < h.length - 1 };
+  return { piece: h[Math.min(i, h.length - 1)], push, undo, redo, reset, canUndo: i > 0, canRedo: i < h.length - 1 };
 }
 
 // ═══ KEYBOARD SHORTCUTS MAP (36) ═══
@@ -125,11 +131,13 @@ export default function AtelierToleriePage() {
   const { setModuleActif } = useAppStore();
 
   const update = useCallback((p: Partial<PieceConfig>) => push({ ...piece, ...p }), [piece, push]);
-  const matConfig = MATIERES.find(m => m.id === piece.matiere)!;
-  const issues = useMemo(() => validerPiece(piece), [piece]);
-  const autoCotes = useMemo(() => genererCotationsAuto(piece), [piece]);
+  const matConfig = MATIERES.find(m => m.id === piece?.matiere) || MATIERES[0];
+  const issues = useMemo(() => piece ? validerPiece(piece) : [], [piece]);
+  const autoCotes = useMemo(() => piece ? genererCotationsAuto(piece) : [], [piece]);
   const errCt = issues.filter(i => i.severity === 'error').length;
-  const collisions = useMemo(() => detectCollisions(piece), [piece]);
+  const collisions = useMemo(() => piece ? detectCollisions(piece) : { hasCollision: false, collisions: [] }, [piece]);
+
+  if (!piece) return null;
 
   // Feature 53: Offline monitoring
   useEffect(() => {
