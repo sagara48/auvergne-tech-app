@@ -14,15 +14,53 @@ export interface S4LErrorCode {
 }
 
 // ── NIVEAUX DE SÉVÉRITÉ ──
+// Mapping S4L API : severity 0=autre, 1=info, 2=leve, 3=fatal_remote, 4=fatal_local
 
 export const SEVERITY_LEVELS = {
-  fatal_local:  { label: 'Arrêt — Réinit. locale',      color: '#DC2626', icon: '🔴', short: 'Fatal local' },
-  fatal_remote: { label: 'Arrêt — Réinit. à distance',   color: '#EA580C', icon: '🟠', short: 'Fatal remote' },
-  leve:         { label: 'Arrêt — Réinit. automatique',   color: '#CA8A04', icon: '🟡', short: 'Leve (auto)' },
-  info:         { label: 'Informatif',                     color: '#3B82F6', icon: '🔵', short: 'Info' },
+  fatal_local:  { label: 'Erreur (réarmement local)',         color: '#DC2626', icon: '🔴', short: 'Fatal local',  apiValue: 4 },
+  fatal_remote: { label: 'Erreur (réarmement à distance)',    color: '#EA580C', icon: '🟠', short: 'Fatal remote', apiValue: 3 },
+  leve:         { label: 'Erreur (réarmement automatique)',    color: '#CA8A04', icon: '🟡', short: 'Auto-reset',   apiValue: 2 },
+  info:         { label: 'Erreur (informatif)',                color: '#3B82F6', icon: '🔵', short: 'Informatif',   apiValue: 1 },
+  other:        { label: 'Erreur (autre)',                     color: '#64748B', icon: '⚪', short: 'Autre',        apiValue: 0 },
 } as const;
 
 export type SeverityKey = keyof typeof SEVERITY_LEVELS;
+
+/** Convertir severity numérique API → clé interne */
+export function severityFromApi(n: number | null | undefined): SeverityKey | undefined {
+  switch (n) {
+    case 4: return 'fatal_local';
+    case 3: return 'fatal_remote';
+    case 2: return 'leve';
+    case 1: return 'info';
+    case 0: return 'other';
+    default: return undefined;
+  }
+}
+
+/** Couleur de sévérité (accepte numérique API ou string) */
+export function severityColor(s: number | string | null | undefined): string {
+  if (typeof s === 'number') {
+    const key = severityFromApi(s);
+    return key ? SEVERITY_LEVELS[key].color : '#64748B';
+  }
+  if (typeof s === 'string' && s in SEVERITY_LEVELS) {
+    return SEVERITY_LEVELS[s as SeverityKey].color;
+  }
+  return '#64748B';
+}
+
+/** Info sévérité complète (accepte numérique API ou string) */
+export function severityInfo(s: number | string | null | undefined): typeof SEVERITY_LEVELS[SeverityKey] | null {
+  if (typeof s === 'number') {
+    const key = severityFromApi(s);
+    return key ? SEVERITY_LEVELS[key] : null;
+  }
+  if (typeof s === 'string' && s in SEVERITY_LEVELS) {
+    return SEVERITY_LEVELS[s as SeverityKey];
+  }
+  return null;
+}
 
 // ── CATÉGORIES DE CAUSES (TYPOLOGIES SMART PREVENTIVE) ──
 
@@ -226,4 +264,78 @@ export function getErrorStats() {
     if (e.severity) bySeverity[e.severity] = (bySeverity[e.severity] || 0) + 1;
   });
   return { total: ERROR_DB.length, byFamily, bySeverity };
+}
+
+// ── ENRICHISSEMENT DEPUIS API /info/errores ──
+
+/** Structure retournée par GET /divide/info/errores */
+export interface S4LApiErrorEntry {
+  errorId: number;
+  idEstandar: string;          // ex: "ECO001002000"
+  severity: number | null;     // 0-4
+  functionalGroup: string | null;
+  family: string | null;
+  code: string | null;
+  subcode: string | null;
+  shortTextFR: string | null;
+  shortTextEN: string | null;
+  shortTextES: string | null;
+  shortTextDE: string | null;
+  fr: string | null;
+  en: string | null;
+  es: string | null;
+  de: string | null;
+  rearme: string | null;
+  classificationAEvent: string | null;
+  classificationBAction: string | null;
+  icon: string | null;
+}
+
+/**
+ * Fusionner les données API avec la base locale.
+ * L'API fournit les severity numériques + functionalGroup,
+ * la base locale fournit descriptions FR / causes / aide.
+ * Retourne la base enrichie.
+ */
+export function mergeApiErrors(apiErrors: S4LApiErrorEntry[]): S4LErrorCode[] {
+  // Index API par idEstandar
+  const apiMap = new Map<string, S4LApiErrorEntry>();
+  apiErrors.forEach(e => { if (e.idEstandar) apiMap.set(e.idEstandar, e); });
+
+  // Enrichir la base locale
+  const enriched = ERROR_DB.map(local => {
+    const api = apiMap.get(local.code);
+    if (!api) return local;
+
+    return {
+      ...local,
+      // Prendre severity de l'API si disponible (numérique → string)
+      severity: severityFromApi(api.severity) || local.severity,
+      // Prendre description API si disponible (rarement)
+      description: api.fr || api.shortTextFR || local.description,
+    };
+  });
+
+  // Ajouter les codes API absents de la base locale
+  apiErrors.forEach(api => {
+    if (!api.idEstandar) return;
+    if (_idx.has(api.idEstandar)) return; // déjà dans la base
+
+    const desc = api.fr || api.shortTextFR || api.en || api.shortTextEN || api.idEstandar;
+    if (!desc) return;
+
+    enriched.push({
+      code: api.idEstandar,
+      family: api.family || api.idEstandar.replace(/\d.*/,'') || 'ECO',
+      description: desc,
+      severity: severityFromApi(api.severity),
+    });
+  });
+
+  return enriched;
+}
+
+/** Nombre total de codes dans l'API (si chargée) */
+export function getApiErrorCount(apiErrors: S4LApiErrorEntry[]): number {
+  return apiErrors.length;
 }

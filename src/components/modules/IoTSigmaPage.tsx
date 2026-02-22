@@ -20,13 +20,14 @@ import {
   Sigma4Chart, Sigma4ChartItem, Sigma4Dashboard, Sigma4Lift, Sigma4ServiceEntry,
   Sigma4MonitorData, MonitorAction,
   getDashboard, getLifts, getLiftServices, getMonitorOnline, sendMonitorAction,
-  getSigma4FrontUrl, getSigma4Session,
+  getErrorInfo, getSigma4FrontUrl, getSigma4Session,
   isConnectedToSigma4, loginSigma4, logoutSigma4,
   MONITOR_ACTIONS,
 } from '@/services/sigma4liftsApi';
 import {
   searchErrorCodes, getAllErrorCodes, getErrorStats, getErrorsByFamily,
-  SEVERITY_LEVELS, CAUSA_CATEGORIES, S4LErrorCode, SeverityKey,
+  mergeApiErrors, severityInfo, severityFromApi,
+  SEVERITY_LEVELS, CAUSA_CATEGORIES, S4LErrorCode, SeverityKey, S4LApiErrorEntry,
 } from '@/services/sigma4ErrorCodes';
 
 // ═══ TABS ═══
@@ -811,8 +812,9 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
   const { data: monitor, isLoading, error, dataUpdatedAt } = useQuery({
     queryKey: ['sigma4', 'monitor', liftId],
     queryFn: () => getMonitorOnline(liftId),
-    refetchInterval: 5000,
+    refetchInterval: 10000,   // /status = polling REST, pas WebSocket
     retry: 1,
+    retryDelay: 5000,
   });
   const [showActions, setShowActions] = useState(false);
 
@@ -820,18 +822,49 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
     const label = MONITOR_ACTIONS.find(a => a.key === action)?.label || action;
     if (!confirm(`Confirmer l'action : ${label} ?`)) return;
     try {
-      await sendMonitorAction(liftId, action);
+      await sendMonitorAction(liftId, action, lift?.numeroCabina || 1);
       toast.success('Action envoyée : ' + label);
-      qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] });
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] }), 2000);
     } catch (e: any) {
       toast.error(e.message || 'Erreur lors de l\'envoi');
     }
   };
 
   if (isLoading) return <LoadingState text="Connexion au monitor..." />;
-  if (error) return (
-    <ErrorState error={error} onRetry={() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] })} />
-  );
+
+  // En cas d'erreur (404 = endpoint pas supporté pour cet ascenseur)
+  if (error) {
+    const msg = (error as Error).message || '';
+    const is404 = msg.includes('404') || msg.includes('Not Found');
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Card><CardBody className="p-4 text-center max-w-xs">
+          {is404 ? (
+            <>
+              <Monitor className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2 opacity-50" />
+              <p className="text-[10px] font-bold text-[var(--text-muted)]">Monitor non disponible</p>
+              <p className="text-[8px] text-[var(--text-muted)] mt-1">
+                L'ascenseur <strong>{lift?.liftCompRef}</strong> ne supporte pas le monitoring temps réel,
+                ou le module Monitor Online n'est pas activé sur cette installation.
+              </p>
+              <a href={`${getSigma4FrontUrl()}lift/${liftId}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 mt-2 px-3 py-1 rounded bg-[#059669]/10 text-[#059669] text-[8px] font-bold hover:bg-[#059669]/20">
+                <ExternalLink className="w-2.5 h-2.5" />Voir sur Sigma4Lifts
+              </a>
+            </>
+          ) : (
+            <>
+              <XCircle className="w-8 h-8 text-[#DC2626] mx-auto mb-2" />
+              <p className="text-[10px] font-bold text-[#DC2626]">Erreur de chargement</p>
+              <p className="text-[8px] text-[var(--text-muted)]">{msg}</p>
+              <button onClick={() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] })}
+                className="mt-2 px-3 py-1 rounded bg-[#059669] text-white text-[9px] font-bold">Réessayer</button>
+            </>
+          )}
+        </CardBody></Card>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto space-y-2">
@@ -1045,6 +1078,24 @@ function MonitorBadge({ label, value, color }: { label: string; value: string; c
 function ErrorsTab() {
   const [subTab, setSubTab] = useState<'search' | 'families' | 'preventive'>('search');
 
+  // Charger le catalogue d'erreurs depuis l'API S4L
+  const { data: apiErrors } = useQuery({
+    queryKey: ['sigma4', 'info-errores'],
+    queryFn: () => getErrorInfo({}) as Promise<S4LApiErrorEntry[]>,
+    staleTime: 600000, // 10 min cache
+    retry: 1,
+  });
+
+  // Fusionner API + base locale
+  const allCodes = useMemo(() => {
+    if (apiErrors && Array.isArray(apiErrors) && apiErrors.length > 0) {
+      return mergeApiErrors(apiErrors);
+    }
+    return getAllErrorCodes();
+  }, [apiErrors]);
+
+  const apiCount = apiErrors?.length || 0;
+
   return (
     <div className="h-full flex flex-col gap-2 overflow-hidden">
       {/* Sub-tabs */}
@@ -1070,9 +1121,9 @@ function ErrorsTab() {
       </div>
 
       <div className="flex-1 overflow-hidden">
-        {subTab === 'search' && <ErrorSearchPanel />}
-        {subTab === 'families' && <ErrorFamiliesPanel />}
-        {subTab === 'preventive' && <SmartPreventivePanel />}
+        {subTab === 'search' && <ErrorSearchPanel allCodes={allCodes} apiCount={apiCount} />}
+        {subTab === 'families' && <ErrorFamiliesPanel allCodes={allCodes} />}
+        {subTab === 'preventive' && <SmartPreventivePanel allCodes={allCodes} apiCount={apiCount} />}
       </div>
     </div>
   );
@@ -1080,16 +1131,34 @@ function ErrorsTab() {
 
 // ── RECHERCHE CODES D'ERREUR ──
 
-function ErrorSearchPanel() {
+function ErrorSearchPanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]; apiCount: number }) {
   const [query, setQuery] = useState('');
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
-  const stats = useMemo(() => getErrorStats(), []);
+
+  const stats = useMemo(() => {
+    const byFamily: Record<string, number> = {};
+    const bySeverity: Record<string, number> = {};
+    allCodes.forEach(e => {
+      byFamily[e.family] = (byFamily[e.family] || 0) + 1;
+      if (e.severity) bySeverity[e.severity] = (bySeverity[e.severity] || 0) + 1;
+    });
+    return { total: allCodes.length, byFamily, bySeverity };
+  }, [allCodes]);
 
   const results = useMemo(() => {
-    let codes = query.length >= 2 ? searchErrorCodes(query, 100) : getAllErrorCodes();
+    let codes = allCodes;
+    if (query.length >= 2) {
+      const q = query.toLowerCase();
+      codes = codes.filter(e =>
+        e.code.toLowerCase().includes(q) ||
+        e.description.toLowerCase().includes(q) ||
+        e.cause?.toLowerCase().includes(q) ||
+        e.help?.toLowerCase().includes(q)
+      );
+    }
     if (filterSeverity !== 'all') codes = codes.filter(c => c.severity === filterSeverity);
-    return codes;
-  }, [query, filterSeverity]);
+    return codes.slice(0, 200);
+  }, [allCodes, query, filterSeverity]);
 
   return (
     <div className="h-full flex flex-col gap-1.5 overflow-hidden">
@@ -1097,9 +1166,13 @@ function ErrorSearchPanel() {
       <div className="flex gap-1 flex-shrink-0">
         <Card className="flex-1"><CardBody className="p-1.5 text-center">
           <p className="text-[14px] font-extrabold font-mono text-[#3B82F6]">{stats.total}</p>
-          <p className="text-[5px] text-[var(--text-muted)] font-semibold">codes en base</p>
+          <p className="text-[5px] text-[var(--text-muted)] font-semibold">
+            {apiCount > 0 ? `${apiCount} API + local` : 'codes en base'}
+          </p>
         </CardBody></Card>
-        {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][]).map(([key, sev]) => (
+        {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
+          .filter(([key]) => (stats.bySeverity[key] || 0) > 0 || ['fatal_local', 'fatal_remote', 'leve', 'info'].includes(key))
+          .map(([key, sev]) => (
           <Card key={key} className="flex-1">
             <CardBody className="p-1.5 text-center cursor-pointer hover:opacity-80"
               onClick={() => setFilterSeverity(filterSeverity === key ? 'all' : key)}>
@@ -1145,7 +1218,9 @@ function ErrorSearchPanel() {
 
 function ErrorCodeRow({ error }: { error: S4LErrorCode }) {
   const [expanded, setExpanded] = useState(false);
-  const sev = error.severity ? SEVERITY_LEVELS[error.severity] : null;
+  const sev = error.severity && error.severity in SEVERITY_LEVELS
+    ? SEVERITY_LEVELS[error.severity as SeverityKey]
+    : null;
 
   return (
     <Card>
@@ -1206,13 +1281,17 @@ const ERROR_FAMILIES_META = [
   { key: 'VSE', label: 'VSE — Variateur chaîne sécu.', desc: 'Erreurs variateur chaîne de sécurité', color: '#DC2626' },
 ];
 
-function ErrorFamiliesPanel() {
-  const stats = useMemo(() => getErrorStats(), []);
+function ErrorFamiliesPanel({ allCodes }: { allCodes: S4LErrorCode[] }) {
+  const stats = useMemo(() => {
+    const byFamily: Record<string, number> = {};
+    allCodes.forEach(e => { byFamily[e.family] = (byFamily[e.family] || 0) + 1; });
+    return { byFamily };
+  }, [allCodes]);
   const [selectedFamily, setSelectedFamily] = useState<string | null>(null);
   const familyCodes = useMemo(() => {
     if (!selectedFamily) return [];
-    return getErrorsByFamily(selectedFamily);
-  }, [selectedFamily]);
+    return allCodes.filter(e => e.family === selectedFamily);
+  }, [allCodes, selectedFamily]);
 
   return (
     <div className="h-full flex flex-col gap-2 overflow-hidden">
@@ -1259,8 +1338,12 @@ function ErrorFamiliesPanel() {
 
 // ── SMART PREVENTIVE ──
 
-function SmartPreventivePanel() {
-  const stats = useMemo(() => getErrorStats(), []);
+function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]; apiCount: number }) {
+  const stats = useMemo(() => {
+    const bySeverity: Record<string, number> = {};
+    allCodes.forEach(e => { if (e.severity) bySeverity[e.severity] = (bySeverity[e.severity] || 0) + 1; });
+    return { total: allCodes.length, bySeverity };
+  }, [allCodes]);
 
   // Group typologies by domain
   const domains = useMemo(() => {
@@ -1298,7 +1381,9 @@ function SmartPreventivePanel() {
           <AlertTriangle className="w-3 h-3 text-[#EA580C]" /> Classification par sévérité
         </h4>
         <div className="space-y-2">
-          {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][]).map(([key, sev]) => {
+          {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
+            .filter(([key]) => (stats.bySeverity[key] || 0) > 0)
+            .map(([key, sev]) => {
             const count = stats.bySeverity[key] || 0;
             const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
             return (
@@ -1322,9 +1407,11 @@ function SmartPreventivePanel() {
         </div>
         <div className="mt-2 pt-2 border-t border-[var(--border-secondary)] text-center">
           <p className="text-[7px] text-[var(--text-muted)]">
-            <strong style={{ color: '#DC2626' }}>Fatales locales</strong> → intervention sur site ·
-            <strong style={{ color: '#EA580C' }}> Fatales remote</strong> → réarmables via S4L ·
-            <strong style={{ color: '#CA8A04' }}> Lèves</strong> → réarmement automatique
+            <strong style={{ color: '#DC2626' }}>Niv. 4</strong> → réarmement local (intervention sur site) ·
+            <strong style={{ color: '#EA580C' }}> Niv. 3</strong> → réarmement à distance (via S4L) ·
+            <strong style={{ color: '#CA8A04' }}> Niv. 2</strong> → auto-reset ·
+            <strong style={{ color: '#3B82F6' }}> Niv. 1</strong> → informatif
+            {apiCount > 0 && <span className="block mt-0.5">📡 {apiCount} codes chargés depuis l'API S4L</span>}
           </p>
         </div>
       </CardBody></Card>

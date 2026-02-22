@@ -131,6 +131,24 @@ async function sigma4Post(path: string, body: any): Promise<any> {
   return res.json();
 }
 
+async function sigma4Put(path: string, body?: any): Promise<any> {
+  const token = getStoredSession()?.token;
+  if (!token) throw new Error('Non connecté');
+
+  const opts: RequestInit = {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  };
+  if (body) opts.body = JSON.stringify(body);
+
+  const res = await fetch(`${SIGMA4_API}${path}`, opts);
+
+  if (res.status === 401) { clearSession(); throw new Error('Session expirée'); }
+  if (!res.ok) throw new Error(`Sigma4 ${res.status}`);
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return text; }
+}
+
 // ═══ ENDPOINTS CONNUS ═══
 
 export async function getDashboard(): Promise<Sigma4Dashboard> {
@@ -329,24 +347,43 @@ export const OPERATING_STATES: Record<string, { label: string; color: string }> 
 // NOUVEAUX ENDPOINTS
 // ═══════════════════════════════════════════════════════════════
 
-/** Données Monitor Online temps réel */
-export async function getMonitorOnline(liftId: number, cabina = 1): Promise<Sigma4MonitorData> {
-  return sigma4Get(`/divide/lifts/${liftId}/monitor/${cabina}`);
+/** Données état d'un ascenseur (Monitor Online — données de base) */
+export async function getMonitorOnline(liftId: number): Promise<Sigma4MonitorData> {
+  return sigma4Get(`/divide/lifts/${liftId}/status`);
 }
 
-/** Envoyer une action Monitor Online */
-export async function sendMonitorAction(liftId: number, action: MonitorAction, cabina = 1, params?: any): Promise<any> {
-  return sigma4Post(`/divide/lifts/${liftId}/control/${cabina}/${action}`, params || {});
+/** Activer le monitor temps réel (session monitoring) */
+export async function activateMonitor(liftId: number): Promise<any> {
+  return sigma4Put(`/divide/lifts/${liftId}/control/activateMonitor`);
 }
 
-/** Historique d'erreurs */
+/** Obtenir l'URL du monitor temps réel (serveur WebSocket/polling séparé) */
+export async function getMonitorURL(liftId: number): Promise<string | null> {
+  try {
+    const data = await sigma4Get(`/divide/lifts/${liftId}/control/getMonitorURL`);
+    return data?.URL || null;
+  } catch { return null; }
+}
+
+/** Envoyer une commande ecoGO (Monitor Online action)
+ *  PUT /lifts/{id}/control/{cabina}/ecogo/{action} { orden, planta } */
+export async function sendMonitorAction(
+  liftId: number, action: MonitorAction, cabina = 1, params?: { orden?: number; planta?: number }
+): Promise<any> {
+  return sigma4Put(`/divide/lifts/${liftId}/control/${cabina}/ecogo/${action}`, params || {});
+}
+
+/** Historique d'erreurs / messages d'un ascenseur */
 export async function getLiftErrors(liftId: number): Promise<Sigma4ErrorEntry[]> {
-  return sigma4Get(`/divide/lifts/${liftId}/errors`);
+  return sigma4Get(`/divide/lifts/${liftId}/messages`);
 }
 
-/** Info erreur (description/cause/aide) */
-export async function getErrorInfo(errorCode: string): Promise<any> {
-  return sigma4Get(`/divide/info/errores?code=${encodeURIComponent(errorCode)}`);
+/** Catalogue erreurs S4L — /info/errores (avec params optionnels) */
+export async function getErrorInfo(params?: Record<string, string>): Promise<any> {
+  const qs = params && Object.keys(params).length > 0
+    ? '?' + new URLSearchParams(params).toString()
+    : '';
+  return sigma4Get(`/divide/info/errores${qs}`);
 }
 
 /** Hardware d'un ascenseur */
@@ -354,9 +391,19 @@ export async function getLiftHardware(liftId: number): Promise<any> {
   return sigma4Get(`/divide/lifts/${liftId}/hardware`);
 }
 
-/** Paramètres */
+/** Paramètres — lecture */
 export async function getLiftParameters(liftId: number): Promise<any> {
   return sigma4Get(`/divide/lifts/${liftId}/parameters`);
+}
+
+/** Paramètres — écriture */
+export async function setLiftParameters(liftId: number, parameters: any): Promise<any> {
+  return sigma4Put(`/divide/lifts/${liftId}/parameters`, parameters);
+}
+
+/** Identify (info fabricant / version) */
+export async function getLiftIdentify(liftId: number): Promise<any> {
+  return sigma4Get(`/divide/lifts/${liftId}/identify`);
 }
 
 /** Groupes */
@@ -371,7 +418,7 @@ export async function getTracs(liftId?: number): Promise<any> {
 
 /** Analytics */
 export async function getAnalytics(type: 'avgavailability' | 'avgservices' | 'stopped'): Promise<any> {
-  return sigma4Get(`/analytics/${type}`);
+  return sigma4Get(`/divide/analytics/${type}`);
 }
 
 // ═══ GENERIC ═══
