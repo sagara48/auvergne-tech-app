@@ -33,7 +33,7 @@ import {
 } from '@/services/sigma4ErrorCodes';
 
 // ═══ TABS ═══
-type Tab = 'dashboard' | 'lifts' | 'monitor' | 'errors';
+type Tab = 'dashboard' | 'lifts' | 'monitor' | 'catalog';
 
 // ═══ MAIN ═══
 export function IoTSigmaPage() {
@@ -112,7 +112,7 @@ function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'lifts', label: 'Ascenseurs', icon: Building2 },
     { id: 'monitor', label: 'Monitor', icon: Monitor },
-    { id: 'errors', label: 'Erreurs', icon: AlertTriangle },
+    { id: 'catalog', label: 'Catalogue', icon: BookOpen },
   ];
 
   return (
@@ -152,7 +152,7 @@ function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
         {tab === 'dashboard' && <DashboardTab />}
         {tab === 'lifts' && <LiftsTab />}
         {tab === 'monitor' && <MonitorTab selectedLiftId={selectedLiftId} setSelectedLiftId={setSelectedLiftId} onLiftChange={setSelectedLift} />}
-        {tab === 'errors' && <ErrorsTab selectedLiftId={selectedLiftId} selectedLift={selectedLift} setSelectedLiftId={setSelectedLiftId} onSwitchToMonitor={() => setTab('monitor')} />}
+        {tab === 'catalog' && <CatalogTab />}
       </div>
     </div>
   );
@@ -734,6 +734,20 @@ function MonitorTab({ selectedLiftId, setSelectedLiftId, onLiftChange }: {
     retry: 1,
   });
   const [search, setSearch] = useState('');
+  const [monitorView, setMonitorView] = useState<'realtime' | 'errors' | 'preventive'>('realtime');
+
+  // Charger le catalogue d'erreurs pour les sous-vues Erreurs & Préventif
+  const { data: apiErrors } = useQuery({
+    queryKey: ['sigma4', 'info-errores'],
+    queryFn: () => getErrorInfo({}) as Promise<S4LApiErrorEntry[]>,
+    staleTime: 600000,
+    retry: 1,
+  });
+  const allCodes = useMemo(() => {
+    if (apiErrors && Array.isArray(apiErrors) && apiErrors.length > 0) return mergeApiErrors(apiErrors);
+    return getAllErrorCodes();
+  }, [apiErrors]);
+  const apiCount = apiErrors?.length || 0;
 
   const activeLifts = useMemo(() => {
     if (!lifts) return [];
@@ -749,66 +763,121 @@ function MonitorTab({ selectedLiftId, setSelectedLiftId, onLiftChange }: {
     return list.sort((a, b) => a.liftCompRef.localeCompare(b.liftCompRef));
   }, [lifts, search]);
 
+  const selectedLift = activeLifts.find(l => l.id === selectedLiftId);
+
   // Notifier le parent quand le lift sélectionné change
   useEffect(() => {
-    const lift = activeLifts.find(l => l.id === selectedLiftId);
-    onLiftChange(lift);
+    onLiftChange(selectedLift);
   }, [selectedLiftId, activeLifts]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset sur temps réel quand on change d'ascenseur
+  useEffect(() => {
+    setMonitorView('realtime');
+  }, [selectedLiftId]);
 
   if (isLoading) return <LoadingState text="Chargement des ascenseurs..." />;
 
+  const monitorSubTabs: { id: 'realtime' | 'errors' | 'preventive'; label: string; icon: any }[] = [
+    { id: 'realtime', label: 'Temps réel', icon: Activity },
+    { id: 'errors', label: 'Erreurs', icon: AlertTriangle },
+    { id: 'preventive', label: 'Préventif', icon: TrendingUp },
+  ];
+
   return (
-    <div className="h-full flex gap-2 overflow-hidden">
+    <div className="h-full flex gap-3 overflow-hidden">
       {/* Sidebar — Sélection ascenseur */}
-      <div className="w-56 flex-shrink-0 flex flex-col gap-1 overflow-hidden">
+      <div className="w-56 flex-shrink-0 flex flex-col gap-2 overflow-hidden">
         <div className="relative">
-          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Rechercher..."
-            className="w-full pl-8 pr-3 py-2 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm outline-none focus:border-[#059669] placeholder:text-[var(--text-tertiary)]" />
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm outline-none focus:border-[#059669] placeholder:text-[var(--text-tertiary)]" />
         </div>
-        <div className="flex-1 overflow-y-auto space-y-1.5">
+        <div className="flex-1 overflow-y-auto space-y-1">
           {activeLifts.map(l => {
             const st = getEstadoInfo(l.estado);
             return (
               <button key={l.id} onClick={() => setSelectedLiftId(l.id)}
-                className={cn('w-full text-left px-3 py-2.5 rounded-xl transition-all text-sm',
+                className={cn('w-full text-left px-3 py-2.5 rounded-xl transition-all',
                   selectedLiftId === l.id
                     ? 'bg-[#059669]/15 ring-1 ring-[#059669]/30 shadow-sm'
                     : 'hover:bg-[var(--bg-secondary)]'
                 )}>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
-                  <span className="font-bold truncate">{l.liftCompRef}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                  <span className="text-sm font-bold truncate">{l.liftCompRef}</span>
                 </div>
-                <p className="text-sm text-[var(--text-muted)] truncate pl-3">
+                <p className="text-xs text-[var(--text-muted)] truncate pl-4 mt-0.5">
                   {l.city || l.descripcion || '—'}
                 </p>
               </button>
             );
           })}
         </div>
-        <p className="text-sm text-[var(--text-muted)] text-center">
+        <p className="text-xs text-[var(--text-muted)] text-center py-1">
           {activeLifts.length} ascenseur{activeLifts.length > 1 ? 's' : ''}
         </p>
       </div>
 
-      {/* Main — Monitor Panel */}
-      <div className="flex-1 overflow-hidden">
-        {selectedLiftId ? (
-          <MonitorPanel
-            liftId={selectedLiftId}
-            lift={activeLifts.find(l => l.id === selectedLiftId)}
-          />
+      {/* Main — Monitor + sub-views */}
+      <div className="flex-1 flex flex-col gap-2 overflow-hidden">
+        {selectedLiftId && selectedLift ? (
+          <>
+            {/* Lift header + sub-tabs */}
+            <div className="flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#059669] flex items-center justify-center">
+                  <Monitor className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-[var(--text-primary)]">{selectedLift.liftCompRef}</h3>
+                  <p className="text-xs text-[var(--text-muted)]">{selectedLift.city}{selectedLift.city && selectedLift.descripcion ? ' · ' : ''}{selectedLift.descripcion}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-tabs */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {monitorSubTabs.map(t => {
+                const Icon = t.icon;
+                const active = monitorView === t.id;
+                return (
+                  <button key={t.id} onClick={() => setMonitorView(t.id)}
+                    className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all',
+                      active
+                        ? t.id === 'errors' ? 'bg-[#EA580C]/15 text-[#EA580C]'
+                          : t.id === 'preventive' ? 'bg-[#8B5CF6]/15 text-[#8B5CF6]'
+                          : 'bg-[#059669]/15 text-[#059669]'
+                        : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)]'
+                    )}>
+                    <Icon className="w-4 h-4" />{t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Sub-view content */}
+            <div className="flex-1 overflow-hidden">
+              {monitorView === 'realtime' && (
+                <MonitorPanel liftId={selectedLiftId} lift={selectedLift} />
+              )}
+              {monitorView === 'errors' && (
+                <LiftErrorHistoryPanel liftId={selectedLiftId} lift={selectedLift} allCodes={allCodes} />
+              )}
+              {monitorView === 'preventive' && (
+                <LiftPreventivePanel liftId={selectedLiftId} lift={selectedLift} allCodes={allCodes} apiCount={apiCount} />
+              )}
+            </div>
+          </>
         ) : (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <Monitor className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-3 opacity-30" />
-              <p className="text-sm text-[var(--text-muted)]">
-                Sélectionnez un ascenseur pour accéder au Monitor Online
+              <p className="text-sm font-semibold text-[var(--text-muted)]">
+                Sélectionnez un ascenseur pour accéder au Monitor
               </p>
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                Supervision temps réel : position, portes, sécurité, voyages, commandes à distance
+                Supervision temps réel · Historique erreurs · Analyse préventive
               </p>
             </div>
           </div>
@@ -1057,34 +1126,21 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
 
   return (
     <div className="h-full overflow-y-auto space-y-2">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-[#059669] flex items-center justify-center">
-            <Monitor className="w-3.5 h-3.5 text-white" />
-          </div>
-          <div>
-            <h3 className="text-base font-extrabold">{lift?.liftCompRef || `#${liftId}`}</h3>
-            <p className="text-xs text-[var(--text-muted)]">
-              {lift?.city}{lift?.city && lift?.descripcion ? ' · ' : ''}{lift?.descripcion}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-[#059669] animate-pulse" />
-          <span className="text-xs text-[var(--text-muted)]">
-            {dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString('fr-FR') : 'Live'}
+      {/* Live indicator */}
+      <div className="flex items-center justify-end gap-2">
+        <div className="w-2 h-2 rounded-full bg-[#059669] animate-pulse" />
+        <span className="text-xs text-[var(--text-muted)]">
+          {dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString('fr-FR') : 'Live'}
+        </span>
+        {updatedAt && (
+          <span className="text-xs text-[var(--text-muted)] opacity-60" title="Dernière mise à jour de l'ascenseur">
+            (S4L: {updatedAt})
           </span>
-          {updatedAt && (
-            <span className="text-sm text-[var(--text-muted)] opacity-60" title="Dernière mise à jour de l'ascenseur">
-              (S4L: {updatedAt})
-            </span>
-          )}
-          <button onClick={() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] })}
-            className="p-1 rounded hover:bg-[var(--bg-tertiary)]">
-            <RefreshCw className="w-3 h-3 text-[var(--text-muted)]" />
-          </button>
-        </div>
+        )}
+        <button onClick={() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] })}
+          className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors">
+          <RefreshCw className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+        </button>
       </div>
 
       {monitor ? (
@@ -1406,82 +1462,40 @@ function MonitorBadge({ label, value, color }: { label: string; value: string; c
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TAB: ERREURS — Recherche codes + Familles + Smart Preventive
+// TAB: CATALOGUE — Référentiel codes erreurs
 // ═══════════════════════════════════════════════════════════════
 
-function ErrorsTab({ selectedLiftId, selectedLift, setSelectedLiftId, onSwitchToMonitor }: {
-  selectedLiftId: number | null;
-  selectedLift?: Sigma4Lift;
-  setSelectedLiftId: (id: number | null) => void;
-  onSwitchToMonitor: () => void;
-}) {
-  const [subTab, setSubTab] = useState<'history' | 'search' | 'families' | 'preventive'>(selectedLiftId ? 'history' : 'search');
+function CatalogTab() {
+  const [subTab, setSubTab] = useState<'search' | 'families'>('search');
 
   // Charger le catalogue d'erreurs depuis l'API S4L
   const { data: apiErrors } = useQuery({
     queryKey: ['sigma4', 'info-errores'],
     queryFn: () => getErrorInfo({}) as Promise<S4LApiErrorEntry[]>,
-    staleTime: 600000, // 10 min cache
+    staleTime: 600000,
     retry: 1,
   });
 
-  // Fusionner API + base locale
   const allCodes = useMemo(() => {
-    if (apiErrors && Array.isArray(apiErrors) && apiErrors.length > 0) {
-      return mergeApiErrors(apiErrors);
-    }
+    if (apiErrors && Array.isArray(apiErrors) && apiErrors.length > 0) return mergeApiErrors(apiErrors);
     return getAllErrorCodes();
   }, [apiErrors]);
 
   const apiCount = apiErrors?.length || 0;
 
-  // Basculer automatiquement sur history quand un lift est sélectionné
-  useEffect(() => {
-    if (selectedLiftId) setSubTab('history');
-  }, [selectedLiftId]);
-
   return (
     <div className="h-full flex flex-col gap-2 overflow-hidden">
-      {/* Lift sélectionné info */}
-      {selectedLiftId && selectedLift && (
-        <div className="flex items-center justify-between flex-shrink-0 px-4 py-3 rounded-2xl bg-[#059669]/10 border border-[#059669]/20">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-[#059669] flex items-center justify-center">
-              <Monitor className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-extrabold text-[#059669]">{selectedLift.liftCompRef}</p>
-              <p className="text-xs text-[var(--text-muted)]">{selectedLift.city}{selectedLift.city && selectedLift.descripcion ? ' · ' : ''}{selectedLift.descripcion}</p>
-            </div>
-          </div>
-          <button onClick={onSwitchToMonitor} className="text-sm font-bold text-[#059669] hover:underline flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-[#059669]/10 transition-colors">
-            <Monitor className="w-4 h-4" /> Voir Monitor
-          </button>
-        </div>
-      )}
-
-      {!selectedLiftId && (
-        <div className="flex items-center gap-3 flex-shrink-0 px-4 py-3 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
-          <AlertTriangle className="w-5 h-5 text-[var(--text-muted)]" />
-          <p className="text-sm text-[var(--text-muted)]">
-            Sélectionnez un ascenseur dans l'onglet <strong className="text-[var(--text-primary)]">Monitor</strong> pour voir son historique d'erreurs
-          </p>
-        </div>
-      )}
-
       {/* Sub-tabs */}
       <div className="flex items-center gap-2 border-b border-[var(--border-primary)] pb-2 flex-shrink-0">
         {([
-          ...(selectedLiftId ? [{ id: 'history' as const, label: 'Historique', icon: Clock }] : []),
-          { id: 'search' as const, label: 'Catalogue', icon: Search },
+          { id: 'search' as const, label: 'Recherche codes', icon: Search },
           { id: 'families' as const, label: 'Par famille', icon: Layers },
-          { id: 'preventive' as const, label: 'Smart Preventive', icon: TrendingUp },
         ]).map(t => {
           const Icon = t.icon;
           return (
             <button key={t.id} onClick={() => setSubTab(t.id)}
               className={cn(
-                'flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all',
+                'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all',
                 subTab === t.id
                   ? 'bg-[#EA580C]/15 text-[#EA580C]'
                   : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)]'
@@ -1490,13 +1504,14 @@ function ErrorsTab({ selectedLiftId, selectedLift, setSelectedLiftId, onSwitchTo
             </button>
           );
         })}
+        <span className="text-xs text-[var(--text-muted)] ml-auto">
+          {allCodes.length} codes{apiCount > 0 && ` · ${apiCount} API`}
+        </span>
       </div>
 
       <div className="flex-1 overflow-hidden">
-        {subTab === 'history' && selectedLiftId && <LiftErrorHistoryPanel liftId={selectedLiftId} lift={selectedLift} allCodes={allCodes} />}
         {subTab === 'search' && <ErrorSearchPanel allCodes={allCodes} apiCount={apiCount} />}
         {subTab === 'families' && <ErrorFamiliesPanel allCodes={allCodes} />}
-        {subTab === 'preventive' && <SmartPreventivePanel allCodes={allCodes} apiCount={apiCount} />}
       </div>
     </div>
   );
@@ -2197,6 +2212,211 @@ function ErrorFamiliesPanel({ allCodes }: { allCodes: S4LErrorCode[] }) {
 }
 
 // ── SMART PREVENTIVE ──
+
+// ── PRÉVENTIF PAR ASCENSEUR — Analyse des erreurs réelles du lift ──
+
+function LiftPreventivePanel({ liftId, lift, allCodes, apiCount }: { liftId: number; lift?: Sigma4Lift; allCodes: S4LErrorCode[]; apiCount: number }) {
+  const [days, setDays] = useState(30);
+
+  const { data: rawMessages, isLoading } = useQuery({
+    queryKey: ['sigma4', 'messages', liftId, days],
+    queryFn: () => getLiftErrors(liftId, days),
+    staleTime: 30000,
+    retry: 1,
+  });
+
+  // Analyser les erreurs réelles de cet ascenseur
+  const analysis = useMemo(() => {
+    if (!rawMessages || !Array.isArray(rawMessages)) return null;
+
+    const errors = rawMessages.filter((m: any) => {
+      const dtype = (m.dtype || '').toUpperCase();
+      return dtype === 'AVERIA' || dtype === 'ALARMA';
+    });
+
+    // Compteur par code
+    const byCode: Record<string, { count: number; code: string; desc: string; cause: string; severity?: string; lastDate: string }> = {};
+    errors.forEach((msg: any) => {
+      const content = (msg.content || '').trim();
+      if (!content || content === '0000' || content === '000000') return;
+      const lookup = lookupErrorCode(content);
+      const key = content;
+      if (!byCode[key]) {
+        byCode[key] = {
+          count: 0,
+          code: lookup?.code || content,
+          desc: lookup?.description || `Code ${content}`,
+          cause: lookup?.cause || '',
+          severity: lookup?.severity,
+          lastDate: msg.systemDate || msg.messageDate || '',
+        };
+      }
+      byCode[key].count++;
+      const d = msg.systemDate || msg.messageDate || '';
+      if (d > byCode[key].lastDate) byCode[key].lastDate = d;
+    });
+
+    const sorted = Object.values(byCode).sort((a, b) => b.count - a.count);
+
+    // Stats sévérité
+    const bySeverity: Record<string, number> = {};
+    sorted.forEach(e => {
+      if (e.severity) bySeverity[e.severity] = (bySeverity[e.severity] || 0) + e.count;
+    });
+
+    // Erreurs récurrentes (>= 3 occurrences)
+    const recurring = sorted.filter(e => e.count >= 3);
+
+    return { total: errors.length, unique: sorted.length, sorted, bySeverity, recurring };
+  }, [rawMessages]);
+
+  if (isLoading) return <LoadingState text={`Analyse de ${lift?.liftCompRef || '#' + liftId}…`} />;
+
+  return (
+    <div className="h-full overflow-y-auto space-y-3">
+      {/* Période */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-[#8B5CF6]" />
+          Analyse préventive — {lift?.liftCompRef}
+        </h3>
+        <div className="flex gap-1 bg-[var(--bg-tertiary)] rounded-xl p-1">
+          {[7, 14, 30, 60, 90].map(d => (
+            <button key={d} onClick={() => setDays(d)}
+              className={cn('px-3 py-1.5 rounded-lg text-xs font-bold transition-all',
+                days === d ? 'bg-[var(--bg-primary)] text-[#8B5CF6] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+              )}>
+              {d}j
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {!analysis || analysis.total === 0 ? (
+        <Card><CardBody className="p-6 text-center">
+          <Check className="w-10 h-10 text-[#059669] mx-auto mb-2 opacity-50" />
+          <p className="text-sm font-bold text-[#059669]">Aucune erreur sur {days} jours</p>
+          <p className="text-xs text-[var(--text-muted)] mt-1">Cet ascenseur fonctionne normalement.</p>
+        </CardBody></Card>
+      ) : (
+        <>
+          {/* KPI synthèse */}
+          <div className="grid grid-cols-4 gap-2">
+            <Card><CardBody className="p-3 text-center">
+              <p className="text-xl font-extrabold font-mono text-[#DC2626]">{analysis.total}</p>
+              <p className="text-xs text-[var(--text-muted)] font-semibold">erreurs</p>
+            </CardBody></Card>
+            <Card><CardBody className="p-3 text-center">
+              <p className="text-xl font-extrabold font-mono text-[#EA580C]">{analysis.unique}</p>
+              <p className="text-xs text-[var(--text-muted)] font-semibold">codes distincts</p>
+            </CardBody></Card>
+            <Card><CardBody className="p-3 text-center">
+              <p className="text-xl font-extrabold font-mono text-[#CA8A04]">{analysis.recurring.length}</p>
+              <p className="text-xs text-[var(--text-muted)] font-semibold">récurrentes</p>
+            </CardBody></Card>
+            <Card><CardBody className="p-3 text-center">
+              <p className="text-xl font-extrabold font-mono text-[#3B82F6]">{days}j</p>
+              <p className="text-xs text-[var(--text-muted)] font-semibold">période</p>
+            </CardBody></Card>
+          </div>
+
+          {/* Sévérité des erreurs */}
+          <Card><CardBody className="p-4">
+            <h4 className="text-sm font-extrabold mb-3 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-[#EA580C]" /> Répartition par sévérité
+            </h4>
+            <div className="space-y-2">
+              {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
+                .filter(([key]) => (analysis.bySeverity[key] || 0) > 0)
+                .map(([key, sev]) => {
+                const count = analysis.bySeverity[key] || 0;
+                const pct = analysis.total > 0 ? (count / analysis.total) * 100 : 0;
+                return (
+                  <div key={key} className="flex items-center gap-3">
+                    <span className="text-sm w-6 text-center">{sev.icon}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold" style={{ color: sev.color }}>{sev.label}</span>
+                        <span className="text-xs font-mono font-bold">
+                          {count} <span className="text-[var(--text-muted)]">({pct.toFixed(0)}%)</span>
+                        </span>
+                      </div>
+                      <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: sev.color }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {Object.keys(analysis.bySeverity).length === 0 && (
+                <p className="text-xs text-[var(--text-muted)]">Sévérité non disponible pour ces codes — enrichissez via l'API /info/errores</p>
+              )}
+            </div>
+          </CardBody></Card>
+
+          {/* Top erreurs récurrentes */}
+          {analysis.recurring.length > 0 && (
+            <Card><CardBody className="p-4">
+              <h4 className="text-sm font-extrabold mb-3 flex items-center gap-2">
+                <Filter className="w-4 h-4 text-[#DC2626]" /> Erreurs récurrentes (≥ 3 occ.)
+              </h4>
+              <div className="space-y-2">
+                {analysis.recurring.map((e, i) => {
+                  const sevInfo = e.severity && e.severity in SEVERITY_LEVELS ? SEVERITY_LEVELS[e.severity as SeverityKey] : null;
+                  return (
+                    <div key={e.code} className="flex items-center gap-3 p-2.5 rounded-xl bg-[var(--bg-tertiary)]">
+                      <span className="text-sm font-extrabold text-[#DC2626] w-8 text-center">×{e.count}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs font-mono font-bold text-[#EA580C]">{e.code}</code>
+                          {sevInfo && <span className="text-xs">{sevInfo.icon}</span>}
+                        </div>
+                        <p className="text-sm text-[var(--text-primary)] truncate">{e.desc}</p>
+                        {e.cause && <p className="text-xs text-[var(--text-muted)] truncate">{e.cause}</p>}
+                      </div>
+                      <span className="text-xs text-[var(--text-muted)] flex-shrink-0">
+                        {e.lastDate ? new Date(e.lastDate).toLocaleDateString('fr-FR') : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardBody></Card>
+          )}
+
+          {/* Toutes les erreurs classées */}
+          <Card><CardBody className="p-4">
+            <h4 className="text-sm font-extrabold mb-3">Tous les codes ({analysis.sorted.length})</h4>
+            <div className="space-y-1">
+              {analysis.sorted.map(e => {
+                const sevInfo = e.severity && e.severity in SEVERITY_LEVELS ? SEVERITY_LEVELS[e.severity as SeverityKey] : null;
+                return (
+                  <div key={e.code} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors">
+                    <span className="text-xs font-mono font-bold text-[var(--text-muted)] w-6 text-right">{e.count}×</span>
+                    {sevInfo && <span className="text-xs">{sevInfo.icon}</span>}
+                    <code className="text-xs font-mono font-bold text-[#EA580C] w-28 flex-shrink-0">{e.code}</code>
+                    <span className="text-xs text-[var(--text-primary)] truncate">{e.desc}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardBody></Card>
+        </>
+      )}
+
+      {/* Légende sévérités */}
+      <Card><CardBody className="p-3">
+        <p className="text-xs text-[var(--text-muted)]">
+          <strong style={{ color: '#DC2626' }}>🔴 Niv. 4</strong> réarmement local ·
+          <strong style={{ color: '#EA580C' }}> 🟠 Niv. 3</strong> réarmement à distance ·
+          <strong style={{ color: '#CA8A04' }}> 🟡 Niv. 2</strong> auto-reset ·
+          <strong style={{ color: '#3B82F6' }}> 🔵 Niv. 1</strong> informatif
+          {apiCount > 0 && <span className="block mt-1">📡 {apiCount} codes enrichis depuis l'API S4L</span>}
+        </p>
+      </CardBody></Card>
+    </div>
+  );
+}
 
 function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]; apiCount: number }) {
   const stats = useMemo(() => {
