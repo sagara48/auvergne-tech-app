@@ -199,16 +199,18 @@ export async function loginSigma4(username: string, password: string): Promise<S
   storeSession(session);
 
   // Enregistrer la connexion Sigma4 dans Supabase (métadonnées)
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
-    await supabase.from('sigma4_connections').upsert({
-      user_id: user.id,
-      sigma4_user_id: session.userId,
-      sigma4_email: username,
-      sigma4_company: session.company,
-      last_login: new Date().toISOString(),
-    }, { onConflict: 'user_id' }).catch(() => {});
-  }
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('sigma4_connections').upsert({
+        user_id: user.id,
+        sigma4_user_id: session.userId,
+        sigma4_email: username,
+        sigma4_company: session.company,
+        last_login: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    }
+  } catch {}
 
   return session;
 }
@@ -339,7 +341,7 @@ export async function acknowledgeAlert(alertId: string): Promise<void> {
     await sigma4Fetch(`/alerts/${alertId}/acknowledge`, { method: 'POST' });
   } catch {}
   // Aussi en local
-  await supabase.from('iot_alerts').update({ acquittee: true, acquitte_date: new Date().toISOString() }).eq('id', alertId).catch(() => {});
+  try { await supabase.from('iot_alerts').update({ acquittee: true, acquitte_date: new Date().toISOString() }).eq('id', alertId); } catch {}
 }
 
 // ═══ PREVENTIVE — Événements ═══
