@@ -2,8 +2,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
-  "framework": null,
   "rewrites": [
+    { "source": "/api/sigma4/:path*", "destination": "https://www.sigma4lifts.com/sigma-api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
