@@ -1807,28 +1807,45 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
 
       {/* Debug panel */}
       {showDebug && (
-        <Card className="flex-shrink-0 max-h-48 overflow-y-auto"><CardBody className="p-2">
+        <Card className="flex-shrink-0 max-h-52 overflow-y-auto"><CardBody className="p-2">
           <p className="text-[7px] font-extrabold text-[#8B5CF6] mb-1">🔍 Debug — /divide/lifts/{liftId}/messages ({days}j)</p>
           <p className="text-[6px] text-[var(--text-secondary)] mb-1">
             {rawMessages ? `${Array.isArray(rawMessages) ? rawMessages.length : '?'} items reçus` : 'Pas de données'}
-            {' · '}{enrichedErrors.filter((e: any) => e.family === 'SUCESO').length} SUCESO
-            {' · '}{enrichedErrors.filter((e: any) => !e.isNoError && e.family !== 'SUCESO' && e.family !== 'AVISO').length} ALARMA
-            {' · '}{enrichedErrors.filter((e: any) => e.family === 'AVISO').length} AVISO
           </p>
-          {rawMessages && Array.isArray(rawMessages) && rawMessages.length > 0 && (
-            <div className="space-y-0.5">
-              <p className="text-[5px] font-bold text-[var(--text-muted)] uppercase">Derniers 5 messages bruts :</p>
-              {rawMessages.slice(0, 5).map((msg: any, i: number) => (
-                <div key={i} className="text-[5px] font-mono bg-[var(--bg-tertiary)] rounded px-1 py-0.5 flex gap-2">
-                  <span className="text-[#EA580C] font-bold">{msg.dtype}</span>
-                  <span>type={msg.type} sub={msg.subtype}/{msg.subsubtype}</span>
-                  <span className="text-[#059669] font-bold">content="{msg.content}"</span>
-                  <span className="text-[var(--text-muted)]">{msg.messageDate?.slice(0, 16)}</span>
-                  <span className="text-[#8B5CF6]">liftId={msg.liftId}</span>
+          {rawMessages && Array.isArray(rawMessages) && rawMessages.length > 0 && (() => {
+            const dtypes: Record<string, number> = {};
+            const dates: string[] = [];
+            rawMessages.forEach((msg: any) => {
+              dtypes[msg.dtype || '?'] = (dtypes[msg.dtype || '?'] || 0) + 1;
+              if (msg.messageDate) dates.push(msg.messageDate);
+            });
+            dates.sort();
+            return (
+              <div className="space-y-1">
+                <div className="flex gap-2 text-[6px]">
+                  {Object.entries(dtypes).map(([k, v]) => (
+                    <span key={k} className="px-1 py-0.5 rounded bg-[var(--bg-tertiary)]">
+                      <span className="font-bold text-[#EA580C]">{k}</span>: {v}
+                    </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+                <p className="text-[5px] text-[var(--text-muted)]">
+                  Plage : {dates[0]?.slice(0, 16) || '?'} → {dates[dates.length - 1]?.slice(0, 16) || '?'}
+                </p>
+                <p className="text-[5px] font-bold text-[var(--text-muted)] uppercase mt-1">Derniers 8 messages bruts :</p>
+                {rawMessages.slice(0, 8).map((msg: any, i: number) => (
+                  <div key={i} className="text-[5px] font-mono bg-[var(--bg-tertiary)] rounded px-1 py-0.5 flex flex-wrap gap-x-2">
+                    <span className="text-[#EA580C] font-bold">{msg.dtype}</span>
+                    <span>type={msg.type} sub={msg.subtype}/{msg.subsubtype}</span>
+                    <span className="text-[#059669] font-bold">content="{msg.content}"</span>
+                    <span className="text-[var(--text-muted)]">{msg.messageDate?.slice(0, 16)}</span>
+                    <span className="text-[#8B5CF6]">lift={msg.liftId}</span>
+                    {msg.closingDate && <span className="text-[#CA8A04]">→ {msg.closingDate?.slice(0, 16)}</span>}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </CardBody></Card>
       )}
 
