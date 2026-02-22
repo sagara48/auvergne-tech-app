@@ -1680,7 +1680,7 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
         severity,
         family,
         msgType,
-        date: msg.messageDate,
+        date: msg.systemDate || msg.messageDate,
         dateEnd: msg.closingDate || '',
         isNoError: !code || code === '0000' || code === '',
       };
@@ -1817,7 +1817,7 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
             const dates: string[] = [];
             rawMessages.forEach((msg: any) => {
               dtypes[msg.dtype || '?'] = (dtypes[msg.dtype || '?'] || 0) + 1;
-              if (msg.messageDate) dates.push(msg.messageDate);
+              if (msg.systemDate || msg.messageDate) dates.push(msg.systemDate || msg.messageDate);
             });
             dates.sort();
             return (
@@ -1838,7 +1838,7 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
                     <span className="text-[#EA580C] font-bold">{msg.dtype}</span>
                     <span>type={msg.type} sub={msg.subtype}/{msg.subsubtype}</span>
                     <span className="text-[#059669] font-bold">content="{msg.content}"</span>
-                    <span className="text-[var(--text-muted)]">{msg.messageDate?.slice(0, 16)}</span>
+                    <span className="text-[var(--text-muted)]">{(msg.systemDate || msg.messageDate)?.slice(0, 16)}</span>
                     <span className="text-[#8B5CF6]">lift={msg.liftId}</span>
                     {msg.closingDate && <span className="text-[#CA8A04]">→ {msg.closingDate?.slice(0, 16)}</span>}
                   </div>
