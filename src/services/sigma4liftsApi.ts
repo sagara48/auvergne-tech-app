@@ -139,14 +139,18 @@ async function sigma4Put(path: string, body?: any): Promise<any> {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
   };
-  if (body) opts.body = JSON.stringify(body);
+  if (body !== undefined && body !== null) opts.body = JSON.stringify(body);
 
   const res = await fetch(`${SIGMA4_API}${path}`, opts);
 
   if (res.status === 401) { clearSession(); throw new Error('Session expirée'); }
-  if (!res.ok) throw new Error(`Sigma4 ${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try { detail = await res.text(); } catch {}
+    throw new Error(`Sigma4 ${res.status}${detail ? ': ' + detail.substring(0, 200) : ''}`);
+  }
   const text = await res.text();
-  try { return JSON.parse(text); } catch { return text; }
+  try { return JSON.parse(text); } catch { return text || true; }
 }
 
 // ═══ ENDPOINTS CONNUS ═══
@@ -503,23 +507,21 @@ export async function fetchModesXML(): Promise<Map<number, string>> {
     const res = await fetch(`${SIGMA4_API}/divide/files/MODES.FR`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (res.ok) {
-      const text = await res.text();
-      if (text.includes('<')) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(text, 'text/xml');
-        const map = new Map<number, string>();
-        // Essayer plusieurs formats XML possibles
-        const nodes = doc.querySelectorAll('mode, Mode, MODE, m, item, entry');
-        nodes.forEach(node => {
-          const id = parseInt(node.getAttribute('id') || node.getAttribute('ID') || node.getAttribute('num') || node.getAttribute('code') || '', 10);
-          const txt = (node.getAttribute('text') || node.getAttribute('name') || node.getAttribute('label') || node.textContent || '').trim();
-          if (!isNaN(id) && txt) map.set(id, txt.toUpperCase());
-        });
-        if (map.size > 0) { _modesCache = map; return map; }
-      }
+    if (!res.ok) throw new Error(`${res.status}`); // 404 → fallback silencieux
+    const text = await res.text();
+    if (text.includes('<')) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, 'text/xml');
+      const map = new Map<number, string>();
+      const nodes = doc.querySelectorAll('mode, Mode, MODE, m, item, entry');
+      nodes.forEach(node => {
+        const id = parseInt(node.getAttribute('id') || node.getAttribute('ID') || node.getAttribute('num') || node.getAttribute('code') || '', 10);
+        const txt = (node.getAttribute('text') || node.getAttribute('name') || node.getAttribute('label') || node.textContent || '').trim();
+        if (!isNaN(id) && txt) map.set(id, txt.toUpperCase());
+      });
+      if (map.size > 0) { _modesCache = map; return map; }
     }
-  } catch { /* fallback */ }
+  } catch { /* Fallback silencieux — les labels MODE_FALLBACK sont suffisants */ }
   _modesCache = new Map(Object.entries(MODE_FALLBACK).map(([k, v]) => [Number(k), v]));
   return _modesCache;
 }

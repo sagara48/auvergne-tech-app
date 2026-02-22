@@ -75,24 +75,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const response = await fetch(targetUrl.toString(), fetchOptions);
 
-    // Transférer le status code
-    res.status(response.status);
-
-    // Headers de réponse importants
-    const contentType = response.headers.get('content-type');
-    if (contentType) res.setHeader('Content-Type', contentType);
-
     // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-    // Retourner le body
-    const text = await response.text();
+    // Headers de réponse importants
+    const contentType = response.headers.get('content-type');
+    if (contentType) res.setHeader('Content-Type', contentType);
+
+    // Lire le body de la réponse S4L
+    const responseText = await response.text();
+
+    // Transférer le status code exact de S4L (y compris les erreurs)
+    res.status(response.status);
+
+    // Si erreur S4L, enrichir avec des détails de debug
+    if (!response.ok) {
+      console.error('[sigma4-proxy]', req.method, subPath, response.status, responseText.substring(0, 500));
+    }
+
+    // Retourner le body tel quel
     try {
-      res.json(JSON.parse(text));
+      res.json(JSON.parse(responseText));
     } catch {
-      res.send(text);
+      res.send(responseText || '');
     }
   } catch (error: any) {
     console.error('[sigma4-proxy]', req.method, subPath, error.message);

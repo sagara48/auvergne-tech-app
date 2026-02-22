@@ -817,7 +817,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
     retryDelay: 5000,
   });
   // Charger les labels de modes (cache long)
-  useQuery({ queryKey: ['sigma4', 'modes'], queryFn: fetchModesXML, staleTime: 3600000, retry: 1 });
+  useQuery({ queryKey: ['sigma4', 'modes'], queryFn: fetchModesXML, staleTime: Infinity, retry: false });
   const [showActions, setShowActions] = useState(false);
 
   const handleAction = async (action: MonitorAction) => {
@@ -836,11 +836,13 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
   const handleComando = async (planta: number) => {
     if (!confirm(`Envoyer la cabine à l'étage ${planta} ?`)) return;
     try {
-      await sendMonitorAction(liftId, 'Comando' as MonitorAction, lift?.numeroCabina || 1, { planta });
+      await sendMonitorAction(liftId, 'Comando' as MonitorAction, lift?.numeroCabina || 1, { planta: planta - 1 });
       toast.success(`Commande envoyée : étage ${planta}`);
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] }), 2000);
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['sigma4', 'monitor', liftId] }), 1500);
     } catch (e: any) {
-      toast.error(e.message || 'Erreur lors de l\'envoi');
+      const msg = e.message || 'Erreur inconnue';
+      console.error('[Comando]', liftId, planta, msg);
+      toast.error(`Erreur commande étage ${planta} : ${msg}`);
     }
   };
 
