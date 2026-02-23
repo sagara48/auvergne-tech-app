@@ -173,7 +173,7 @@ function ConnectedView({ onDisconnect }: { onDisconnect: (forgetCreds: boolean) 
   });
   const problemCount = useMemo(() => {
     if (!allLifts) return 0;
-    return allLifts.filter(l => !l.baja && l.estado !== 0).length;
+    return allLifts.filter(l => !l.baja && l.estado !== 0 && l.estado < 90).length;
   }, [allLifts]);
 
   const handleDisconnect = () => {
@@ -271,25 +271,24 @@ function DashboardTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => vo
   const qc = useQueryClient();
 
   // Ascenseurs en anomalie (pas "En marche")
+  // Ascenseurs en anomalie (exclure sans connexion 90 et résiliés 91+)
   const problemLifts = useMemo(() => {
     if (!lifts) return [];
     return lifts
-      .filter(l => !l.baja && l.estado !== 0)
+      .filter(l => !l.baja && l.estado !== 0 && l.estado < 90)
       .sort((a, b) => {
-        // Arrêtés/urgences en premier (10-19, 60-61), puis maintenance/inspection (20-32), puis le reste
         const priority = (e: number) => {
-          if (e >= 10 && e <= 19 || e >= 60 && e <= 61) return 0; // Arrêts + urgences
-          if (e >= 20 && e <= 32) return 1; // Maintenance + inspection
-          if (e >= 40 && e <= 51) return 2; // Hors service + test
-          if (e >= 70 && e <= 80) return 3; // Modes spéciaux
-          if (e >= 90) return 4; // Déconnexion
+          if (e >= 10 && e <= 19 || e >= 60 && e <= 61) return 0;
+          if (e >= 20 && e <= 32) return 1;
+          if (e >= 40 && e <= 51) return 2;
+          if (e >= 70 && e <= 80) return 3;
           return 5;
         };
         return priority(a.estado) - priority(b.estado) || a.liftCompRef.localeCompare(b.liftCompRef);
       });
   }, [lifts]);
 
-  const totalLifts = lifts?.filter(l => !l.baja).length || 0;
+  const totalLifts = lifts?.filter(l => !l.baja && l.estado < 90).length || 0;
 
   if (isLoading) return <LoadingState text="Chargement dashboard Sigma4..." />;
   if (error) return <ErrorState error={error} onRetry={() => qc.invalidateQueries({ queryKey: ['sigma4', 'dashboard'] })} />;
@@ -2734,7 +2733,7 @@ function getEstadoInfo(estado: number): { label: string; color: string } {
     case 15: return { label: 'Panne (15)', color: '#DC2626' };
     case 20: return { label: 'Maintenance (20)', color: '#8B5CF6' };
     case 90: return { label: 'Sans connexion (90)', color: '#EA580C' };
-    case 91: return { label: 'Connexion instable (91)', color: '#EA580C' };
+    case 91: return { label: 'Résilié (91)', color: '#64748B' };
     default:
       console.warn(`[Sigma4] Estado inconnu: ${estado}`);
       if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, color: '#059669' };
