@@ -319,7 +319,7 @@ function getEstadoStyle(estado: number): {
     case 15: return { label: 'Panne (15)', short: 'PANNE (15)', color: '#DC2626', icon: XCircle, pulse: true };
     case 20: return { label: 'Maintenance (20)', short: 'MAINT (20)', color: '#8B5CF6', icon: Wrench, pulse: false };
     case 90: return { label: 'Sans connexion (90)', short: 'H.L. (90)', color: '#EA580C', icon: WifiOff, pulse: false };
-    case 91: return { label: 'Connexion instable (91)', short: 'INST (91)', color: '#EA580C', icon: WifiOff, pulse: false };
+    case 91: return { label: 'Résilié (91)', short: 'RÉSILIÉ (91)', color: '#64748B', icon: AlertTriangle, pulse: false };
     default:
       if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, short: `OK (${estado})`, color: '#059669', icon: CheckCircle2, pulse: false };
       if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, short: `ARRÊT (${estado})`, color: '#DC2626', icon: XCircle, pulse: true };
