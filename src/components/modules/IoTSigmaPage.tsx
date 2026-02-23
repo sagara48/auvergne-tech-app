@@ -2725,57 +2725,21 @@ function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void })
 // ═══ HELPERS ═══
 
 function getEstadoInfo(estado: number): { label: string; color: string } {
+  // Codes confirmés par l'API Sigma4Lifts (ESTADO_DE_FUNCIONAMIENTO)
   switch (estado) {
-    case 0: return { label: 'En marche', color: '#059669' };
-    case 1: return { label: 'En marche (mode normal)', color: '#059669' };
-    case 2: return { label: 'En mouvement', color: '#059669' };
-    case 3: return { label: 'Occupé', color: '#3B82F6' };
-    case 4: return { label: 'Repos', color: '#059669' };
-    case 5: return { label: 'Attente', color: '#CA8A04' };
-    case 6: return { label: 'Rappel', color: '#3B82F6' };
-    case 7: return { label: 'Mode parking', color: '#64748B' };
-    case 8: return { label: 'Hors service temporaire', color: '#CA8A04' };
-    case 9: return { label: 'Mode spécial', color: '#8B5CF6' };
-    // Arrêts
-    case 10: return { label: 'Arrêté', color: '#DC2626' };
-    case 11: return { label: 'Arrêté (panne)', color: '#DC2626' };
-    case 12: return { label: 'Arrêté (sécurité)', color: '#DC2626' };
-    case 13: return { label: 'Arrêté (blocage)', color: '#DC2626' };
-    case 14: return { label: 'Arrêté (pompier)', color: '#DC2626' };
-    case 15: return { label: 'Arrêté (incendie)', color: '#DC2626' };
-    // Maintenance / inspection
-    case 20: return { label: 'Maintenance', color: '#8B5CF6' };
-    case 21: return { label: 'Maintenance préventive', color: '#8B5CF6' };
-    case 22: return { label: 'Maintenance corrective', color: '#8B5CF6' };
-    case 30: return { label: 'Inspection', color: '#3B82F6' };
-    case 31: return { label: 'Inspection (toit cabine)', color: '#3B82F6' };
-    case 32: return { label: 'Inspection (cuvette)', color: '#3B82F6' };
-    // Hors service / modes spéciaux
-    case 40: return { label: 'Hors service', color: '#64748B' };
-    case 41: return { label: 'Hors service (volontaire)', color: '#64748B' };
-    case 50: return { label: 'En test', color: '#CA8A04' };
-    case 51: return { label: 'Essai automatique', color: '#CA8A04' };
-    case 60: return { label: 'Urgence', color: '#DC2626' };
-    case 61: return { label: 'Personnes bloquées', color: '#DC2626' };
-    case 70: return { label: 'Mode incendie', color: '#EA580C' };
-    case 71: return { label: 'Rappel pompier', color: '#EA580C' };
-    case 80: return { label: 'Mode séisme', color: '#EA580C' };
-    // Déconnexion
-    case 90: return { label: 'Sans connexion', color: '#EA580C' };
-    case 91: return { label: 'Connexion instable', color: '#EA580C' };
-    case 99: return { label: 'État inconnu', color: '#64748B' };
-    // Fallback — log pour debug
+    case 0: return { label: 'En marche', color: '#059669' };       // OPERATIVO
+    case 10: return { label: 'Arrêté', color: '#DC2626' };         // PARADO
+    case 20: return { label: 'Maintenance', color: '#8B5CF6' };    // MANTENIMIENTO
+    case 90: return { label: 'Sans connexion', color: '#EA580C' }; // SIN_CONEXION
+    case 91: return { label: 'Connexion instable', color: '#EA580C' }; // Observé en prod
     default:
-      console.warn(`[Sigma4] Estado non mappé: ${estado} — ajouter dans getEstadoInfo()`);
-      // Heuristique par plage
+      // Heuristique par plage pour les codes non documentés
+      console.warn(`[Sigma4] Estado inconnu: ${estado} — vérifier la doc S4L`);
       if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, color: '#059669' };
       if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, color: '#DC2626' };
-      if (estado >= 20 && estado <= 29) return { label: `Maintenance (${estado})`, color: '#8B5CF6' };
-      if (estado >= 30 && estado <= 39) return { label: `Inspection (${estado})`, color: '#3B82F6' };
-      if (estado >= 40 && estado <= 49) return { label: `Hors service (${estado})`, color: '#64748B' };
-      if (estado >= 50 && estado <= 59) return { label: `Test (${estado})`, color: '#CA8A04' };
-      if (estado >= 60 && estado <= 69) return { label: `Urgence (${estado})`, color: '#DC2626' };
-      if (estado >= 70 && estado <= 89) return { label: `Mode spécial (${estado})`, color: '#EA580C' };
+      if (estado >= 20 && estado <= 39) return { label: `Maintenance (${estado})`, color: '#8B5CF6' };
+      if (estado >= 40 && estado <= 59) return { label: `Hors service (${estado})`, color: '#64748B' };
+      if (estado >= 60 && estado <= 89) return { label: `Urgence (${estado})`, color: '#DC2626' };
       if (estado >= 90) return { label: `Déconnecté (${estado})`, color: '#EA580C' };
       return { label: `État ${estado}`, color: '#64748B' };
   }
