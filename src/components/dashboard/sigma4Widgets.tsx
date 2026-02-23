@@ -44,13 +44,12 @@ export function IoTFleetWidget({ onRemove }: { onRemove?: () => void }) {
 
   const stats = useMemo(() => {
     if (!lifts) return null;
-    const active = lifts.filter(l => !l.baja);
+    const active = lifts.filter(l => !l.baja && l.estado < 90); // Exclure sans connexion / résiliés
     return {
       total: active.length,
       ok: active.filter(l => l.estado >= 0 && l.estado <= 9).length,
       arret: active.filter(l => (l.estado >= 10 && l.estado <= 19) || (l.estado >= 60 && l.estado <= 89)).length,
       maintenance: active.filter(l => (l.estado >= 20 && l.estado <= 39) || (l.estado >= 40 && l.estado <= 59)).length,
-      deconnecte: active.filter(l => l.estado >= 90).length,
     };
   }, [lifts]);
 
@@ -70,7 +69,6 @@ export function IoTFleetWidget({ onRemove }: { onRemove?: () => void }) {
     { label: 'En marche', value: stats.ok, color: '#059669', bg: 'bg-[#059669]/10' },
     { label: 'Arrêtés', value: stats.arret, color: '#DC2626', bg: 'bg-[#DC2626]/10' },
     { label: 'Maintenance', value: stats.maintenance, color: '#8B5CF6', bg: 'bg-[#8B5CF6]/10' },
-    { label: 'Déconnectés', value: stats.deconnecte, color: '#EA580C', bg: 'bg-[#EA580C]/10' },
   ] : [];
 
   return (
@@ -109,9 +107,6 @@ export function IoTFleetWidget({ onRemove }: { onRemove?: () => void }) {
                 )}
                 {stats.arret > 0 && (
                   <div className="h-full bg-[#DC2626]" style={{ width: `${(stats.arret / stats.total) * 100}%` }} />
-                )}
-                {stats.deconnecte > 0 && (
-                  <div className="h-full bg-[#EA580C]" style={{ width: `${(stats.deconnecte / stats.total) * 100}%` }} />
                 )}
               </div>
             </div>
@@ -165,11 +160,10 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
   const problemLifts = useMemo(() => {
     if (!lifts) return [];
     return lifts
-      .filter(l => !l.baja && l.estado !== 0)
+      .filter(l => !l.baja && l.estado !== 0 && l.estado < 90)
       .sort((a, b) => {
         const prio = (e: number) => {
           if (e >= 10 && e <= 19 || e >= 60 && e <= 69) return 0;
-          if (e >= 90) return 1;
           return 2;
         };
         return prio(a.estado) - prio(b.estado);
@@ -187,7 +181,7 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
       case 15: return { label: 'Panne (15)', color: '#DC2626', icon: XCircle, pulse: true };
       case 20: return { label: 'Maintenance (20)', color: '#8B5CF6', icon: Wrench, pulse: false };
       case 90: return { label: 'Sans connexion (90)', color: '#EA580C', icon: WifiOff, pulse: false };
-      case 91: return { label: 'Connexion instable (91)', color: '#EA580C', icon: WifiOff, pulse: false };
+      case 91: return { label: 'Résilié (91)', color: '#64748B', icon: AlertTriangle, pulse: false };
       default:
         if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, color: '#059669', icon: CheckCircle2, pulse: false };
         if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, color: '#DC2626', icon: XCircle, pulse: true };
@@ -240,9 +234,9 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
               </div>
             );
           })}
-          {lifts && lifts.filter(l => !l.baja && l.estado !== 0).length > 6 && (
+          {lifts && lifts.filter(l => !l.baja && l.estado !== 0 && l.estado < 90).length > 6 && (
             <p className="text-[10px] text-center text-[var(--text-muted)]">
-              +{lifts.filter(l => !l.baja && l.estado !== 0).length - 6} autres alertes
+              +{lifts.filter(l => !l.baja && l.estado !== 0 && l.estado < 90).length - 6} autres alertes
             </p>
           )}
         </div>
@@ -284,7 +278,7 @@ export function IoTAvailabilityWidget({ onRemove }: { onRemove?: () => void }) {
 
   const stats = useMemo(() => {
     if (!lifts) return null;
-    const active = lifts.filter(l => !l.baja);
+    const active = lifts.filter(l => !l.baja && l.estado < 90);
     const total = active.length;
     if (total === 0) return null;
     const ok = active.filter(l => l.estado >= 0 && l.estado <= 9).length;
