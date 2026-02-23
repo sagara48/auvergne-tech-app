@@ -38,6 +38,7 @@ export interface Sigma4Dashboard {
 const SIGMA4_API   = '/api/sigma4';  // Proxy Vercel → sigma4lifts.com/sigma/rs/
 const SIGMA4_FRONT = 'https://www.sigma4lifts.com/sigma-front/#/';
 const STORAGE_KEY  = 'sigma4_session';
+const CREDS_KEY    = 'sigma4_credentials';
 
 // ═══ SESSION ═══
 
@@ -57,6 +58,50 @@ function clearSession() { localStorage.removeItem(STORAGE_KEY); }
 export function getSigma4Session(): Sigma4Session | null { return getStoredSession(); }
 export function isConnectedToSigma4(): boolean { return getStoredSession() !== null; }
 export function getSigma4FrontUrl(): string { return SIGMA4_FRONT; }
+
+// ═══ CREDENTIALS (remember me) ═══
+
+export function saveCredentials(username: string, password: string): void {
+  try {
+    localStorage.setItem(CREDS_KEY, JSON.stringify({ u: btoa(username), p: btoa(password) }));
+  } catch {}
+}
+
+export function getSavedCredentials(): { username: string; password: string } | null {
+  try {
+    const raw = localStorage.getItem(CREDS_KEY);
+    if (!raw) return null;
+    const { u, p } = JSON.parse(raw);
+    return { username: atob(u), password: atob(p) };
+  } catch { return null; }
+}
+
+export function clearSavedCredentials(): void {
+  try { localStorage.removeItem(CREDS_KEY); } catch {}
+}
+
+export function hasSavedCredentials(): boolean {
+  return getSavedCredentials() !== null;
+}
+
+/** Auto-login avec les credentials sauvegardés. Retourne la session ou null. */
+export async function autoLoginSigma4(): Promise<Sigma4Session | null> {
+  // D'abord vérifier si la session est encore valide
+  const existing = getStoredSession();
+  if (existing) return existing;
+
+  // Sinon tenter avec les credentials sauvegardés
+  const creds = getSavedCredentials();
+  if (!creds) return null;
+
+  try {
+    return await loginSigma4(creds.username, creds.password);
+  } catch {
+    // Credentials invalides → les supprimer
+    clearSavedCredentials();
+    return null;
+  }
+}
 
 // ═══ AUTH ═══
 
@@ -99,7 +144,10 @@ export async function loginSigma4(username: string, password: string): Promise<S
   return session;
 }
 
-export function logoutSigma4(): void { clearSession(); }
+export function logoutSigma4(clearCreds = false): void {
+  clearSession();
+  if (clearCreds) clearSavedCredentials();
+}
 
 // ═══ FETCH HELPERS ═══
 
