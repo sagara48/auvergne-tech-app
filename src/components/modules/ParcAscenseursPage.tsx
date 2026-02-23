@@ -27,6 +27,7 @@ import { geocodeAndUpdateAll } from '@/services/geocodingService';
 import { format, formatDistanceToNow, parseISO, differenceInHours, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import { IoTStatusDot, IoTStatusInline, IoTStatusPanel } from '@/components/integrations/IoTStatusBadge';
 
 // =============================================
 // CONFIGURATION SYNC API
@@ -1228,6 +1229,7 @@ function AscenseurCard({ ascenseur, onClick }: { ascenseur: any; onClick: () => 
           ) : (
             <span className="text-xs text-[var(--text-muted)] italic">Aucun contrat de maintenance</span>
           )}
+          <IoTStatusDot codeAppareil={ascenseur.code_appareil} />
         </div>
       </CardBody>
     </Card>
@@ -1275,13 +1277,16 @@ function AscenseurRow({ ascenseur, onClick }: { ascenseur: any; onClick: () => v
         )}
       </td>
       <td className="px-4 py-3 text-center">
-        {ascenseur.en_arret ? (
-          <Badge variant="red">Arrêt</Badge>
-        ) : isHorsContrat ? (
-          <Badge variant="gray">HC</Badge>
-        ) : (
-          <Badge variant="green">OK</Badge>
-        )}
+        <div className="flex items-center justify-center gap-1.5">
+          {ascenseur.en_arret ? (
+            <Badge variant="red">Arrêt</Badge>
+          ) : isHorsContrat ? (
+            <Badge variant="gray">HC</Badge>
+          ) : (
+            <Badge variant="green">OK</Badge>
+          )}
+          <IoTStatusDot codeAppareil={ascenseur.code_appareil} />
+        </div>
       </td>
     </tr>
   );
@@ -2488,7 +2493,10 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 </div>
                 <div>
                   <h2 className="text-xl font-bold">{ascenseur.code_appareil}</h2>
-                  <p className="text-sm text-[var(--text-muted)]">{ascenseur.adresse}, {ascenseur.ville}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-[var(--text-muted)]">{ascenseur.adresse}, {ascenseur.ville}</p>
+                    <IoTStatusInline codeAppareil={ascenseur.code_appareil} />
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2557,7 +2565,11 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-4">
             {activeTab === 'info' && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                {/* Panneau IoT Sigma4 */}
+                <IoTStatusPanel codeAppareil={ascenseur.code_appareil} ascenseurId={ascenseur.id} />
+                
+                <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
                   <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-orange-400" /> Localisation
@@ -2642,6 +2654,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                     </p>
                   )}
                 </div>
+              </div>
               </div>
             )}
             

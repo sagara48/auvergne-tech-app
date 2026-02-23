@@ -23,6 +23,7 @@ import {
   getErrorInfo, getLiftErrors, fetchModesXML, getModeLabel, getModeColor, getSigma4FrontUrl, getSigma4Session,
   getDrivePhaseLabel, getDrivePhaseColor, getContactorLabel, getContactorColor, getBrakeLabel, getBrakeColor,
   isConnectedToSigma4, loginSigma4, logoutSigma4,
+  autoLoginSigma4, saveCredentials, hasSavedCredentials, clearSavedCredentials,
   MONITOR_ACTIONS,
 } from '@/services/sigma4liftsApi';
 import {
@@ -38,22 +39,64 @@ type Tab = 'dashboard' | 'lifts' | 'monitor' | 'catalog';
 // ═══ MAIN ═══
 export function IoTSigmaPage() {
   const [connected, setConnected] = useState(isConnectedToSigma4());
-  if (!connected) return <LoginView onConnected={() => setConnected(true)} />;
-  return <ConnectedView onDisconnect={() => { logoutSigma4(); setConnected(false); }} />;
+  const [autoLogging, setAutoLogging] = useState(false);
+  const [autoLoginFailed, setAutoLoginFailed] = useState(false);
+
+  // Auto-login au montage si des credentials sont sauvegardés
+  useEffect(() => {
+    if (connected) return;
+    if (!hasSavedCredentials()) return;
+
+    setAutoLogging(true);
+    autoLoginSigma4()
+      .then(session => {
+        if (session) {
+          setConnected(true);
+        } else {
+          setAutoLoginFailed(true);
+        }
+      })
+      .catch(() => setAutoLoginFailed(true))
+      .finally(() => setAutoLogging(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (autoLogging) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#059669] to-[#047857] flex items-center justify-center mx-auto">
+            <Radio className="w-7 h-7 text-white animate-pulse" />
+          </div>
+          <p className="text-sm font-bold text-[var(--text-primary)]">Connexion automatique…</p>
+          <Loader2 className="w-5 h-5 animate-spin text-[#059669] mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!connected) return <LoginView onConnected={() => setConnected(true)} autoLoginFailed={autoLoginFailed} />;
+
+  return <ConnectedView onDisconnect={(forgetCreds) => { logoutSigma4(forgetCreds); setConnected(false); setAutoLoginFailed(false); }} />;
 }
 
 // ═══ LOGIN ═══
-function LoginView({ onConnected }: { onConnected: () => void }) {
+function LoginView({ onConnected, autoLoginFailed }: { onConnected: () => void; autoLoginFailed?: boolean }) {
   const [loginName, setLoginName] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(hasSavedCredentials());
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(autoLoginFailed ? 'La connexion automatique a échoué. Veuillez vous reconnecter.' : '');
 
   const handleLogin = async () => {
     if (!loginName || !password) { setError('Identifiant et mot de passe requis'); return; }
     setLoading(true); setError('');
     try {
       await loginSigma4(loginName, password);
+      if (rememberMe) {
+        saveCredentials(loginName, password);
+      } else {
+        clearSavedCredentials();
+      }
       toast.success('Connecté à Sigma4Lifts');
       onConnected();
     } catch (e: any) {
@@ -71,7 +114,7 @@ function LoginView({ onConnected }: { onConnected: () => void }) {
           <h2 className="text-xl font-extrabold" style={{ letterSpacing: '-0.03em' }}>Sigma4Lifts</h2>
           <p className="text-sm text-[var(--text-muted)]">Connectez-vous à votre compte Sigma4Lifts<br />pour accéder à la télésurveillance IoT</p>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <div>
             <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Identifiant Sigma4</label>
             <Input type="text" value={loginName} onChange={e => setLoginName(e.target.value)} placeholder="Auver015" className="text-sm mt-0.5" onKeyDown={e => e.key === 'Enter' && handleLogin()} autoFocus />
@@ -80,12 +123,24 @@ function LoginView({ onConnected }: { onConnected: () => void }) {
             <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Mot de passe</label>
             <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="text-sm mt-0.5" onKeyDown={e => e.key === 'Enter' && handleLogin()} />
           </div>
-          {error && <div className="flex items-center gap-1 p-1.5 rounded bg-[#DC2626]/10 border border-[#DC2626]/20">
-            <XCircle className="w-3 h-3 text-[#DC2626] flex-shrink-0" />
+          {/* Se souvenir de moi */}
+          <label className="flex items-center gap-2 cursor-pointer select-none py-0.5">
+            <div className={cn(
+              'w-4 h-4 rounded flex items-center justify-center border transition-colors flex-shrink-0',
+              rememberMe
+                ? 'bg-[#059669] border-[#059669]'
+                : 'border-[var(--border-primary)] bg-[var(--bg-tertiary)]'
+            )} onClick={() => setRememberMe(!rememberMe)}>
+              {rememberMe && <Check className="w-3 h-3 text-white" />}
+            </div>
+            <span className="text-xs text-[var(--text-secondary)]" onClick={() => setRememberMe(!rememberMe)}>Se souvenir de moi</span>
+          </label>
+          {error && <div className="flex items-center gap-1.5 p-2 rounded-lg bg-[#DC2626]/10 border border-[#DC2626]/20">
+            <XCircle className="w-3.5 h-3.5 text-[#DC2626] flex-shrink-0" />
             <p className="text-xs text-[#DC2626] font-semibold">{error}</p>
           </div>}
           <button onClick={handleLogin} disabled={loading || !loginName || !password}
-            className="w-full py-2 rounded-lg bg-gradient-to-r from-[#059669] to-[#047857] text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 hover:opacity-90 transition-opacity">
+            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#059669] to-[#047857] text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 hover:opacity-90 transition-opacity">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
             {loading ? 'Connexion...' : 'Se connecter'}
           </button>
@@ -101,12 +156,34 @@ function LoginView({ onConnected }: { onConnected: () => void }) {
 }
 
 // ═══ CONNECTED VIEW WITH TABS ═══
-function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
+function ConnectedView({ onDisconnect }: { onDisconnect: (forgetCreds: boolean) => void }) {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [selectedLiftId, setSelectedLiftId] = useState<number | null>(null);
   const [selectedLift, setSelectedLift] = useState<Sigma4Lift | undefined>(undefined);
   const session = getSigma4Session();
   const qc = useQueryClient();
+  const hasCreds = hasSavedCredentials();
+
+  // Compter les appareils en anomalie pour le badge Dashboard
+  const { data: allLifts } = useQuery({
+    queryKey: ['sigma4', 'lifts'],
+    queryFn: getLifts,
+    staleTime: 120000,
+    retry: 1,
+  });
+  const problemCount = useMemo(() => {
+    if (!allLifts) return 0;
+    return allLifts.filter(l => !l.baja && l.estado !== 0).length;
+  }, [allLifts]);
+
+  const handleDisconnect = () => {
+    if (hasCreds) {
+      const forget = confirm('Voulez-vous oublier vos identifiants sauvegardés ?\n\nOK = Oublier (reconnexion manuelle)\nAnnuler = Garder (reconnexion automatique)');
+      onDisconnect(forget);
+    } else {
+      onDisconnect(false);
+    }
+  };
 
   const tabs: { id: Tab; label: string; icon: any }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -123,13 +200,16 @@ function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
           <div className="w-8 h-8 rounded-xl bg-[#059669] flex items-center justify-center"><Radio className="w-4 h-4 text-white" /></div>
           <div>
             <h1 className="text-xl font-extrabold text-[var(--text-primary)]" style={{ letterSpacing: '-0.03em' }}>Sigma4Lifts IoT</h1>
-            <p className="text-xs text-[var(--text-muted)]">Connecté : {session?.userName} {session?.company && `· ${session.company}`}</p>
+            <p className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
+              Connecté : {session?.userName} {session?.company && `· ${session.company}`}
+              {hasCreds && <span title="Connexion automatique activée" className="text-[#059669]">🔒</span>}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => qc.invalidateQueries({ queryKey: ['sigma4'] })} className="p-2 rounded-xl text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] transition-colors" title="Rafraîchir"><RefreshCw className="w-4 h-4" /></button>
           <a href={getSigma4FrontUrl()} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] transition-colors" title="Sigma4Lifts"><ExternalLink className="w-4 h-4" /></a>
-          <button onClick={onDisconnect} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-[#DC2626] hover:bg-[#DC2626]/10 transition-colors"><LogOut className="w-4 h-4" /> Déconnecter</button>
+          <button onClick={handleDisconnect} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-[#DC2626] hover:bg-[#DC2626]/10 transition-colors"><LogOut className="w-4 h-4" /> Déconnecter</button>
         </div>
       </div>
 
@@ -138,18 +218,31 @@ function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
         {tabs.map(t => {
           const Icon = t.icon;
           const active = tab === t.id;
+          // Badge ascenseur sur l'onglet Monitor
+          const liftBadge = t.id === 'monitor' && selectedLift;
+          const problemBadge = t.id === 'dashboard' && problemCount > 0;
           return <button key={t.id} onClick={() => setTab(t.id)}
             className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all',
               active ? 'bg-[#059669]/15 text-[#059669]' : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)]'
             )}>
             <Icon className="w-4 h-4" />{t.label}
+            {liftBadge && (
+              <span className="px-1.5 py-0.5 rounded-md bg-[#059669]/20 text-[#059669] text-xs font-mono font-bold">
+                {selectedLift.liftCompRef}
+              </span>
+            )}
+            {problemBadge && (
+              <span className="px-1.5 py-0.5 rounded-full bg-[#DC2626] text-white text-xs font-bold min-w-[20px] text-center">
+                {problemCount}
+              </span>
+            )}
           </button>;
         })}
       </div>
 
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden">
-        {tab === 'dashboard' && <DashboardTab />}
+        {tab === 'dashboard' && <DashboardTab onOpenMonitor={(id) => { setSelectedLiftId(id); setTab('monitor'); }} />}
         {tab === 'lifts' && <LiftsTab onOpenMonitor={(id) => { setSelectedLiftId(id); setTab('monitor'); }} />}
         {tab === 'monitor' && <MonitorTab selectedLiftId={selectedLiftId} onLiftChange={setSelectedLift} onBackToLifts={() => setTab('lifts')} />}
         {tab === 'catalog' && <CatalogTab />}
@@ -162,21 +255,94 @@ function ConnectedView({ onDisconnect }: { onDisconnect: () => void }) {
 // TAB: DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 
-function DashboardTab() {
+function DashboardTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => void }) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['sigma4', 'dashboard'],
     queryFn: getDashboard,
     refetchInterval: 60000,
     retry: 1,
   });
+  const { data: lifts } = useQuery({
+    queryKey: ['sigma4', 'lifts'],
+    queryFn: getLifts,
+    staleTime: 120000,
+    retry: 1,
+  });
   const qc = useQueryClient();
+
+  // Ascenseurs en anomalie (pas "En marche")
+  const problemLifts = useMemo(() => {
+    if (!lifts) return [];
+    return lifts
+      .filter(l => !l.baja && l.estado !== 0)
+      .sort((a, b) => {
+        // Arrêtés en premier, puis maintenance, puis sans connexion
+        const priority = (e: number) => e === 10 ? 0 : e === 20 ? 1 : 2;
+        return priority(a.estado) - priority(b.estado) || a.liftCompRef.localeCompare(b.liftCompRef);
+      });
+  }, [lifts]);
+
+  const totalLifts = lifts?.filter(l => !l.baja).length || 0;
 
   if (isLoading) return <LoadingState text="Chargement dashboard Sigma4..." />;
   if (error) return <ErrorState error={error} onRetry={() => qc.invalidateQueries({ queryKey: ['sigma4', 'dashboard'] })} />;
   if (!data) return null;
 
   return (
-    <div className="h-full overflow-y-auto space-y-2">
+    <div className="h-full overflow-y-auto space-y-3">
+      {/* ── Appareils en anomalie ── */}
+      {problemLifts.length > 0 ? (
+        <Card>
+          <CardBody className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-extrabold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
+                Appareils en anomalie
+                <span className="text-xs font-mono font-bold text-[#DC2626] bg-[#DC2626]/10 px-2 py-0.5 rounded-full">{problemLifts.length}</span>
+              </h3>
+              <span className="text-xs text-[var(--text-muted)]">{totalLifts - problemLifts.length}/{totalLifts} en marche</span>
+            </div>
+            <div className="space-y-1.5">
+              {problemLifts.map(lift => {
+                const st = getEstadoInfo(lift.estado);
+                return (
+                  <div key={lift.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors">
+                    <div className="w-1.5 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-extrabold text-[var(--text-primary)]">{lift.liftCompRef}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: st.color + '18', color: st.color }}>{st.label}</span>
+                        {lift.en8128 && <Shield className="w-3 h-3 text-[#059669]" />}
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] truncate">
+                        {[lift.city, lift.descripcion].filter(Boolean).join(' · ') || '—'}
+                      </p>
+                    </div>
+                    <button onClick={() => onOpenMonitor(lift.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#059669]/10 text-[#059669] text-xs font-bold hover:bg-[#059669]/20 transition-colors flex-shrink-0">
+                      <Activity className="w-3.5 h-3.5" />Monitor
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </CardBody>
+        </Card>
+      ) : totalLifts > 0 ? (
+        <Card>
+          <CardBody className="p-4 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-[#059669]/10 flex items-center justify-center">
+              <Check className="w-4 h-4 text-[#059669]" />
+            </div>
+            <div>
+              <p className="text-sm font-extrabold text-[#059669]">Tous les appareils fonctionnent</p>
+              <p className="text-xs text-[var(--text-muted)]">{totalLifts} ascenseur{totalLifts > 1 ? 's' : ''} en marche</p>
+            </div>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {/* ── KPIs S4L ── */}
       <DashboardKPIs charts={data.dashboard} />
       <div className="grid grid-cols-2 gap-1.5">
         {data.dashboard.map(chart => <ChartCard key={chart.idString} chart={chart} />)}
@@ -264,14 +430,14 @@ function LiftsTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => void }
   return (
     <div className="h-full flex flex-col gap-1.5 overflow-hidden">
       {/* Stats bar */}
-      <div className="flex gap-1 flex-shrink-0">
+      <div className="flex gap-1.5 flex-shrink-0">
         {[
           { label: 'Ascenseurs', value: total, icon: Building2, color: '#3B82F6' },
           { label: 'EN 81-28', value: withEN, icon: Shield, color: '#059669' },
           { label: 'Géolocalisés', value: withCoords, icon: MapPin, color: '#8B5CF6' },
           { label: 'Groupes', value: groups.length, icon: Layers, color: '#EA580C' },
         ].map(s => (
-          <Card key={s.label} className="flex-1"><CardBody className="p-1.5 flex items-center gap-1.5">
+          <Card key={s.label} className="flex-1"><CardBody className="p-2.5 flex items-center gap-2">
             <s.icon className="w-3 h-3 flex-shrink-0" style={{ color: s.color }} />
             <div>
               <p className="text-base font-extrabold font-mono" style={{ color: s.color }}>{s.value}</p>
@@ -282,7 +448,7 @@ function LiftsTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => void }
       </div>
 
       {/* Search + Filters */}
-      <div className="flex gap-1 flex-shrink-0">
+      <div className="flex gap-1.5 flex-shrink-0">
         <div className="flex-1 relative">
           <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input
@@ -364,7 +530,7 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
           <button onClick={onToggle} className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-extrabold text-[var(--text-primary)]">{lift.liftCompRef}</span>
-              <span className="px-1 py-0.5 rounded text-sm font-bold" style={{ backgroundColor: status.color + '18', color: status.color }}>{status.label}</span>
+              <span className="px-1 py-0.5 rounded-md text-sm font-bold" style={{ backgroundColor: status.color + '18', color: status.color }}>{status.label}</span>
               {lift.groups.map(g => (
                 <span key={g.id} className="px-1.5 py-0.5 rounded-full bg-[#3B82F6]/10 text-sm font-bold text-[#3B82F6]">
                   {g.groupName}
@@ -410,7 +576,7 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
         {isExpanded && (
           <div className="px-3 pb-3 pt-1 border-t border-[var(--border-secondary)] space-y-2">
             {/* Technical Details Grid */}
-            <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+            <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
               <DetailItem label="Traction" value={cleanTechLabel(lift.traccion)} />
               <DetailItem label="Architecture" value={cleanTechLabel(lift.arquitectura)} />
               <DetailItem label="Fabricant" value={cleanTechLabel(lift.manufacturerName)} />
@@ -427,11 +593,11 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
 
             {/* Network info (if available) */}
             {(lift.ip || lift.apn || lift.simStatus) && (
-              <div className="p-1.5 rounded bg-[var(--bg-secondary)]">
-                <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
+              <div className="p-2 rounded-lg bg-[var(--bg-secondary)]">
+                <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1.5 flex items-center gap-1.5">
                   <Wifi className="w-3.5 h-3.5" />Réseau / SIM
                 </p>
-                <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+                <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
                   {lift.ip && <DetailItem label="IP" value={lift.ip} />}
                   {lift.apn && <DetailItem label="APN" value={lift.apn} />}
                   {lift.simStatus && <DetailItem label="SIM" value={lift.simStatus} />}
@@ -440,14 +606,14 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
             )}
 
             {/* Dates */}
-            <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+            <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
               {lift.commisioningDate && <DetailItem label="Mise en service" value={formatDate(lift.commisioningDate)} />}
               {lift.registrationDate && <DetailItem label="Enregistrement" value={formatDate(lift.registrationDate)} />}
               {lift.billingStartDate && <DetailItem label="Début facturation" value={formatDate(lift.billingStartDate)} />}
             </div>
 
             {/* EN 81-28 */}
-            <div className="flex items-center gap-2 p-1.5 rounded bg-[var(--bg-secondary)]">
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--bg-secondary)]">
               <Shield className={cn('w-3.5 h-3.5', lift.en8128 ? 'text-[#059669]' : 'text-[var(--text-muted)]')} />
               <div className="flex-1">
                 <p className="text-xs font-bold">{lift.en8128 ? 'EN 81-28 conforme' : 'EN 81-28 non conforme'}</p>
@@ -468,13 +634,13 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
               {hasCoords && (
                 <a href={`https://www.google.com/maps?q=${lift.latitude},${lift.longitude}`}
                   target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-[#3B82F6]/10 text-[#3B82F6] text-xs font-bold hover:bg-[#3B82F6]/20 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3B82F6]/10 text-[#3B82F6] text-xs font-bold hover:bg-[#3B82F6]/20 transition-colors">
                   <Navigation className="w-3.5 h-3.5" />Voir sur la carte
                 </a>
               )}
               <a href={`${getSigma4FrontUrl()}lift/${lift.id}`}
                 target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2 py-1 rounded bg-[#059669]/10 text-[#059669] text-xs font-bold hover:bg-[#059669]/20 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#059669]/10 text-[#059669] text-xs font-bold hover:bg-[#059669]/20 transition-colors">
                 <ExternalLink className="w-3.5 h-3.5" />Sigma4Lifts
               </a>
             </div>
@@ -488,8 +654,8 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-sm text-[var(--text-muted)] font-semibold uppercase">{label}</p>
-      <p className="text-xs font-bold text-[var(--text-primary)] truncate">{value}</p>
+      <p className="text-xs text-[var(--text-muted)] font-semibold uppercase">{label}</p>
+      <p className="text-sm font-bold text-[var(--text-primary)] truncate">{value}</p>
     </div>
   );
 }
@@ -505,7 +671,7 @@ function LiftTrafficSection({ liftId }: { liftId: number }) {
   });
 
   if (isLoading) return (
-    <div className="flex items-center gap-1.5 p-1.5 rounded bg-[var(--bg-secondary)]">
+    <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--bg-secondary)]">
       <Loader2 className="w-3 h-3 animate-spin text-[#3B82F6]" />
       <span className="text-xs text-[var(--text-muted)]">Chargement trafic...</span>
     </div>
@@ -539,34 +705,34 @@ function LiftTrafficSection({ liftId }: { liftId: number }) {
   const sparkMax = Math.max(...sparkData.map(d => d.trips), 1);
 
   return (
-    <div className="p-1.5 rounded bg-[var(--bg-secondary)] space-y-1.5">
+    <div className="p-3 rounded-lg bg-[var(--bg-secondary)] space-y-2.5">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
+        <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1.5">
           <Activity className="w-3.5 h-3.5" />Trafic / Manœuvres
         </p>
         <span className="text-xs font-mono text-[var(--text-muted)]">Compteur: {totalCounter.toLocaleString('fr-FR')}</span>
       </div>
 
       {/* Mini KPIs */}
-      <div className="grid grid-cols-3 gap-1">
-        <div className="text-center p-1 rounded bg-[var(--bg-primary)]">
-          <p className="text-sm font-extrabold font-mono text-[#3B82F6]">{avgDaily}</p>
-          <p className="text-sm text-[var(--text-muted)] font-semibold">moy/jour (30j)</p>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="text-center p-2 rounded-lg bg-[var(--bg-primary)]">
+          <p className="text-base font-extrabold font-mono text-[#3B82F6]">{avgDaily}</p>
+          <p className="text-xs text-[var(--text-muted)] font-semibold">moy/jour (30j)</p>
         </div>
-        <div className="text-center p-1 rounded bg-[var(--bg-primary)]">
-          <p className="text-sm font-extrabold font-mono text-[#8B5CF6]">{maxDaily}</p>
-          <p className="text-sm text-[var(--text-muted)] font-semibold">max/jour (30j)</p>
+        <div className="text-center p-2 rounded-lg bg-[var(--bg-primary)]">
+          <p className="text-base font-extrabold font-mono text-[#8B5CF6]">{maxDaily}</p>
+          <p className="text-xs text-[var(--text-muted)] font-semibold">max/jour (30j)</p>
         </div>
-        <div className="text-center p-1 rounded bg-[var(--bg-primary)]">
-          <p className="text-sm font-extrabold font-mono text-[#059669]">{totalLast30.toLocaleString('fr-FR')}</p>
-          <p className="text-sm text-[var(--text-muted)] font-semibold">total 30j</p>
+        <div className="text-center p-2 rounded-lg bg-[var(--bg-primary)]">
+          <p className="text-base font-extrabold font-mono text-[#059669]">{totalLast30.toLocaleString('fr-FR')}</p>
+          <p className="text-xs text-[var(--text-muted)] font-semibold">total 30j</p>
         </div>
       </div>
 
       {/* Sparkline Bar Chart */}
       <div>
-        <p className="text-sm text-[var(--text-muted)] mb-0.5">Manœuvres / jour (60 derniers jours)</p>
-        <div className="flex items-end gap-px h-10">
+        <p className="text-xs text-[var(--text-muted)] mb-1">Manœuvres / jour (60 derniers jours)</p>
+        <div className="flex items-end gap-px h-12">
           {sparkData.map((d, i) => {
             const pct = (d.trips / sparkMax) * 100;
             const isWeekend = [0, 6].includes(new Date(d.date).getDay());
@@ -586,8 +752,8 @@ function LiftTrafficSection({ liftId }: { liftId: number }) {
         </div>
         {/* Date labels */}
         <div className="flex justify-between mt-0.5">
-          <span className="text-sm text-[var(--text-muted)]">{formatDateShort(sparkData[0]?.date)}</span>
-          <span className="text-sm text-[var(--text-muted)]">{formatDateShort(sparkData[sparkData.length - 1]?.date)}</span>
+          <span className="text-xs text-[var(--text-muted)]">{formatDateShort(sparkData[0]?.date)}</span>
+          <span className="text-xs text-[var(--text-muted)]">{formatDateShort(sparkData[sparkData.length - 1]?.date)}</span>
         </div>
       </div>
     </div>
@@ -612,7 +778,7 @@ function DashboardKPIs({ charts }: { charts: Sigma4Chart[] }) {
   const en28ko = en81?.data.find(d => d.id.includes('KO'))?.quantity || 0;
   const en28total = en28ok + en28ko;
 
-  return <div className="grid grid-cols-5 gap-1">
+  return <div className="grid grid-cols-5 gap-2">
     {[
       { label: 'Total connectés', value: totalSim, color: '#3B82F6' },
       { label: 'En marche', value: enMarche, color: '#059669' },
@@ -624,7 +790,7 @@ function DashboardKPIs({ charts }: { charts: Sigma4Chart[] }) {
       <p className="text-sm text-[var(--text-muted)] font-semibold leading-tight">{k.label}</p>
     </CardBody></Card>)}
     {en28total > 0 && <div className="col-span-5">
-      <div className="flex items-center gap-2 px-2 py-1 rounded bg-[var(--bg-secondary)]">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-secondary)]">
         <span className="text-xs font-bold">EN 81-28 :</span>
         <div className="flex-1 h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
           <div className="h-full rounded-full bg-[#059669]" style={{ width: `${(en28ok / en28total) * 100}%` }} />
@@ -648,13 +814,13 @@ function ChartCard({ chart }: { chart: Sigma4Chart }) {
   const isKey = ['ESTADO_DE_FUNCIONAMIENTO', 'TOTAL_ASCENSORES_CONECTADOS', 'CUMPLIMIENTO_EN81_28', 'MODELO_MANIOBRA'].includes(chart.idString);
 
   return <Card className={isKey ? 'col-span-2' : ''}>
-    <CardBody className="p-2">
-      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1">
+    <CardBody className="p-3">
+      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
           {chart.aspect === 'pie' ? <PieChart className="w-3 h-3 text-[#3B82F6]" /> : <BarChart3 className="w-3 h-3 text-[#8B5CF6]" />}
           <span className="text-sm font-bold">{chart.caption}</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <span className="text-xs font-mono text-[var(--text-muted)]">{total}</span>
           {expanded ? <ChevronUp className="w-3.5 h-3.5 text-[var(--text-muted)]" /> : <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />}
         </div>
@@ -693,8 +859,8 @@ function PieViz({ items, total }: { items: Sigma4ChartItem[]; total: number }) {
         strokeDashoffset={`${-s.offset * 0.754}`} />)}
     </svg>
     <div className="flex-1 space-y-1.5">
-      {segments.slice(0, 4).map(s => <div key={s.id} className="flex items-center gap-1">
-        <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: s.color }} />
+      {segments.slice(0, 4).map(s => <div key={s.id} className="flex items-center gap-1.5">
+        <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: s.color }} />
         <span className="text-xs truncate flex-1">{cleanLabel(s.label)}</span>
         <span className="text-xs font-mono font-bold">{s.quantity}</span>
       </div>)}
@@ -1033,7 +1199,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
             </>
           )}
           <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); setInitialMonitorData(null); }}
-            className="px-4 py-1.5 rounded bg-[#059669] text-white text-sm font-bold hover:bg-[#059669]/90">
+            className="px-4 py-2 rounded-xl bg-[#059669] text-white text-sm font-bold hover:bg-[#059669]/90 transition-colors">
             Réessayer
           </button>
         </CardBody></Card>
@@ -1051,7 +1217,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           <p className="text-sm font-bold text-[#DC2626]">Connexion perdue</p>
           <p className="text-xs text-[var(--text-muted)]">{msg}</p>
           <button onClick={() => { setConnectionState('connecting'); setConnectionStep(0); setInitialMonitorData(null); }}
-            className="px-4 py-1.5 rounded bg-[#059669] text-white text-sm font-bold hover:bg-[#059669]/90">
+            className="px-4 py-2 rounded-xl bg-[#059669] text-white text-sm font-bold hover:bg-[#059669]/90 transition-colors">
             Reconnecter
           </button>
         </CardBody></Card>
@@ -1106,7 +1272,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
         <>
           {/* ── Dernier événement / Erreur ── */}
           {hasError ? (
-            <Card className="ring-1 ring-[#DC2626]/30"><CardBody className="p-2 flex items-center gap-2 bg-[#DC2626]/5">
+            <Card className="ring-1 ring-[#DC2626]/30"><CardBody className="p-3 flex items-center gap-3 bg-[#DC2626]/5">
               <AlertTriangle className="w-4 h-4 text-[#DC2626] flex-shrink-0" />
               <div>
                 <p className="text-sm font-extrabold text-[#DC2626]">Erreur active : {errorStr}</p>
@@ -1117,15 +1283,15 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               </div>
             </CardBody></Card>
           ) : (
-            <Card><CardBody className="p-1.5 flex items-center gap-1.5 bg-[#059669]/5">
+            <Card><CardBody className="p-3 flex items-center gap-2 bg-[#059669]/5">
               <div className="w-2 h-2 rounded-full bg-[#059669]" />
               <p className="text-xs text-[#059669] font-semibold">L'ascenseur fonctionne correctement</p>
             </CardBody></Card>
           )}
 
           {/* ── État — Mode de fonctionnement ── */}
-          <Card><CardBody className="p-2 flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${getModeColor(monitor.modoFuncionamiento)}20` }}>
+          <Card><CardBody className="p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${getModeColor(monitor.modoFuncionamiento)}20` }}>
               <Layers className="w-3.5 h-3.5" style={{ color: getModeColor(monitor.modoFuncionamiento) }} />
             </div>
             <div>
@@ -1146,11 +1312,11 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
 
           <div className="grid grid-cols-2 gap-1.5">
             {/* ── Portes ── */}
-            <Card><CardBody className="p-2 space-y-1.5">
-              <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
+            <Card><CardBody className="p-3 space-y-2">
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1.5">
                 <DoorOpen className="w-3.5 h-3.5" /> Portes
               </p>
-              <div className="grid grid-cols-2 gap-1">
+              <div className="grid grid-cols-2 gap-1.5">
                 <MonitorBadge label="Porte 1" value={doorLabel} color={doorColor} />
                 <MonitorBadge label="Cellule photo" value={door?.fotocelula ? '⚠️ Activée' : 'Libre'} color={door?.fotocelula ? '#CA8A04' : '#059669'} />
                 <MonitorBadge label="À niveau" value={monitor.nivel ? '✅ Oui' : 'Non'} color={monitor.nivel ? '#059669' : '#CA8A04'} />
@@ -1158,7 +1324,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               </div>
               {monitor.embarques && monitor.embarques.length > 1 && monitor.embarques[1].habilitado && (
                 <div className="pt-1 border-t border-[var(--border-secondary)]">
-                  <div className="grid grid-cols-2 gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <MonitorBadge label="Porte 2"
                       value={['Fermée', 'Ouverture…', 'Ouverte', 'Fermeture…'][monitor.embarques[1].estado] || `État ${monitor.embarques[1].estado}`}
                       color={['#059669', '#CA8A04', '#EA580C', '#CA8A04'][monitor.embarques[1].estado] || '#64748B'} />
@@ -1168,23 +1334,23 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 </div>
               )}
               {monitor.flechaSubida && (
-                <div className="flex items-center gap-1"><ArrowUp className="w-3 h-3 text-[#059669]" /><span className="text-xs text-[#059669] font-bold">Montée</span></div>
+                <div className="flex items-center gap-1.5"><ArrowUp className="w-3.5 h-3.5 text-[#059669]" /><span className="text-xs text-[#059669] font-bold">Montée</span></div>
               )}
               {monitor.flechaBajada && (
-                <div className="flex items-center gap-1"><ArrowDown className="w-3 h-3 text-[#3B82F6]" /><span className="text-xs text-[#3B82F6] font-bold">Descente</span></div>
+                <div className="flex items-center gap-1.5"><ArrowDown className="w-3.5 h-3.5 text-[#3B82F6]" /><span className="text-xs text-[#3B82F6] font-bold">Descente</span></div>
               )}
             </CardBody></Card>
 
             {/* ── Chaîne de sécurité (Série) ── */}
-            <Card><CardBody className="p-2 space-y-1.5">
-              <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
+            <Card><CardBody className="p-3 space-y-2">
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5" /> Série
               </p>
               {/* Points optionnels 85, 95 au-dessus (comme S4L) */}
               <div className="flex justify-center gap-6">
                 {([['85', monitor.serieSeguridad85], ['95', monitor.serieSeguridad95]] as [string, boolean | null][]).map(([id, ok]) => (
                   <div key={id}
-                    className="w-7 h-5 rounded flex items-center justify-center text-xs font-extrabold"
+                    className="w-8 h-6 rounded-lg flex items-center justify-center text-xs font-extrabold"
                     style={{
                       backgroundColor: ok === true ? '#5cb85c' : '#9e9e9e',
                       color: 'white',
@@ -1194,7 +1360,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 ))}
               </div>
               {/* Points principaux 00, 40, 60, 70, 80, 90 */}
-              <div className="flex justify-center gap-1">
+              <div className="flex justify-center gap-1.5">
                 {([
                   ['00', monitor.serieSeguridad00],
                   ['40', monitor.serieSeguridad40],
@@ -1204,7 +1370,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                   ['90', monitor.serieSeguridad90],
                 ] as [string, boolean | null][]).map(([id, ok]) => (
                   <div key={id}
-                    className="w-8 h-6 rounded flex items-center justify-center text-sm font-extrabold"
+                    className="w-9 h-7 rounded-lg flex items-center justify-center text-sm font-extrabold"
                     style={{
                       backgroundColor: ok === true ? '#5cb85c' : '#9e9e9e',
                       color: 'white',
@@ -1217,8 +1383,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           </div>
 
           {/* ── Alimentation ── */}
-          <Card><CardBody className="p-2">
-            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1.5 flex items-center gap-1">
+          <Card><CardBody className="p-3">
+            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-2 flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5" /> Alimentation
             </p>
             {/* Grille 3 colonnes fidèle au layout S4L */}
@@ -1257,11 +1423,11 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           </CardBody></Card>
 
           {/* ── Variateur & Bus ── */}
-          <Card><CardBody className="p-2">
-            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1 flex items-center gap-1">
+          <Card><CardBody className="p-3">
+            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-2 flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5" /> Variateur
             </p>
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-4 gap-1.5">
               <MonitorBadge label="Phase" value={getDrivePhaseLabel(monitor.faseVariador)} color={getDrivePhaseColor(monitor.faseVariador)} />
               <MonitorBadge label="Contacteurs" value={getContactorLabel(monitor.variadorContactores)} color={getContactorColor(monitor.variadorContactores)} />
               <MonitorBadge label="Frein" value={getBrakeLabel(monitor.variadorFreno)} color={getBrakeColor(monitor.variadorFreno)} />
@@ -1274,18 +1440,18 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           </CardBody></Card>
 
           {/* ── Appels (Envoi de cabine / Palier montée / Palier descente) ── */}
-          <Card><CardBody className="p-2">
-            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1.5">Appel / Envoi</p>
+          <Card><CardBody className="p-3">
+            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-2">Appel / Envoi</p>
             <div className="grid grid-cols-3 gap-2">
               {/* Envoi de cabine (cliquable → envoie Comando) */}
               <div>
-                <p className="text-sm font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Envoi de cabine</p>
+                <p className="text-xs font-bold text-[#8B5CF6] bg-[#8B5CF6]/10 rounded-lg px-2 py-1 mb-1.5">Envoi cabine</p>
                 <div className="flex flex-wrap gap-1.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeCabinCalls.includes(f);
                     return <button key={f} onClick={() => handleComando(f, 'LlamadasCabina')}
                       title={`Envoyer cabine à l'étage ${f}`}
-                      className={cn('w-5 h-5 rounded flex items-center justify-center text-xs font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#8B5CF6]',
+                      className={cn('w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#8B5CF6]',
                       active ? 'bg-[#8B5CF6] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#8B5CF6]/20'
                     )}>{f}</button>;
                   })}
@@ -1293,13 +1459,13 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               </div>
               {/* Appel palier en montée (cliquable) */}
               <div>
-                <p className="text-sm font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en montée</p>
+                <p className="text-xs font-bold text-[#059669] bg-[#059669]/10 rounded-lg px-2 py-1 mb-1.5">Appel montée</p>
                 <div className="flex flex-wrap gap-1.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeUpCalls.includes(f);
                     return <button key={f} onClick={() => handleComando(f, 'LlamadasExterioresSubida')}
                       title={`Appel montée étage ${f}`}
-                      className={cn('w-5 h-5 rounded flex items-center justify-center text-xs font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#059669]',
+                      className={cn('w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#059669]',
                       active ? 'bg-[#059669] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#059669]/20'
                     )}>{f}</button>;
                   })}
@@ -1307,13 +1473,13 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
               </div>
               {/* Appel palier en descente (cliquable) */}
               <div>
-                <p className="text-sm font-bold text-white bg-[#6B7280] rounded px-1.5 py-0.5 mb-1">Appel palier en descente</p>
+                <p className="text-xs font-bold text-[#DC2626] bg-[#DC2626]/10 rounded-lg px-2 py-1 mb-1.5">Appel descente</p>
                 <div className="flex flex-wrap gap-1.5">
                   {Array.from({ length: numStops }, (_, i) => i + 1).map(f => {
                     const active = activeDownCalls.includes(f);
                     return <button key={f} onClick={() => handleComando(f, 'LlamadasExterioresBajada')}
                       title={`Appel descente étage ${f}`}
-                      className={cn('w-5 h-5 rounded flex items-center justify-center text-xs font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#DC2626]',
+                      className={cn('w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold cursor-pointer transition-all hover:ring-1 hover:ring-[#DC2626]',
                       active ? 'bg-[#DC2626] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[#DC2626]/20'
                     )}>{f}</button>;
                   })}
@@ -1323,8 +1489,8 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           </CardBody></Card>
 
           {/* ── Cartes détectées ── */}
-          <Card><CardBody className="p-2">
-            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Cartes détectées</p>
+          <Card><CardBody className="p-3">
+            <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-2">Cartes détectées</p>
             <div className="flex flex-wrap gap-1">
               {([
                 ['MIO', monitor.numPlacaMIO], ['RevMam', monitor.numPlacaRevMam], ['CAR', monitor.numPlacaCar],
@@ -1343,7 +1509,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
           </CardBody></Card>
 
           {/* ── Actions à distance ── */}
-          <Card><CardBody className="p-2">
+          <Card><CardBody className="p-3">
             <button onClick={() => setShowActions(!showActions)} className="w-full flex items-center justify-between">
               <p className="text-xs font-bold text-[var(--text-muted)] uppercase flex items-center gap-1">
                 <Send className="w-3.5 h-3.5" /> Actions à distance ({MONITOR_ACTIONS.length})
@@ -1357,7 +1523,7 @@ function MonitorPanel({ liftId, lift }: { liftId: number; lift?: Sigma4Lift }) {
                 {MONITOR_ACTIONS.map(a => (
                   <button key={a.key} onClick={() => handleAction(a.key)}
                     className={cn(
-                      'flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold transition-colors',
+                      'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors',
                       a.danger
                         ? 'bg-[#DC2626]/10 text-[#DC2626] hover:bg-[#DC2626]/20'
                         : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
@@ -1390,8 +1556,8 @@ function busColor(v: number | null | undefined): string {
 /** Card alimentation fidèle au layout S4L (label petit au-dessus, valeur + unité en grand) */
 function AliCard({ label, value, unit, decimals = 0 }: { label: string; value: number | null | undefined; unit: string; decimals?: number }) {
   return (
-    <div className="bg-[var(--bg-secondary)] rounded p-1.5 text-center">
-      <p className="text-sm text-[var(--text-muted)] font-semibold truncate">{label}</p>
+    <div className="bg-[var(--bg-secondary)] rounded-lg p-2.5 text-center">
+      <p className="text-xs text-[var(--text-muted)] font-semibold truncate">{label}</p>
       <p className="text-base font-extrabold text-[var(--text-primary)]">
         {value != null ? `${decimals > 0 ? value.toFixed(decimals) : value} ${unit}` : '—'}
       </p>
@@ -1401,11 +1567,11 @@ function AliCard({ label, value, unit, decimals = 0 }: { label: string; value: n
 
 function MiniKPI({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color: string }) {
   return (
-    <Card className="flex-1"><CardBody className="p-2 flex items-center gap-2">
-      <div className="flex-shrink-0" style={{ color }}>{icon}</div>
+    <Card className="flex-1"><CardBody className="p-3 flex items-center gap-3">
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: color + '15', color }}>{icon}</div>
       <div>
         <p className="text-base font-extrabold font-mono" style={{ color }}>{value}</p>
-        <p className="text-sm text-[var(--text-muted)] font-semibold leading-tight">{label}</p>
+        <p className="text-xs text-[var(--text-muted)] font-semibold leading-tight">{label}</p>
       </div>
     </CardBody></Card>
   );
@@ -1413,9 +1579,9 @@ function MiniKPI({ label, value, icon, color }: { label: string; value: string; 
 
 function MonitorBadge({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="p-1 rounded bg-[var(--bg-primary)]">
-      <p className="text-sm text-[var(--text-muted)] font-semibold">{label}</p>
-      <p className="text-xs font-bold truncate" style={{ color }}>{value}</p>
+    <div className="p-2 rounded-lg bg-[var(--bg-primary)]">
+      <p className="text-xs text-[var(--text-muted)] font-semibold">{label}</p>
+      <p className="text-sm font-bold truncate" style={{ color }}>{value}</p>
     </div>
   );
 }
@@ -1707,9 +1873,9 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
   if (error) return <ErrorState error={error} onRetry={() => refetch()} />;
 
   return (
-    <div className="h-full flex flex-col gap-1.5 overflow-hidden">
+    <div className="h-full flex flex-col gap-2 overflow-hidden">
       {/* KPI + Période */}
-      <div className="flex gap-1 flex-shrink-0 items-end">
+      <div className="flex gap-1.5 flex-shrink-0 items-end">
         <Card className="flex-1"><CardBody className="p-3 text-center">
           <p className="text-xl font-extrabold font-mono text-[#3B82F6]">{stats.total}</p>
           <p className="text-sm text-[var(--text-muted)] font-semibold">messages</p>
@@ -1744,7 +1910,7 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
       </div>
 
       {/* Période + recherche */}
-      <div className="flex gap-1 flex-shrink-0 items-center">
+      <div className="flex gap-2 flex-shrink-0 items-center">
         <div className="flex gap-1 bg-[var(--bg-tertiary)] rounded-xl p-1">
           {[1, 3, 7, 14, 30].map(d => (
             <button key={d} onClick={() => setDays(d)}
@@ -1756,7 +1922,7 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
           ))}
         </div>
         <div className="flex-1 relative">
-          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             placeholder="Filtrer…"
             className="w-full pl-8 pr-3 py-2 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm outline-none focus:border-[#EA580C] transition-colors placeholder:text-[var(--text-tertiary)]" />
@@ -1774,8 +1940,8 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
           🔍
         </button>
         <button onClick={() => refetch()}
-          className="p-1 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors">
-          <RefreshCw className="w-3 h-3 text-[var(--text-muted)]" />
+          className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors">
+          <RefreshCw className="w-3.5 h-3.5 text-[var(--text-muted)]" />
         </button>
       </div>
 
@@ -1830,7 +1996,7 @@ function LiftErrorHistoryPanel({ liftId, lift, allCodes }: { liftId: number; lif
 
       {/* Liste */}
       {filteredErrors.length > 0 ? (
-        <div className="flex-1 overflow-y-auto space-y-1.5">
+        <div className="flex-1 overflow-y-auto space-y-1">
           {filteredErrors.map((err: any, idx: number) => (
             <LiftMessageRow key={err.id || idx} msg={err} />
           ))}
@@ -1879,7 +2045,7 @@ function LiftMessageRow({ msg }: { msg: any }) {
     <Card className={cn(isNoError && 'opacity-60')}>
       <CardBody className="p-0">
         <button onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center gap-2.5 p-3 text-left hover:bg-[var(--bg-secondary)]/50 rounded-xl transition-colors">
+          className="w-full flex items-center gap-3 p-3 text-left hover:bg-[var(--bg-tertiary)] rounded-xl transition-colors">
           {/* Icône sévérité ou type */}
           <span className="text-xs flex-shrink-0" title={sev ? sev.label : typeInfo.label}>
             {sev ? sev.icon : typeInfo.icon}
@@ -1914,35 +2080,35 @@ function LiftMessageRow({ msg }: { msg: any }) {
         {expanded && (
           <div className="px-4 pb-3 pt-2 space-y-2 border-t border-[var(--border-secondary)]">
             {/* Détails techniques */}
-            <div className="mt-2 grid grid-cols-4 gap-2">
-              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">ID:</span> <span className="font-mono">{msg.id}</span></div>
-              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">Dtype:</span> <span className="font-mono text-[#8B5CF6]">{msg.dtype}</span></div>
-              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">Type:</span> <span className="font-mono">{msg.type}/{msg.subtype}/{msg.subsubtype}</span></div>
-              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">Content:</span> <span className="font-mono text-[#EA580C]">{msg.content}</span></div>
-              <div className="text-sm"><span className="font-bold text-[var(--text-muted)]">LiftId:</span> <span className="font-mono">{msg.liftId}</span></div>
+            <div className="grid grid-cols-5 gap-2 p-2 rounded-lg bg-[var(--bg-tertiary)]">
+              <div className="text-xs"><span className="font-bold text-[var(--text-muted)]">ID</span><br /><span className="font-mono">{msg.id}</span></div>
+              <div className="text-xs"><span className="font-bold text-[var(--text-muted)]">Dtype</span><br /><span className="font-mono text-[#8B5CF6]">{msg.dtype}</span></div>
+              <div className="text-xs"><span className="font-bold text-[var(--text-muted)]">Type</span><br /><span className="font-mono">{msg.type}/{msg.subtype}/{msg.subsubtype}</span></div>
+              <div className="text-xs"><span className="font-bold text-[var(--text-muted)]">Content</span><br /><span className="font-mono text-[#EA580C]">{msg.content}</span></div>
+              <div className="text-xs"><span className="font-bold text-[var(--text-muted)]">Lift</span><br /><span className="font-mono">{msg.liftId}</span></div>
             </div>
             {msg.cause && (
               <div>
-                <p className="text-sm font-bold text-[#EA580C] uppercase">Cause probable</p>
-                <p className="text-xs text-[var(--text-secondary)]">{msg.cause}</p>
+                <p className="text-xs font-bold text-[#EA580C] uppercase mb-0.5">Cause probable</p>
+                <p className="text-sm text-[var(--text-secondary)]">{msg.cause}</p>
               </div>
             )}
             {msg.help && (
               <div>
-                <p className="text-sm font-bold text-[#059669] uppercase">Aide diagnostic</p>
-                <p className="text-xs text-[var(--text-secondary)]">{msg.help}</p>
+                <p className="text-xs font-bold text-[#059669] uppercase mb-0.5">Aide diagnostic</p>
+                <p className="text-sm text-[var(--text-secondary)]">{msg.help}</p>
               </div>
             )}
             {msg.observations && (
               <div>
-                <p className="text-sm font-bold text-[#3B82F6] uppercase">Observations</p>
-                <p className="text-xs text-[var(--text-secondary)]">{msg.observations}</p>
+                <p className="text-xs font-bold text-[#3B82F6] uppercase mb-0.5">Observations</p>
+                <p className="text-sm text-[var(--text-secondary)]">{msg.observations}</p>
               </div>
             )}
             {msg.extraContent && (
               <div>
-                <p className="text-sm font-bold text-[#8B5CF6] uppercase">Extra</p>
-                <p className="text-xs text-[var(--text-secondary)] font-mono">{msg.extraCode} · {msg.extraContent}</p>
+                <p className="text-xs font-bold text-[#8B5CF6] uppercase mb-0.5">Extra</p>
+                <p className="text-sm text-[var(--text-secondary)] font-mono">{msg.extraCode} · {msg.extraContent}</p>
               </div>
             )}
             {sev && (
@@ -1995,9 +2161,9 @@ function ErrorSearchPanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]; ap
   }, [allCodes, query, filterSeverity]);
 
   return (
-    <div className="h-full flex flex-col gap-1.5 overflow-hidden">
+    <div className="h-full flex flex-col gap-2 overflow-hidden">
       {/* Severity stats bar */}
-      <div className="flex gap-1 flex-shrink-0">
+      <div className="flex gap-1.5 flex-shrink-0">
         <Card className="flex-1"><CardBody className="p-3 text-center">
           <p className="text-xl font-extrabold font-mono text-[#3B82F6]">{stats.total}</p>
           <p className="text-sm text-[var(--text-muted)] font-semibold">
@@ -2022,9 +2188,9 @@ function ErrorSearchPanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]; ap
       </div>
 
       {/* Search bar */}
-      <div className="flex gap-1 flex-shrink-0">
+      <div className="flex gap-2 flex-shrink-0">
         <div className="flex-1 relative">
-          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input type="text" value={query} onChange={e => setQuery(e.target.value)}
             placeholder="Rechercher un code (F0102, ECO, MBA…) ou une description…"
             className="w-full pl-8 pr-3 py-2 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm outline-none focus:border-[#EA580C] transition-colors placeholder:text-[var(--text-tertiary)]"
@@ -2060,7 +2226,7 @@ function ErrorCodeRow({ error }: { error: S4LErrorCode }) {
     <Card>
       <CardBody className="p-0">
         <button onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center gap-2 p-2 text-left hover:bg-[var(--bg-secondary)]/50 rounded-lg transition-colors">
+          className="w-full flex items-center gap-3 p-3 text-left hover:bg-[var(--bg-tertiary)] rounded-xl transition-colors">
           {sev && <span className="text-xs" title={sev.label}>{sev.icon}</span>}
           <code className="text-sm font-mono font-extrabold text-[#EA580C] flex-shrink-0 w-28">
             {error.code}
@@ -2082,14 +2248,14 @@ function ErrorCodeRow({ error }: { error: S4LErrorCode }) {
           <div className="px-4 pb-3 pt-2 space-y-2 border-t border-[var(--border-secondary)]">
             {error.cause && (
               <div className="mt-1">
-                <p className="text-sm font-bold text-[#EA580C] uppercase">Cause probable</p>
-                <p className="text-xs text-[var(--text-secondary)]">{error.cause}</p>
+                <p className="text-xs font-bold text-[#EA580C] uppercase mb-0.5">Cause probable</p>
+                <p className="text-sm text-[var(--text-secondary)]">{error.cause}</p>
               </div>
             )}
             {error.help && (
               <div>
-                <p className="text-sm font-bold text-[#059669] uppercase">Aide diagnostic</p>
-                <p className="text-xs text-[var(--text-secondary)]">{error.help}</p>
+                <p className="text-xs font-bold text-[#059669] uppercase mb-0.5">Aide diagnostic</p>
+                <p className="text-sm text-[var(--text-secondary)]">{error.help}</p>
               </div>
             )}
             {sev && (
@@ -2130,17 +2296,17 @@ function ErrorFamiliesPanel({ allCodes }: { allCodes: S4LErrorCode[] }) {
   return (
     <div className="h-full flex flex-col gap-2 overflow-hidden">
       {/* Family cards */}
-      <div className="grid grid-cols-5 gap-1 flex-shrink-0">
+      <div className="grid grid-cols-5 gap-2 flex-shrink-0">
         {ERROR_FAMILIES_META.map(f => (
           <Card key={f.key}
             className={cn('cursor-pointer transition-all', selectedFamily === f.key && 'ring-1 ring-[var(--text-primary)]')}>
-            <CardBody className="p-2 text-center"
+            <CardBody className="p-3 text-center"
               onClick={() => setSelectedFamily(selectedFamily === f.key ? null : f.key)}>
               <p className="text-xl font-extrabold font-mono" style={{ color: f.color }}>
                 {stats.byFamily[f.key] || 0}
               </p>
               <p className="text-xs font-bold">{f.key}</p>
-              <p className="text-sm text-[var(--text-muted)] leading-tight mt-0.5">{f.desc}</p>
+              <p className="text-xs text-[var(--text-muted)] leading-tight mt-0.5">{f.desc}</p>
             </CardBody>
           </Card>
         ))}
@@ -2403,7 +2569,7 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
     <div className="h-full overflow-y-auto space-y-3">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div className="w-7 h-7 rounded-lg bg-[#EA580C] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-xl bg-[#EA580C] flex items-center justify-center">
           <TrendingUp className="w-4 h-4 text-white" />
         </div>
         <div>
@@ -2416,8 +2582,8 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
 
       {/* Classification par sévérité */}
       <Card><CardBody className="p-3">
-        <h4 className="text-sm font-extrabold mb-2 flex items-center gap-1">
-          <AlertTriangle className="w-3 h-3 text-[#EA580C]" /> Classification par sévérité
+        <h4 className="text-sm font-extrabold mb-3 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-[#EA580C]" /> Classification par sévérité
         </h4>
         <div className="space-y-2">
           {(Object.entries(SEVERITY_LEVELS) as [SeverityKey, typeof SEVERITY_LEVELS[SeverityKey]][])
@@ -2426,8 +2592,8 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
             const count = stats.bySeverity[key] || 0;
             const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
             return (
-              <div key={key} className="flex items-center gap-2">
-                <span className="text-sm w-5 text-center">{sev.icon}</span>
+              <div key={key} className="flex items-center gap-3">
+                <span className="text-sm w-6 text-center">{sev.icon}</span>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-0.5">
                     <span className="text-xs font-bold" style={{ color: sev.color }}>{sev.label}</span>
@@ -2457,20 +2623,20 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
 
       {/* Typologie des erreurs par domaine */}
       <Card><CardBody className="p-3">
-        <h4 className="text-sm font-extrabold mb-2 flex items-center gap-1">
-          <Filter className="w-3 h-3 text-[#8B5CF6]" /> Typologie par cause ({Object.keys(CAUSA_CATEGORIES).length - 1} catégories)
+        <h4 className="text-sm font-extrabold mb-3 flex items-center gap-2">
+          <Filter className="w-4 h-4 text-[#8B5CF6]" /> Typologie par cause ({Object.keys(CAUSA_CATEGORIES).length - 1} catégories)
         </h4>
         <div className="space-y-2">
           {domains.map(([domain, items]) => (
             <div key={domain}>
-              <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-0.5">{domain}</p>
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1">{domain}</p>
               <div className="grid grid-cols-2 gap-1.5">
                 {items.map(t => (
-                  <div key={t.key} className="flex items-center gap-1.5 px-1.5 py-1 rounded bg-[var(--bg-secondary)]">
-                    <div className="w-1 h-4 rounded-full bg-[#8B5CF6]/40 flex-shrink-0" />
+                  <div key={t.key} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[var(--bg-secondary)]">
+                    <div className="w-1.5 h-5 rounded-full bg-[#8B5CF6]/40 flex-shrink-0" />
                     <div className="min-w-0">
                       <p className="text-xs font-bold truncate">{t.label}</p>
-                      <p className="text-sm text-[var(--text-muted)] font-mono">CAUSA_{t.key}</p>
+                      <p className="text-xs text-[var(--text-muted)] font-mono">CAUSA_{t.key}</p>
                     </div>
                   </div>
                 ))}
@@ -2483,7 +2649,7 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
       {/* Info Life Warning */}
       <Card><CardBody className="p-3">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#CA8A04]/15 flex items-center justify-center text-xl">⚠️</div>
+          <div className="w-9 h-9 rounded-xl bg-[#CA8A04]/15 flex items-center justify-center text-xl">⚠️</div>
           <div>
             <h4 className="text-sm font-extrabold text-[#CA8A04]">Life Warning — Avertissement durée de vie</h4>
             <p className="text-xs text-[var(--text-muted)]">
@@ -2497,8 +2663,8 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
 
       {/* Points chaîne sécurité */}
       <Card><CardBody className="p-3">
-        <h4 className="text-sm font-extrabold mb-2">Nomenclature chaîne de sécurité (points Sigma)</h4>
-        <div className="grid grid-cols-4 gap-1 text-xs">
+        <h4 className="text-sm font-extrabold mb-3">Nomenclature chaîne de sécurité (points Sigma)</h4>
+        <div className="grid grid-cols-4 gap-2 text-xs">
           {[
             { pt: '1H-3C', desc: 'Chaîne primaire' },
             { pt: '40', desc: 'Point coupure MCB' },
@@ -2509,9 +2675,9 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
             { pt: '102-220-103', desc: 'Bornes chaîne MCB' },
             { pt: '104-105-106', desc: 'Bornes verrouillages' },
           ].map(p => (
-            <div key={p.pt} className="p-1 rounded bg-[var(--bg-secondary)]">
+            <div key={p.pt} className="p-2 rounded-lg bg-[var(--bg-secondary)]">
               <code className="text-[#EA580C] font-mono font-bold">{p.pt}</code>
-              <p className="text-sm text-[var(--text-muted)]">{p.desc}</p>
+              <p className="text-xs text-[var(--text-muted)]">{p.desc}</p>
             </div>
           ))}
         </div>
@@ -2525,9 +2691,9 @@ function SmartPreventivePanel({ allCodes, apiCount }: { allCodes: S4LErrorCode[]
 // ═══════════════════════════════════════════════════════════════
 
 function LoadingState({ text }: { text: string }) {
-  return <div className="h-full flex items-center justify-center">
-    <Loader2 className="w-6 h-6 animate-spin text-[#059669]" />
-    <span className="ml-2 text-sm text-[var(--text-muted)]">{text}</span>
+  return <div className="h-full flex flex-col items-center justify-center gap-3">
+    <Loader2 className="w-8 h-8 animate-spin text-[#059669]" />
+    <span className="text-sm text-[var(--text-muted)] font-semibold">{text}</span>
   </div>;
 }
 
@@ -2537,7 +2703,7 @@ function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void })
       <XCircle className="w-8 h-8 text-[#DC2626] mx-auto mb-2" />
       <p className="text-sm font-bold text-[#DC2626]">Erreur de chargement</p>
       <p className="text-xs text-[var(--text-muted)]">{(error as Error).message}</p>
-      <button onClick={onRetry} className="mt-2 px-3 py-1 rounded bg-[#059669] text-white text-sm font-bold">Réessayer</button>
+      <button onClick={onRetry} className="mt-2 px-4 py-2 rounded-xl bg-[#059669] text-white text-sm font-bold">Réessayer</button>
     </CardBody></Card>
   </div>;
 }
