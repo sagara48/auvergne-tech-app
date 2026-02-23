@@ -2725,23 +2725,25 @@ function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void })
 // ═══ HELPERS ═══
 
 function getEstadoInfo(estado: number): { label: string; color: string } {
-  // Codes confirmés par l'API Sigma4Lifts (ESTADO_DE_FUNCIONAMIENTO)
   switch (estado) {
-    case 0: return { label: 'En marche', color: '#059669' };       // OPERATIVO
-    case 10: return { label: 'Arrêté', color: '#DC2626' };         // PARADO
-    case 20: return { label: 'Maintenance', color: '#8B5CF6' };    // MANTENIMIENTO
-    case 90: return { label: 'Sans connexion', color: '#EA580C' }; // SIN_CONEXION
-    case 91: return { label: 'Connexion instable', color: '#EA580C' }; // Observé en prod
+    case 0: return { label: 'En marche (0)', color: '#059669' };
+    case 1: return { label: 'SOS (1)', color: '#DC2626' };
+    case 7: return { label: 'Reset de position (7)', color: '#CA8A04' };
+    case 8: return { label: 'MES (8)', color: '#3B82F6' };
+    case 10: return { label: 'Arrêté (10)', color: '#DC2626' };
+    case 15: return { label: 'Panne (15)', color: '#DC2626' };
+    case 20: return { label: 'Maintenance (20)', color: '#8B5CF6' };
+    case 90: return { label: 'Sans connexion (90)', color: '#EA580C' };
+    case 91: return { label: 'Connexion instable (91)', color: '#EA580C' };
     default:
-      // Heuristique par plage pour les codes non documentés
-      console.warn(`[Sigma4] Estado inconnu: ${estado} — vérifier la doc S4L`);
+      console.warn(`[Sigma4] Estado inconnu: ${estado}`);
       if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, color: '#059669' };
       if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, color: '#DC2626' };
       if (estado >= 20 && estado <= 39) return { label: `Maintenance (${estado})`, color: '#8B5CF6' };
       if (estado >= 40 && estado <= 59) return { label: `Hors service (${estado})`, color: '#64748B' };
       if (estado >= 60 && estado <= 89) return { label: `Urgence (${estado})`, color: '#DC2626' };
       if (estado >= 90) return { label: `Déconnecté (${estado})`, color: '#EA580C' };
-      return { label: `État ${estado}`, color: '#64748B' };
+      return { label: `État (${estado})`, color: '#64748B' };
   }
 }
 
