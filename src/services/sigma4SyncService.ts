@@ -51,12 +51,19 @@ function mapEstadoToEtat(estado: number): string {
     case 10: return 'arret';
     case 20: return 'maintenance';
     case 90: return 'deconnecte';
-    default: return 'inconnu';
+    default:
+      if (estado >= 1 && estado <= 9) return 'normal';
+      if (estado >= 10 && estado <= 19) return 'arret';
+      if (estado >= 20 && estado <= 39) return 'maintenance';
+      if (estado >= 40 && estado <= 59) return 'hors_service';
+      if (estado >= 60 && estado <= 89) return 'urgence';
+      if (estado >= 90) return 'deconnecte';
+      return 'inconnu';
   }
 }
 
 function mapEstadoToConnecte(estado: number): boolean {
-  return estado !== 90;
+  return estado < 90;
 }
 
 /** Mappe un lift S4L vers une ligne iot_lifts Supabase */
@@ -208,16 +215,18 @@ export async function syncAlertsToSupabase(): Promise<{ created: number; errors:
 
     for (const lift of problemLifts) {
       const liftId = String(lift.id);
-      const alertType = lift.estado === 10 ? 'arret' : lift.estado === 20 ? 'maintenance' : 'deconnexion';
+      const e = lift.estado;
+      const alertType = (e >= 10 && e <= 19 || e >= 60 && e <= 69) ? 'arret' : (e >= 20 && e <= 39) ? 'maintenance' : (e >= 90) ? 'deconnexion' : 'anomalie';
       const key = `${liftId}:${alertType}`;
 
       if (!existingSet.has(key)) {
-        const niveau = lift.estado === 10 ? 'critique' : lift.estado === 20 ? 'warning' : 'info';
+        const niveau = alertType === 'arret' ? 'critique' : alertType === 'maintenance' ? 'warning' : 'info';
+        const msgLabel = alertType === 'arret' ? 'Ascenseur arrêté' : alertType === 'maintenance' ? 'En maintenance' : alertType === 'deconnexion' ? 'Perte de connexion' : `Anomalie (état ${e})`;
         newAlerts.push({
           lift_id: liftId,
           niveau,
           type: alertType,
-          message: `${lift.liftCompRef} — ${alertType === 'arret' ? 'Ascenseur arrêté' : alertType === 'maintenance' ? 'En maintenance' : 'Perte de connexion'} · ${lift.city || lift.address || ''}`,
+          message: `${lift.liftCompRef} — ${msgLabel} · ${lift.city || lift.address || ''}`,
           timestamp: new Date().toISOString(),
         });
       }
@@ -234,7 +243,7 @@ export async function syncAlertsToSupabase(): Promise<{ created: number; errors:
 
     // Auto-acquitter les alertes pour les lifts redevenus OK
     const okLiftIds = lifts
-      .filter(l => !l.baja && l.estado === 0)
+      .filter(l => !l.baja && (l.estado === 0 || (l.estado >= 1 && l.estado <= 9)))
       .map(l => String(l.id));
 
     if (okLiftIds.length > 0) {
