@@ -310,22 +310,24 @@ function getEstadoStyle(estado: number): {
   label: string; short: string; color: string;
   icon: typeof Radio; pulse: boolean;
 } {
-  // Codes confirmés S4L
   switch (estado) {
-    case 0: return { label: 'En marche', short: 'OK', color: '#059669', icon: CheckCircle2, pulse: false };
-    case 10: return { label: 'Arrêté', short: 'ARRÊT', color: '#DC2626', icon: XCircle, pulse: true };
-    case 20: return { label: 'Maintenance', short: 'MAINT', color: '#8B5CF6', icon: Wrench, pulse: false };
-    case 90: return { label: 'Sans connexion', short: 'HORS LIGNE', color: '#EA580C', icon: WifiOff, pulse: false };
-    case 91: return { label: 'Connexion instable', short: 'INSTABLE', color: '#EA580C', icon: WifiOff, pulse: false };
+    case 0: return { label: 'En marche (0)', short: 'OK (0)', color: '#059669', icon: CheckCircle2, pulse: false };
+    case 1: return { label: 'SOS (1)', short: 'SOS (1)', color: '#DC2626', icon: XCircle, pulse: true };
+    case 7: return { label: 'Reset position (7)', short: 'RESET (7)', color: '#CA8A04', icon: AlertTriangle, pulse: false };
+    case 8: return { label: 'MES (8)', short: 'MES (8)', color: '#3B82F6', icon: Wrench, pulse: false };
+    case 10: return { label: 'Arrêté (10)', short: 'ARRÊT (10)', color: '#DC2626', icon: XCircle, pulse: true };
+    case 15: return { label: 'Panne (15)', short: 'PANNE (15)', color: '#DC2626', icon: XCircle, pulse: true };
+    case 20: return { label: 'Maintenance (20)', short: 'MAINT (20)', color: '#8B5CF6', icon: Wrench, pulse: false };
+    case 90: return { label: 'Sans connexion (90)', short: 'H.L. (90)', color: '#EA580C', icon: WifiOff, pulse: false };
+    case 91: return { label: 'Connexion instable (91)', short: 'INST (91)', color: '#EA580C', icon: WifiOff, pulse: false };
     default:
-      // Fallback par plage
-      if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, short: 'OK', color: '#059669', icon: CheckCircle2, pulse: false };
-      if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, short: 'ARRÊT', color: '#DC2626', icon: XCircle, pulse: true };
-      if (estado >= 20 && estado <= 39) return { label: `Maintenance (${estado})`, short: 'MAINT', color: '#8B5CF6', icon: Wrench, pulse: false };
-      if (estado >= 40 && estado <= 59) return { label: `Hors service (${estado})`, short: 'H.S.', color: '#64748B', icon: AlertTriangle, pulse: false };
-      if (estado >= 60 && estado <= 89) return { label: `Urgence (${estado})`, short: 'URG', color: '#DC2626', icon: AlertTriangle, pulse: true };
-      if (estado >= 90) return { label: `Déconnecté (${estado})`, short: `${estado}`, color: '#EA580C', icon: WifiOff, pulse: false };
-      return { label: `État ${estado}`, short: `${estado}`, color: '#64748B', icon: AlertTriangle, pulse: false };
+      if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, short: `OK (${estado})`, color: '#059669', icon: CheckCircle2, pulse: false };
+      if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, short: `ARRÊT (${estado})`, color: '#DC2626', icon: XCircle, pulse: true };
+      if (estado >= 20 && estado <= 39) return { label: `Maintenance (${estado})`, short: `MAINT (${estado})`, color: '#8B5CF6', icon: Wrench, pulse: false };
+      if (estado >= 40 && estado <= 59) return { label: `Hors service (${estado})`, short: `H.S. (${estado})`, color: '#64748B', icon: AlertTriangle, pulse: false };
+      if (estado >= 60 && estado <= 89) return { label: `Urgence (${estado})`, short: `URG (${estado})`, color: '#DC2626', icon: AlertTriangle, pulse: true };
+      if (estado >= 90) return { label: `Déconnecté (${estado})`, short: `(${estado})`, color: '#EA580C', icon: WifiOff, pulse: false };
+      return { label: `État (${estado})`, short: `(${estado})`, color: '#64748B', icon: AlertTriangle, pulse: false };
   }
 }
 
