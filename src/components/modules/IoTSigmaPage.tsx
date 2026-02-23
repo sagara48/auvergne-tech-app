@@ -276,8 +276,15 @@ function DashboardTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => vo
     return lifts
       .filter(l => !l.baja && l.estado !== 0)
       .sort((a, b) => {
-        // Arrêtés en premier, puis maintenance, puis sans connexion
-        const priority = (e: number) => e === 10 ? 0 : e === 20 ? 1 : 2;
+        // Arrêtés/urgences en premier (10-19, 60-61), puis maintenance/inspection (20-32), puis le reste
+        const priority = (e: number) => {
+          if (e >= 10 && e <= 19 || e >= 60 && e <= 61) return 0; // Arrêts + urgences
+          if (e >= 20 && e <= 32) return 1; // Maintenance + inspection
+          if (e >= 40 && e <= 51) return 2; // Hors service + test
+          if (e >= 70 && e <= 80) return 3; // Modes spéciaux
+          if (e >= 90) return 4; // Déconnexion
+          return 5;
+        };
         return priority(a.estado) - priority(b.estado) || a.liftCompRef.localeCompare(b.liftCompRef);
       });
   }, [lifts]);
@@ -404,6 +411,10 @@ function LiftsTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => void }
     else if (statusFilter === 'en8128_ko') list = list.filter(l => !l.en8128);
     else if (statusFilter === 'has_coords') list = list.filter(l => l.latitude !== 0 && l.longitude !== 0);
     else if (statusFilter === 'no_group') list = list.filter(l => l.groups.length === 0);
+    else if (statusFilter === 'anomalie') list = list.filter(l => l.estado !== 0);
+    else if (statusFilter === 'arrets') list = list.filter(l => l.estado >= 10 && l.estado <= 19 || l.estado >= 60 && l.estado <= 61);
+    else if (statusFilter === 'maintenance') list = list.filter(l => l.estado >= 20 && l.estado <= 32);
+    else if (statusFilter === 'hors_service') list = list.filter(l => l.estado >= 40 && l.estado <= 51);
     else if (statusFilter.startsWith('estado_')) {
       const code = Number(statusFilter.split('_')[1]);
       list = list.filter(l => l.estado === code);
@@ -467,8 +478,11 @@ function LiftsTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => void }
           className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-sm outline-none min-w-0">
           <option value="all">Tous statuts</option>
           <option value="estado_0">En marche</option>
+          <option value="anomalie">⚠ Toutes anomalies</option>
+          <option value="arrets">Arrêtés / Urgences</option>
+          <option value="maintenance">Maintenance / Inspection</option>
+          <option value="hors_service">Hors service / Test</option>
           <option value="estado_90">Sans connexion</option>
-          <option value="estado_10">Arrêtés</option>
           <option value="en8128_ok">EN 81-28 ✓</option>
           <option value="en8128_ko">EN 81-28 ✗</option>
           <option value="has_coords">Géolocalisés</option>
@@ -588,7 +602,7 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
               <DetailItem label="Version SW" value={lift.versionSW || '—'} />
               <DetailItem label="Accès PV" value={lift.accesoPv ? 'Oui' : 'Non'} />
               <DetailItem label="CCID" value={lift.ccid ? `...${lift.ccid.slice(-8)}` : '—'} />
-              <DetailItem label="État (código)" value={String(lift.estado)} />
+              <DetailItem label="État (código)" value={`${getEstadoInfo(lift.estado).label} (${lift.estado})`} />
             </div>
 
             {/* Network info (if available) */}
@@ -2713,10 +2727,57 @@ function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void })
 function getEstadoInfo(estado: number): { label: string; color: string } {
   switch (estado) {
     case 0: return { label: 'En marche', color: '#059669' };
+    case 1: return { label: 'En marche (mode normal)', color: '#059669' };
+    case 2: return { label: 'En mouvement', color: '#059669' };
+    case 3: return { label: 'Occupé', color: '#3B82F6' };
+    case 4: return { label: 'Repos', color: '#059669' };
+    case 5: return { label: 'Attente', color: '#CA8A04' };
+    case 6: return { label: 'Rappel', color: '#3B82F6' };
+    case 7: return { label: 'Mode parking', color: '#64748B' };
+    case 8: return { label: 'Hors service temporaire', color: '#CA8A04' };
+    case 9: return { label: 'Mode spécial', color: '#8B5CF6' };
+    // Arrêts
     case 10: return { label: 'Arrêté', color: '#DC2626' };
+    case 11: return { label: 'Arrêté (panne)', color: '#DC2626' };
+    case 12: return { label: 'Arrêté (sécurité)', color: '#DC2626' };
+    case 13: return { label: 'Arrêté (blocage)', color: '#DC2626' };
+    case 14: return { label: 'Arrêté (pompier)', color: '#DC2626' };
+    case 15: return { label: 'Arrêté (incendie)', color: '#DC2626' };
+    // Maintenance / inspection
     case 20: return { label: 'Maintenance', color: '#8B5CF6' };
+    case 21: return { label: 'Maintenance préventive', color: '#8B5CF6' };
+    case 22: return { label: 'Maintenance corrective', color: '#8B5CF6' };
+    case 30: return { label: 'Inspection', color: '#3B82F6' };
+    case 31: return { label: 'Inspection (toit cabine)', color: '#3B82F6' };
+    case 32: return { label: 'Inspection (cuvette)', color: '#3B82F6' };
+    // Hors service / modes spéciaux
+    case 40: return { label: 'Hors service', color: '#64748B' };
+    case 41: return { label: 'Hors service (volontaire)', color: '#64748B' };
+    case 50: return { label: 'En test', color: '#CA8A04' };
+    case 51: return { label: 'Essai automatique', color: '#CA8A04' };
+    case 60: return { label: 'Urgence', color: '#DC2626' };
+    case 61: return { label: 'Personnes bloquées', color: '#DC2626' };
+    case 70: return { label: 'Mode incendie', color: '#EA580C' };
+    case 71: return { label: 'Rappel pompier', color: '#EA580C' };
+    case 80: return { label: 'Mode séisme', color: '#EA580C' };
+    // Déconnexion
     case 90: return { label: 'Sans connexion', color: '#EA580C' };
-    default: return { label: `État ${estado}`, color: '#64748B' };
+    case 91: return { label: 'Connexion instable', color: '#EA580C' };
+    case 99: return { label: 'État inconnu', color: '#64748B' };
+    // Fallback — log pour debug
+    default:
+      console.warn(`[Sigma4] Estado non mappé: ${estado} — ajouter dans getEstadoInfo()`);
+      // Heuristique par plage
+      if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, color: '#059669' };
+      if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, color: '#DC2626' };
+      if (estado >= 20 && estado <= 29) return { label: `Maintenance (${estado})`, color: '#8B5CF6' };
+      if (estado >= 30 && estado <= 39) return { label: `Inspection (${estado})`, color: '#3B82F6' };
+      if (estado >= 40 && estado <= 49) return { label: `Hors service (${estado})`, color: '#64748B' };
+      if (estado >= 50 && estado <= 59) return { label: `Test (${estado})`, color: '#CA8A04' };
+      if (estado >= 60 && estado <= 69) return { label: `Urgence (${estado})`, color: '#DC2626' };
+      if (estado >= 70 && estado <= 89) return { label: `Mode spécial (${estado})`, color: '#EA580C' };
+      if (estado >= 90) return { label: `Déconnecté (${estado})`, color: '#EA580C' };
+      return { label: `État ${estado}`, color: '#64748B' };
   }
 }
 
