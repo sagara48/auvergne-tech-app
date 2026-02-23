@@ -178,26 +178,21 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
   }, [lifts]);
 
   const getStatusInfo = (estado: number) => {
+    // Codes confirmés S4L
     switch (estado) {
+      case 0: return { label: 'En marche', color: '#059669', icon: CheckCircle2, pulse: false };
       case 10: return { label: 'Arrêté', color: '#DC2626', icon: XCircle, pulse: true };
-      case 11: return { label: 'Panne', color: '#DC2626', icon: XCircle, pulse: true };
-      case 12: return { label: 'Sécurité', color: '#DC2626', icon: XCircle, pulse: true };
-      case 14: return { label: 'Pompier', color: '#DC2626', icon: XCircle, pulse: true };
       case 20: return { label: 'Maintenance', color: '#8B5CF6', icon: Wrench, pulse: false };
-      case 30: case 31: case 32: return { label: 'Inspection', color: '#3B82F6', icon: Wrench, pulse: false };
-      case 40: case 41: return { label: 'Hors service', color: '#64748B', icon: AlertTriangle, pulse: false };
-      case 50: case 51: return { label: 'En test', color: '#CA8A04', icon: AlertTriangle, pulse: false };
-      case 60: case 61: return { label: 'Urgence', color: '#DC2626', icon: XCircle, pulse: true };
-      case 70: case 71: return { label: 'Incendie', color: '#EA580C', icon: AlertTriangle, pulse: true };
-      case 80: return { label: 'Séisme', color: '#EA580C', icon: AlertTriangle, pulse: true };
-      case 90: return { label: 'Déconnecté', color: '#EA580C', icon: WifiOff, pulse: false };
-      case 91: return { label: 'Instable', color: '#EA580C', icon: WifiOff, pulse: false };
+      case 90: return { label: 'Sans connexion', color: '#EA580C', icon: WifiOff, pulse: false };
+      case 91: return { label: 'Connexion instable', color: '#EA580C', icon: WifiOff, pulse: false };
       default:
-        if (estado >= 10 && estado <= 19) return { label: 'Arrêté', color: '#DC2626', icon: XCircle, pulse: true };
-        if (estado >= 20 && estado <= 39) return { label: 'Maintenance', color: '#8B5CF6', icon: Wrench, pulse: false };
-        if (estado >= 40 && estado <= 59) return { label: 'Hors service', color: '#64748B', icon: AlertTriangle, pulse: false };
-        if (estado >= 60 && estado <= 89) return { label: 'Urgence', color: '#DC2626', icon: XCircle, pulse: true };
-        if (estado >= 90) return { label: 'Déconnecté', color: '#EA580C', icon: WifiOff, pulse: false };
+        // Fallback par plage
+        if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, color: '#059669', icon: CheckCircle2, pulse: false };
+        if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, color: '#DC2626', icon: XCircle, pulse: true };
+        if (estado >= 20 && estado <= 39) return { label: `Maintenance (${estado})`, color: '#8B5CF6', icon: Wrench, pulse: false };
+        if (estado >= 40 && estado <= 59) return { label: `Hors service (${estado})`, color: '#64748B', icon: AlertTriangle, pulse: false };
+        if (estado >= 60 && estado <= 89) return { label: `Urgence (${estado})`, color: '#DC2626', icon: XCircle, pulse: true };
+        if (estado >= 90) return { label: `Déconnecté (${estado})`, color: '#EA580C', icon: WifiOff, pulse: false };
         return { label: `État ${estado}`, color: '#64748B', icon: AlertTriangle, pulse: false };
     }
   };
