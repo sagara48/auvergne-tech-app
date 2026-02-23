@@ -178,22 +178,24 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
   }, [lifts]);
 
   const getStatusInfo = (estado: number) => {
-    // Codes confirmés S4L
     switch (estado) {
-      case 0: return { label: 'En marche', color: '#059669', icon: CheckCircle2, pulse: false };
-      case 10: return { label: 'Arrêté', color: '#DC2626', icon: XCircle, pulse: true };
-      case 20: return { label: 'Maintenance', color: '#8B5CF6', icon: Wrench, pulse: false };
-      case 90: return { label: 'Sans connexion', color: '#EA580C', icon: WifiOff, pulse: false };
-      case 91: return { label: 'Connexion instable', color: '#EA580C', icon: WifiOff, pulse: false };
+      case 0: return { label: 'En marche (0)', color: '#059669', icon: CheckCircle2, pulse: false };
+      case 1: return { label: 'SOS (1)', color: '#DC2626', icon: XCircle, pulse: true };
+      case 7: return { label: 'Reset position (7)', color: '#CA8A04', icon: AlertTriangle, pulse: false };
+      case 8: return { label: 'MES (8)', color: '#3B82F6', icon: Wrench, pulse: false };
+      case 10: return { label: 'Arrêté (10)', color: '#DC2626', icon: XCircle, pulse: true };
+      case 15: return { label: 'Panne (15)', color: '#DC2626', icon: XCircle, pulse: true };
+      case 20: return { label: 'Maintenance (20)', color: '#8B5CF6', icon: Wrench, pulse: false };
+      case 90: return { label: 'Sans connexion (90)', color: '#EA580C', icon: WifiOff, pulse: false };
+      case 91: return { label: 'Connexion instable (91)', color: '#EA580C', icon: WifiOff, pulse: false };
       default:
-        // Fallback par plage
         if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, color: '#059669', icon: CheckCircle2, pulse: false };
         if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, color: '#DC2626', icon: XCircle, pulse: true };
         if (estado >= 20 && estado <= 39) return { label: `Maintenance (${estado})`, color: '#8B5CF6', icon: Wrench, pulse: false };
         if (estado >= 40 && estado <= 59) return { label: `Hors service (${estado})`, color: '#64748B', icon: AlertTriangle, pulse: false };
         if (estado >= 60 && estado <= 89) return { label: `Urgence (${estado})`, color: '#DC2626', icon: XCircle, pulse: true };
         if (estado >= 90) return { label: `Déconnecté (${estado})`, color: '#EA580C', icon: WifiOff, pulse: false };
-        return { label: `État ${estado}`, color: '#64748B', icon: AlertTriangle, pulse: false };
+        return { label: `État (${estado})`, color: '#64748B', icon: AlertTriangle, pulse: false };
     }
   };
 
