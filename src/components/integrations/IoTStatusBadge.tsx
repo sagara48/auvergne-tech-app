@@ -312,10 +312,36 @@ function getEstadoStyle(estado: number): {
 } {
   switch (estado) {
     case 0: return { label: 'En marche', short: 'OK', color: '#059669', icon: CheckCircle2, pulse: false };
+    // Arrêts
     case 10: return { label: 'Arrêté', short: 'ARRÊT', color: '#DC2626', icon: XCircle, pulse: true };
+    case 11: return { label: 'Arrêté (panne)', short: 'PANNE', color: '#DC2626', icon: XCircle, pulse: true };
+    case 12: return { label: 'Arrêté (sécurité)', short: 'SÉCU', color: '#DC2626', icon: XCircle, pulse: true };
+    case 13: return { label: 'Arrêté (blocage)', short: 'BLOQUÉ', color: '#DC2626', icon: XCircle, pulse: true };
+    case 14: return { label: 'Arrêté (pompier)', short: 'POMPIER', color: '#DC2626', icon: XCircle, pulse: true };
+    case 15: return { label: 'Arrêté (incendie)', short: 'FEU', color: '#DC2626', icon: XCircle, pulse: true };
+    // Maintenance / inspection
     case 20: return { label: 'Maintenance', short: 'MAINT', color: '#8B5CF6', icon: Wrench, pulse: false };
+    case 21: return { label: 'Maintenance préventive', short: 'PRÉV', color: '#8B5CF6', icon: Wrench, pulse: false };
+    case 22: return { label: 'Maintenance corrective', short: 'CORR', color: '#8B5CF6', icon: Wrench, pulse: false };
+    case 30: return { label: 'Inspection', short: 'INSP', color: '#3B82F6', icon: Wrench, pulse: false };
+    case 31: return { label: 'Inspection (toit)', short: 'TOIT', color: '#3B82F6', icon: Wrench, pulse: false };
+    case 32: return { label: 'Inspection (cuvette)', short: 'CUV', color: '#3B82F6', icon: Wrench, pulse: false };
+    // Hors service
+    case 40: return { label: 'Hors service', short: 'H.S.', color: '#64748B', icon: AlertTriangle, pulse: false };
+    case 41: return { label: 'Hors service (volontaire)', short: 'H.S.', color: '#64748B', icon: AlertTriangle, pulse: false };
+    case 50: return { label: 'En test', short: 'TEST', color: '#CA8A04', icon: AlertTriangle, pulse: false };
+    case 51: return { label: 'Essai automatique', short: 'ESSAI', color: '#CA8A04', icon: AlertTriangle, pulse: false };
+    // Urgences
+    case 60: return { label: 'Urgence', short: 'URG', color: '#DC2626', icon: AlertTriangle, pulse: true };
+    case 61: return { label: 'Personnes bloquées', short: 'BLOQUÉS', color: '#DC2626', icon: AlertTriangle, pulse: true };
+    case 70: return { label: 'Mode incendie', short: 'FEU', color: '#EA580C', icon: AlertTriangle, pulse: true };
+    case 71: return { label: 'Rappel pompier', short: 'POMPIER', color: '#EA580C', icon: AlertTriangle, pulse: true };
+    case 80: return { label: 'Mode séisme', short: 'SÉISME', color: '#EA580C', icon: AlertTriangle, pulse: true };
+    // Déconnexion
     case 90: return { label: 'Déconnecté', short: 'HORS LIGNE', color: '#EA580C', icon: WifiOff, pulse: false };
-    default: return { label: 'Inconnu', short: '?', color: '#64748B', icon: AlertTriangle, pulse: false };
+    case 91: return { label: 'Connexion instable', short: 'INSTABLE', color: '#EA580C', icon: WifiOff, pulse: false };
+    case 99: return { label: 'État inconnu', short: '?', color: '#64748B', icon: AlertTriangle, pulse: false };
+    default: return { label: `État ${estado}`, short: `${estado}`, color: '#64748B', icon: AlertTriangle, pulse: false };
   }
 }
 
