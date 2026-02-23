@@ -47,10 +47,10 @@ export function IoTFleetWidget({ onRemove }: { onRemove?: () => void }) {
     const active = lifts.filter(l => !l.baja);
     return {
       total: active.length,
-      ok: active.filter(l => l.estado === 0).length,
-      arret: active.filter(l => l.estado === 10).length,
-      maintenance: active.filter(l => l.estado === 20).length,
-      deconnecte: active.filter(l => l.estado === 90).length,
+      ok: active.filter(l => l.estado >= 0 && l.estado <= 9).length,
+      arret: active.filter(l => (l.estado >= 10 && l.estado <= 19) || (l.estado >= 60 && l.estado <= 89)).length,
+      maintenance: active.filter(l => (l.estado >= 20 && l.estado <= 39) || (l.estado >= 40 && l.estado <= 59)).length,
+      deconnecte: active.filter(l => l.estado >= 90).length,
     };
   }, [lifts]);
 
@@ -167,7 +167,11 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
     return lifts
       .filter(l => !l.baja && l.estado !== 0)
       .sort((a, b) => {
-        const prio = (e: number) => e === 10 ? 0 : e === 90 ? 1 : 2;
+        const prio = (e: number) => {
+          if (e >= 10 && e <= 19 || e >= 60 && e <= 69) return 0;
+          if (e >= 90) return 1;
+          return 2;
+        };
         return prio(a.estado) - prio(b.estado);
       })
       .slice(0, 6);
@@ -176,9 +180,25 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
   const getStatusInfo = (estado: number) => {
     switch (estado) {
       case 10: return { label: 'Arrêté', color: '#DC2626', icon: XCircle, pulse: true };
+      case 11: return { label: 'Panne', color: '#DC2626', icon: XCircle, pulse: true };
+      case 12: return { label: 'Sécurité', color: '#DC2626', icon: XCircle, pulse: true };
+      case 14: return { label: 'Pompier', color: '#DC2626', icon: XCircle, pulse: true };
       case 20: return { label: 'Maintenance', color: '#8B5CF6', icon: Wrench, pulse: false };
+      case 30: case 31: case 32: return { label: 'Inspection', color: '#3B82F6', icon: Wrench, pulse: false };
+      case 40: case 41: return { label: 'Hors service', color: '#64748B', icon: AlertTriangle, pulse: false };
+      case 50: case 51: return { label: 'En test', color: '#CA8A04', icon: AlertTriangle, pulse: false };
+      case 60: case 61: return { label: 'Urgence', color: '#DC2626', icon: XCircle, pulse: true };
+      case 70: case 71: return { label: 'Incendie', color: '#EA580C', icon: AlertTriangle, pulse: true };
+      case 80: return { label: 'Séisme', color: '#EA580C', icon: AlertTriangle, pulse: true };
       case 90: return { label: 'Déconnecté', color: '#EA580C', icon: WifiOff, pulse: false };
-      default: return { label: 'Inconnu', color: '#64748B', icon: AlertTriangle, pulse: false };
+      case 91: return { label: 'Instable', color: '#EA580C', icon: WifiOff, pulse: false };
+      default:
+        if (estado >= 10 && estado <= 19) return { label: 'Arrêté', color: '#DC2626', icon: XCircle, pulse: true };
+        if (estado >= 20 && estado <= 39) return { label: 'Maintenance', color: '#8B5CF6', icon: Wrench, pulse: false };
+        if (estado >= 40 && estado <= 59) return { label: 'Hors service', color: '#64748B', icon: AlertTriangle, pulse: false };
+        if (estado >= 60 && estado <= 89) return { label: 'Urgence', color: '#DC2626', icon: XCircle, pulse: true };
+        if (estado >= 90) return { label: 'Déconnecté', color: '#EA580C', icon: WifiOff, pulse: false };
+        return { label: `État ${estado}`, color: '#64748B', icon: AlertTriangle, pulse: false };
     }
   };
 
@@ -270,7 +290,7 @@ export function IoTAvailabilityWidget({ onRemove }: { onRemove?: () => void }) {
     const active = lifts.filter(l => !l.baja);
     const total = active.length;
     if (total === 0) return null;
-    const ok = active.filter(l => l.estado === 0).length;
+    const ok = active.filter(l => l.estado >= 0 && l.estado <= 9).length;
     const rate = (ok / total) * 100;
 
     // Tendance basée sur les alertes
