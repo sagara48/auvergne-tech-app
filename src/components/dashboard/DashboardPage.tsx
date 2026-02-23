@@ -51,6 +51,11 @@ import {
 } from './widgets';
 import { NotificationsWidget } from '@/components/notifications';
 import { SynergyPanel } from './SynergyPanel';
+import {
+  IoTFleetWidget,
+  IoTAlertsWidget,
+  IoTAvailabilityWidget,
+} from './sigma4Widgets';
 import toast from 'react-hot-toast';
 
 // ID utilisateur actuel (à remplacer par auth)
@@ -90,6 +95,9 @@ const WIDGET_COMPONENTS: Record<string, React.FC<{ onRemove?: () => void }>> = {
   'my-day': MyDayWidget,
   'team-weather': TeamWeatherWidget,
   'supply-chain': SupplyChainWidget,
+  'iot-fleet': IoTFleetWidget,
+  'iot-alerts': IoTAlertsWidget,
+  'iot-availability': IoTAvailabilityWidget,
 };
 
 // Modal pour ajouter des widgets

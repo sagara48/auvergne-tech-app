@@ -2,11 +2,11 @@ import {
   LayoutDashboard, Calendar, Hammer, FileCheck, Package, Clock, 
   MessageCircle, Car, AlertTriangle, TrendingUp, CheckSquare,
   StickyNote, CloudSun, Link, Users, BarChart3, PieChart,
-  Timer, Truck, Bell, Activity
+  Timer, Truck, Bell, Activity, Radio
 } from 'lucide-react';
 
 export type WidgetSize = 'small' | 'medium' | 'large';
-export type WidgetCategory = 'stats' | 'planning' | 'travaux' | 'stock' | 'communication' | 'temps' | 'vehicule' | 'graphiques' | 'utilitaires';
+export type WidgetCategory = 'stats' | 'planning' | 'travaux' | 'stock' | 'communication' | 'temps' | 'vehicule' | 'graphiques' | 'utilitaires' | 'iot';
 
 export interface WidgetDefinition {
   id: string;
@@ -51,6 +51,7 @@ export const WIDGET_CATEGORIES: Record<WidgetCategory, { label: string; color: s
   vehicule: { label: 'Véhicule', color: '#22c55e' },
   graphiques: { label: 'Graphiques', color: '#ec4899' },
   utilitaires: { label: 'Utilitaires', color: '#6366f1' },
+  iot: { label: 'IoT Sigma4', color: '#059669' },
 };
 
 // Définitions de tous les widgets
@@ -358,6 +359,35 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: 'Travaux bloqués, commandes en transit, stock critique',
     category: 'stock',
     icon: Truck,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 2,
+  },
+
+  // === IoT SIGMA4 ===
+  {
+    id: 'iot-fleet',
+    name: 'Parc IoT Sigma4',
+    description: 'État en temps réel des ascenseurs connectés (en marche, arrêtés, déconnectés)',
+    category: 'iot',
+    icon: Radio,
+    defaultSize: 'large',
+    minW: 2, minH: 1, defaultW: 4, defaultH: 1,
+  },
+  {
+    id: 'iot-alerts',
+    name: 'Alertes IoT',
+    description: 'Ascenseurs en anomalie avec détails et état',
+    category: 'iot',
+    icon: AlertTriangle,
+    defaultSize: 'medium',
+    minW: 2, minH: 2, defaultW: 2, defaultH: 3,
+  },
+  {
+    id: 'iot-availability',
+    name: 'Disponibilité IoT',
+    description: 'Taux de disponibilité du parc avec tendance et historique alertes',
+    category: 'iot',
+    icon: Activity,
     defaultSize: 'medium',
     minW: 2, minH: 2, defaultW: 2, defaultH: 2,
   },
