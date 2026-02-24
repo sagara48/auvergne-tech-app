@@ -587,6 +587,7 @@ export default function AtelierToleriePage() {
                     onDimEdit={handleDimEdit} onDimAdd={handleAddManualDim} onDimRemove={handleRemoveDim}
                     dimPoints={dimPoints} setDimPoints={setDimPoints}
                   />
+                </div>
                 <div className="flex-1">
                   <Canvas3DFold piece={piece} foldProgress={foldState.progress} darkCanvas={darkCanvas}
                     highlightedBend={foldState.highlightedBend} showBendLines={foldState.showBendLines} />
