@@ -241,8 +241,67 @@ export default function AtelierToleriePage() {
   const [showParams, setShowParams] = useState(false);
 
   // Smart Dimensions
-  const smartDims = useMemo(() => autoSmartDimensions(piece), [piece]);
+  const autoSmartDimsRaw = useMemo(() => autoSmartDimensions(piece), [piece]);
+  const [customDims, setCustomDims] = useState<SmartDimension[]>([]);
+  const smartDims = useMemo(() => [...autoSmartDimsRaw, ...customDims], [autoSmartDimsRaw, customDims]);
   const dimValidation = useMemo(() => validateDimensionChain(smartDims, piece), [smartDims, piece]);
+
+  // Dimension editing: when user changes a value, propagate to geometry
+  const handleDimEdit = useCallback((dimId: string, newValue: number) => {
+    // Check if it's a custom dim first
+    const customIdx = customDims.findIndex(d => d.id === dimId);
+    if (customIdx >= 0) {
+      setCustomDims(prev => prev.map(d => d.id === dimId ? { ...d, value: newValue } : d));
+      return;
+    }
+    // Auto dim → propagate to geometry via feature tree
+    const dim = autoSmartDimsRaw.find(d => d.id === dimId);
+    if (!dim) return;
+    if (dim.type === 'horizontal' && dim.source.type === 'edge') {
+      // Largeur globale
+      addNode('dimension', { largeur: newValue, hauteur: piece.hauteur });
+      toast.success(`Largeur → ${newValue}mm`);
+    } else if (dim.type === 'vertical' && dim.source.type === 'edge') {
+      // Hauteur globale
+      addNode('dimension', { largeur: piece.largeur, hauteur: newValue });
+      toast.success(`Hauteur → ${newValue}mm`);
+    } else if (dim.type === 'horizontal' && dim.source.type === 'bend') {
+      // Position de pli
+      const pliId = dim.source.id1;
+      const node = tree.nodes.find(n => n.type === 'bend' && n.params.id === pliId);
+      if (node) { updateNode(node.id, { position: newValue }); toast.success(`Pli → ${newValue}mm`); }
+    } else if (dim.type === 'horizontal' && dim.source.type === 'hole_center' && !dim.source.id2) {
+      // Position X d'un trou
+      const node = tree.nodes.find(n => n.type === 'hole' && n.params.id === dim.source.id1);
+      if (node) { updateNode(node.id, { x: newValue }); toast.success(`Trou X → ${newValue}mm`); }
+    } else if (dim.type === 'radius') {
+      // Diamètre trou
+      const node = tree.nodes.find(n => n.type === 'hole' && n.params.id === dim.source.id1);
+      if (node) { updateNode(node.id, { diametre: newValue }); toast.success(`∅ → ${newValue}mm`); }
+    }
+  }, [customDims, autoSmartDimsRaw, piece, tree, addNode, updateNode]);
+
+  // Add manual dimension (tool dimension: click 2 points)
+  const [dimPoints, setDimPoints] = useState<{ x: number; y: number }[]>([]);
+  const handleAddManualDim = useCallback((p1: { x: number; y: number }, p2: { x: number; y: number }) => {
+    const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
+    const isH = dx > dy;
+    const value = isH ? dx : dy;
+    const newDim: SmartDimension = {
+      id: uid(),
+      type: isH ? 'horizontal' : (dx < 1 && dy > 1) ? 'vertical' : 'distance',
+      source: { type: 'point', id1: `${p1.x},${p1.y}`, id2: `${p2.x},${p2.y}` },
+      value: Math.round(value * 10) / 10,
+      displayOffset: isH ? -(piece.hauteur + 10 + customDims.filter(d => d.type === 'horizontal').length * 6) : -(piece.largeur + 10 + customDims.filter(d => d.type === 'vertical').length * 6),
+      _manual: true, _p1: p1, _p2: p2,
+    } as any;
+    setCustomDims(prev => [...prev, newDim]);
+    toast.success(`Cote ${isH ? 'H' : 'V'} ajoutée: ${newDim.value}mm`);
+  }, [piece, customDims]);
+
+  const handleRemoveDim = useCallback((dimId: string) => {
+    setCustomDims(prev => prev.filter(d => d.id !== dimId));
+  }, []);
 
   // Existing features (collab, offline, etc.)
   const [showSaved, setShowSaved] = useState(false);
@@ -525,8 +584,9 @@ export default function AtelierToleriePage() {
                     foldState={foldState} sketchMode={sketchMode} sketch={sketch}
                     onFlangeEdge={(edge) => { addNode('flange', { ...flangeConfig, edge }); setCanvasTool('select'); }}
                     onHemEdge={(edge) => { addNode('hem', { ...hemConfig, edge }); setCanvasTool('select'); }}
+                    onDimEdit={handleDimEdit} onDimAdd={handleAddManualDim} onDimRemove={handleRemoveDim}
+                    dimPoints={dimPoints} setDimPoints={setDimPoints}
                   />
-                </div>
                 <div className="flex-1">
                   <Canvas3DFold piece={piece} foldProgress={foldState.progress} darkCanvas={darkCanvas}
                     highlightedBend={foldState.highlightedBend} showBendLines={foldState.showBendLines} />
@@ -546,6 +606,8 @@ export default function AtelierToleriePage() {
                 foldState={foldState} sketchMode={sketchMode} sketch={sketch}
                 onFlangeEdge={(edge) => { addNode('flange', { ...flangeConfig, edge }); setCanvasTool('select'); }}
                 onHemEdge={(edge) => { addNode('hem', { ...hemConfig, edge }); setCanvasTool('select'); }}
+                onDimEdit={handleDimEdit} onDimAdd={handleAddManualDim} onDimRemove={handleRemoveDim}
+                dimPoints={dimPoints} setDimPoints={setDimPoints}
               />
             )}
             {/* Fold/unfold overlay controls */}
@@ -590,7 +652,7 @@ export default function AtelierToleriePage() {
         <div className="flex gap-1">
           <button onClick={() => { telechargerDXF(piece); toast.success('DXF'); }} className="px-2 py-1 rounded border border-[var(--border-secondary)] text-[8px] font-semibold"><Download className="w-2.5 h-2.5 inline mr-0.5" />DXF</button>
           <button onClick={() => { telechargerSTEP(piece); toast.success('STEP'); }} className="px-2 py-1 rounded border border-[var(--border-secondary)] text-[8px] font-semibold"><Cuboid className="w-2.5 h-2.5 inline mr-0.5" />STEP</button>
-          <button onClick={() => { exportPlanPDF(piece, matConfig); toast.success('PDF'); }} className="px-2 py-1 rounded bg-[#B91C1C] text-white text-[8px] font-semibold"><FileDown className="w-2.5 h-2.5 inline mr-0.5" />PDF</button>
+          <button onClick={() => { exportPlanPDF(piece, matConfig, smartDims); toast.success('PDF'); }} className="px-2 py-1 rounded bg-[#B91C1C] text-white text-[8px] font-semibold"><FileDown className="w-2.5 h-2.5 inline mr-0.5" />PDF</button>
         </div>
       </div>
     </div>
@@ -1052,10 +1114,14 @@ function FeatureNodeEditor({ node, piece, onUpdate, onClose, paramCtx }: {
 function CanvasSVG({ piece, zoom, showGrid, showCotes, showSmartDims, smartDims, autoCotes,
   viewMode, darkCanvas, svgRef, pan, setPan, selTrou, setSelTrou, selPli, setSelPli,
   tool, mPts, setMPts, collabCursors, photoOverlay, photoOpacity, pieceId,
-  foldState, sketchMode, sketch, onFlangeEdge, onHemEdge }: any) {
+  foldState, sketchMode, sketch, onFlangeEdge, onHemEdge,
+  onDimEdit, onDimAdd, onDimRemove, dimPoints, setDimPoints }: any) {
 
   const [drag, setDrag] = useState<any>(null);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
+  const [editingDimId, setEditingDimId] = useState<string | null>(null);
+  const [editingDimValue, setEditingDimValue] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
   const mc = MATIERES.find(m => m.id === piece.matiere);
   const W = piece.largeur, H = piece.hauteur, mg = 40;
   const bg = darkCanvas ? '#12121e' : 'var(--bg-primary)';
@@ -1082,6 +1148,19 @@ function CanvasSVG({ piece, zoom, showGrid, showCotes, showSmartDims, smartDims,
 
   const handleDown = (e: React.MouseEvent, type = 'pan', id?: string) => {
     e.stopPropagation();
+    // Close dim editor on outside click
+    if (editingDimId && type === 'pan') { setEditingDimId(null); }
+    if (tool === 'dimension') {
+      const pt = toWorld(e.clientX, e.clientY);
+      if (!dimPoints || dimPoints.length === 0) {
+        setDimPoints([pt]);
+      } else {
+        // Second click → create dimension
+        onDimAdd(dimPoints[0], pt);
+        setDimPoints([]);
+      }
+      return;
+    }
     if (tool === 'flange') {
       const edge = detectEdge(e.clientX, e.clientY);
       if (edge) { onFlangeEdge(edge); return; }
@@ -1120,7 +1199,7 @@ function CanvasSVG({ piece, zoom, showGrid, showCotes, showSmartDims, smartDims,
 
   return (
     <svg ref={svgRef} className="w-full h-full" viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
-      style={{ background: bg, cursor: tool === 'flange' || tool === 'hem' ? 'pointer' : tool === 'measure' ? 'crosshair' : 'default' }}
+      style={{ background: bg, cursor: tool === 'dimension' ? 'crosshair' : tool === 'flange' || tool === 'hem' ? 'pointer' : tool === 'measure' ? 'crosshair' : 'default' }}
       onMouseDown={e => handleDown(e)} onMouseMove={handleMove} onMouseUp={handleUp} onMouseLeave={handleUp}>
 
       {/* Photo overlay */}
@@ -1169,10 +1248,28 @@ function CanvasSVG({ piece, zoom, showGrid, showCotes, showSmartDims, smartDims,
         <rect key={e.id} x={e.x} y={e.y} width={e.largeur} height={e.hauteur}
           fill="none" stroke="#EA580C" strokeWidth={0.3} strokeDasharray="1 0.5" />)}
 
-      {/* Smart Dimensions */}
+      {/* Smart Dimensions (clickable to edit) */}
       {showSmartDims && smartDims && smartDims.map((dim: SmartDimension) =>
-        <SmartDimSVG key={dim.id} dim={dim} piece={piece} zoom={zoom} darkCanvas={darkCanvas} />
+        <SmartDimSVG key={dim.id} dim={dim} piece={piece} zoom={zoom} darkCanvas={darkCanvas}
+          isEditing={editingDimId === dim.id}
+          onStartEdit={() => { setEditingDimId(dim.id); setEditingDimValue(String(dim.value)); }}
+          onRemove={() => onDimRemove?.(dim.id)}
+          isManual={(dim as any)._manual}
+        />
       )}
+
+      {/* Dimension tool: first point marker */}
+      {tool === 'dimension' && dimPoints && dimPoints.length === 1 && <g>
+        <circle cx={dimPoints[0].x} cy={dimPoints[0].y} r={1.5} fill="none" stroke="#2563EB" strokeWidth={0.3} />
+        <line x1={dimPoints[0].x - 2} y1={dimPoints[0].y} x2={dimPoints[0].x + 2} y2={dimPoints[0].y} stroke="#2563EB" strokeWidth={0.2} />
+        <line x1={dimPoints[0].x} y1={dimPoints[0].y - 2} x2={dimPoints[0].x} y2={dimPoints[0].y + 2} stroke="#2563EB" strokeWidth={0.2} />
+      </g>}
+
+      {/* Manual dims: point markers */}
+      {showSmartDims && smartDims.filter((d: any) => d._manual && d._p1 && d._p2).map((dim: any) => <g key={`mp_${dim.id}`}>
+        <circle cx={dim._p1.x} cy={dim._p1.y} r={0.8} fill="#2563EB" />
+        <circle cx={dim._p2.x} cy={dim._p2.y} r={0.8} fill="#2563EB" />
+      </g>)}
 
       {/* Auto cotes */}
       {showCotes && autoCotes.map((c: AutoCote, i: number) =>
@@ -1195,10 +1292,70 @@ function CanvasSVG({ piece, zoom, showGrid, showCotes, showSmartDims, smartDims,
         <circle key={uid} cx={pos.x} cy={pos.y} r={2} fill="#8B5CF6" opacity={0.5} />
       )}
 
+      {/* Inline dimension editor (foreignObject) */}
+      {editingDimId && (() => {
+        const dim = smartDims?.find((d: SmartDimension) => d.id === editingDimId);
+        if (!dim) return null;
+        // Calculate position
+        let ex = 0, ey = 0;
+        if (dim.type === 'horizontal') {
+          const x1 = dim.source.type === 'hole_center' ? piece.trous.find((t: Trou) => t.id === dim.source.id1)?.x || 0 : (dim as any)._p1?.x ?? 0;
+          const x2 = dim.source.id2 ? (piece.trous.find((t: Trou) => t.id === dim.source.id2)?.x || piece.largeur) : (dim as any)._p2?.x ?? piece.largeur;
+          ex = (x1 + x2) / 2;
+          ey = dim.displayOffset < 0 ? dim.displayOffset : piece.hauteur - dim.displayOffset;
+        } else if (dim.type === 'vertical') {
+          ex = dim.displayOffset < 0 ? dim.displayOffset : piece.largeur - dim.displayOffset;
+          ey = piece.hauteur / 2;
+        } else if (dim.type === 'radius') {
+          const trou = piece.trous.find((t: Trou) => t.id === dim.source.id1);
+          if (trou) { ex = trou.x + trou.diametre / 2 + 5; ey = trou.y; }
+        } else if ((dim as any)._manual && (dim as any)._p1 && (dim as any)._p2) {
+          ex = ((dim as any)._p1.x + (dim as any)._p2.x) / 2;
+          ey = ((dim as any)._p1.y + (dim as any)._p2.y) / 2 - 6;
+        }
+        return <foreignObject x={ex - 15} y={ey - 5} width={30} height={10} className="overflow-visible">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
+            <input
+              ref={editInputRef}
+              autoFocus
+              type="number"
+              value={editingDimValue}
+              onChange={e => setEditingDimValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const val = parseFloat(editingDimValue);
+                  if (val > 0) onDimEdit?.(editingDimId, val);
+                  setEditingDimId(null);
+                } else if (e.key === 'Escape') {
+                  setEditingDimId(null);
+                }
+              }}
+              onBlur={() => {
+                const val = parseFloat(editingDimValue);
+                if (val > 0) onDimEdit?.(editingDimId, val);
+                setEditingDimId(null);
+              }}
+              style={{
+                width: '28px', height: '8px', fontSize: '5px', fontFamily: 'monospace',
+                fontWeight: 'bold', textAlign: 'center', border: '0.3px solid #2563EB',
+                borderRadius: '1px', background: darkCanvas ? '#1e1e2e' : 'white',
+                color: '#2563EB', outline: 'none', padding: '0 1px',
+              }}
+            />
+          </div>
+        </foreignObject>;
+      })()}
+
       {/* SVG defs */}
       <defs>
         <marker id="arrow" markerWidth="4" markerHeight="3" refX="4" refY="1.5" orient="auto">
           <polygon points="0 0, 4 1.5, 0 3" fill={cc} />
+        </marker>
+        <marker id="dimArrowR" markerWidth="3" markerHeight="2.5" refX="3" refY="1.25" orient="auto">
+          <polygon points="0 0, 3 1.25, 0 2.5" fill={darkCanvas ? '#60A5FA' : '#2563EB'} />
+        </marker>
+        <marker id="dimArrowL" markerWidth="3" markerHeight="2.5" refX="0" refY="1.25" orient="auto">
+          <polygon points="3 0, 0 1.25, 3 2.5" fill={darkCanvas ? '#60A5FA' : '#2563EB'} />
         </marker>
       </defs>
     </svg>
@@ -1207,47 +1364,132 @@ function CanvasSVG({ piece, zoom, showGrid, showCotes, showSmartDims, smartDims,
 
 // ═══ SMART DIMENSION SVG RENDERING ═══
 
-function SmartDimSVG({ dim, piece, zoom, darkCanvas }: { dim: SmartDimension; piece: PieceConfig; zoom: number; darkCanvas: boolean }) {
+function SmartDimSVG({ dim, piece, zoom, darkCanvas, isEditing, onStartEdit, onRemove, isManual }: {
+  dim: SmartDimension; piece: PieceConfig; zoom: number; darkCanvas: boolean;
+  isEditing?: boolean; onStartEdit?: () => void; onRemove?: () => void; isManual?: boolean;
+}) {
   const color = darkCanvas ? '#60A5FA' : '#2563EB';
+  const manualColor = darkCanvas ? '#F59E0B' : '#D97706';
+  const c = isManual ? manualColor : color;
   const tolerance = dim.tolerance;
+  const fmtVal = (v: number) => v.toFixed(v % 1 === 0 ? 0 : 1);
 
+  // Helper: resolved coords for manual dims stored with _p1/_p2
+  const mp1 = (dim as any)._p1 as { x: number; y: number } | undefined;
+  const mp2 = (dim as any)._p2 as { x: number; y: number } | undefined;
+
+  // ─── HORIZONTAL ───
   if (dim.type === 'horizontal') {
-    const y = dim.displayOffset < 0 ? dim.displayOffset : piece.hauteur - dim.displayOffset;
-    const x1 = dim.source.type === 'hole_center' ? piece.trous.find(t => t.id === dim.source.id1)?.x || 0 : 0;
-    const x2 = dim.source.id2 ? (piece.trous.find(t => t.id === dim.source.id2)?.x || piece.largeur) : piece.largeur;
+    let x1: number, x2: number;
+    if (mp1 && mp2) { x1 = Math.min(mp1.x, mp2.x); x2 = Math.max(mp1.x, mp2.x); }
+    else {
+      x1 = dim.source.type === 'hole_center' ? piece.trous.find(t => t.id === dim.source.id1)?.x || 0 : 0;
+      x2 = dim.source.id2 ? (piece.trous.find(t => t.id === dim.source.id2)?.x || piece.largeur) : piece.largeur;
+    }
+    const refY = mp1 ? Math.min(mp1.y, mp2?.y ?? mp1.y) : 0;
+    const y = mp1 ? refY - 8 - (isManual ? 4 : 0) : (dim.displayOffset < 0 ? dim.displayOffset : piece.hauteur - dim.displayOffset);
+    const midX = (x1 + x2) / 2;
 
-    return <g className="pointer-events-none">
-      <line x1={x1} y1={y} x2={x2} y2={y} stroke={color} strokeWidth={0.2} />
-      <line x1={x1} y1={y - 2} x2={x1} y2={y + 2} stroke={color} strokeWidth={0.15} />
-      <line x1={x2} y1={y - 2} x2={x2} y2={y + 2} stroke={color} strokeWidth={0.15} />
-      <rect x={(x1 + x2) / 2 - 8} y={y - 3} width={16} height={4} rx={0.5}
-        fill={darkCanvas ? '#1e1e2e' : 'white'} stroke={color} strokeWidth={0.1} />
-      <text x={(x1 + x2) / 2} y={y - 0.5} textAnchor="middle" fontSize={2.5} fill={color} fontWeight="bold" fontFamily="monospace">
-        {dim.value.toFixed(dim.value % 1 === 0 ? 0 : 1)}
-        {tolerance && <tspan fontSize={1.5} fill={color} opacity={0.7}> +{tolerance.plus}/-{tolerance.minus}</tspan>}
+    return <g className="cursor-pointer" onDoubleClick={e => { e.stopPropagation(); onStartEdit?.(); }}>
+      {/* Extension lines */}
+      <line x1={x1} y1={mp1 ? mp1.y : 0} x2={x1} y2={y} stroke={c} strokeWidth={0.08} strokeDasharray="0.5 0.5" opacity={0.5} />
+      <line x1={x2} y1={mp2 ? mp2.y : 0} x2={x2} y2={y} stroke={c} strokeWidth={0.08} strokeDasharray="0.5 0.5" opacity={0.5} />
+      {/* Dimension line + arrows */}
+      <line x1={x1} y1={y} x2={x2} y2={y} stroke={c} strokeWidth={0.2} markerStart="url(#dimArrowL)" markerEnd="url(#dimArrowR)" />
+      {/* Tick marks */}
+      <line x1={x1} y1={y - 1.5} x2={x1} y2={y + 1.5} stroke={c} strokeWidth={0.15} />
+      <line x1={x2} y1={y - 1.5} x2={x2} y2={y + 1.5} stroke={c} strokeWidth={0.15} />
+      {/* Value badge */}
+      <rect x={midX - 8} y={y - 3} width={16} height={4} rx={0.5}
+        fill={darkCanvas ? '#1e1e2e' : 'white'} stroke={c} strokeWidth={isEditing ? 0.3 : 0.1}
+        className={isEditing ? '' : 'hover:stroke-[0.25]'} />
+      <text x={midX} y={y - 0.5} textAnchor="middle" fontSize={2.5} fill={c} fontWeight="bold" fontFamily="monospace">
+        {fmtVal(dim.value)}
+        {tolerance && <tspan fontSize={1.3} opacity={0.6}> +{tolerance.plus}/-{tolerance.minus}</tspan>}
       </text>
+      {/* Manual badge + remove */}
+      {isManual && <g>
+        <rect x={midX + 9} y={y - 2.5} width={3} height={3} rx={0.5} fill={c} fillOpacity={0.15}
+          className="cursor-pointer hover:fill-opacity-40" onClick={e => { e.stopPropagation(); onRemove?.(); }} />
+        <text x={midX + 10.5} y={y - 0.5} textAnchor="middle" fontSize={2} fill={c} fontWeight="bold">×</text>
+      </g>}
     </g>;
   }
 
+  // ─── VERTICAL ───
   if (dim.type === 'vertical') {
-    const x = dim.displayOffset < 0 ? dim.displayOffset : piece.largeur - dim.displayOffset;
-    return <g className="pointer-events-none">
-      <line x1={x} y1={0} x2={x} y2={piece.hauteur} stroke={color} strokeWidth={0.2} />
-      <line x1={x - 2} y1={0} x2={x + 2} y2={0} stroke={color} strokeWidth={0.15} />
-      <line x1={x - 2} y1={piece.hauteur} x2={x + 2} y2={piece.hauteur} stroke={color} strokeWidth={0.15} />
-      <text x={x - 1.5} y={piece.hauteur / 2} textAnchor="middle" fontSize={2.5} fill={color} fontWeight="bold" fontFamily="monospace"
-        transform={`rotate(-90 ${x - 1.5} ${piece.hauteur / 2})`}>
-        {dim.value.toFixed(dim.value % 1 === 0 ? 0 : 1)}
+    let y1: number, y2: number;
+    if (mp1 && mp2) { y1 = Math.min(mp1.y, mp2.y); y2 = Math.max(mp1.y, mp2.y); }
+    else { y1 = 0; y2 = piece.hauteur; }
+    const refX = mp1 ? Math.min(mp1.x, mp2?.x ?? mp1.x) : 0;
+    const x = mp1 ? refX - 8 - (isManual ? 4 : 0) : (dim.displayOffset < 0 ? dim.displayOffset : piece.largeur - dim.displayOffset);
+    const midY = (y1 + y2) / 2;
+
+    return <g className="cursor-pointer" onDoubleClick={e => { e.stopPropagation(); onStartEdit?.(); }}>
+      {/* Extension lines */}
+      <line x1={mp1 ? mp1.x : 0} y1={y1} x2={x} y2={y1} stroke={c} strokeWidth={0.08} strokeDasharray="0.5 0.5" opacity={0.5} />
+      <line x1={mp2 ? mp2.x : 0} y1={y2} x2={x} y2={y2} stroke={c} strokeWidth={0.08} strokeDasharray="0.5 0.5" opacity={0.5} />
+      {/* Dimension line */}
+      <line x1={x} y1={y1} x2={x} y2={y2} stroke={c} strokeWidth={0.2} markerStart="url(#dimArrowL)" markerEnd="url(#dimArrowR)" />
+      {/* Tick marks */}
+      <line x1={x - 1.5} y1={y1} x2={x + 1.5} y2={y1} stroke={c} strokeWidth={0.15} />
+      <line x1={x - 1.5} y1={y2} x2={x + 1.5} y2={y2} stroke={c} strokeWidth={0.15} />
+      {/* Value badge */}
+      <rect x={x - 8} y={midY - 2} width={12} height={4} rx={0.5}
+        fill={darkCanvas ? '#1e1e2e' : 'white'} stroke={c} strokeWidth={isEditing ? 0.3 : 0.1} />
+      <text x={x - 2} y={midY + 0.8} textAnchor="middle" fontSize={2.5} fill={c} fontWeight="bold" fontFamily="monospace"
+        transform={`rotate(-90 ${x - 2} ${midY + 0.8})`}>
+        {fmtVal(dim.value)}
       </text>
+      {isManual && <g>
+        <rect x={x - 2} y={midY + 3} width={3} height={3} rx={0.5} fill={c} fillOpacity={0.15}
+          className="cursor-pointer hover:fill-opacity-40" onClick={e => { e.stopPropagation(); onRemove?.(); }} />
+        <text x={x - 0.5} y={midY + 5} textAnchor="middle" fontSize={2} fill={c} fontWeight="bold">×</text>
+      </g>}
     </g>;
   }
 
+  // ─── DISTANCE (oblique manual dim) ───
+  if (dim.type === 'distance' && mp1 && mp2) {
+    const midX = (mp1.x + mp2.x) / 2, midY = (mp1.y + mp2.y) / 2;
+    const angle = Math.atan2(mp2.y - mp1.y, mp2.x - mp1.x) * 180 / Math.PI;
+    const perpOff = 4; // offset perpendicular to line
+    const nx = -Math.sin(angle * Math.PI / 180) * perpOff;
+    const ny = Math.cos(angle * Math.PI / 180) * perpOff;
+
+    return <g className="cursor-pointer" onDoubleClick={e => { e.stopPropagation(); onStartEdit?.(); }}>
+      {/* Extension lines */}
+      <line x1={mp1.x} y1={mp1.y} x2={mp1.x + nx} y2={mp1.y + ny} stroke={c} strokeWidth={0.08} strokeDasharray="0.5 0.5" opacity={0.5} />
+      <line x1={mp2.x} y1={mp2.y} x2={mp2.x + nx} y2={mp2.y + ny} stroke={c} strokeWidth={0.08} strokeDasharray="0.5 0.5" opacity={0.5} />
+      {/* Dim line */}
+      <line x1={mp1.x + nx} y1={mp1.y + ny} x2={mp2.x + nx} y2={mp2.y + ny}
+        stroke={c} strokeWidth={0.2} markerStart="url(#dimArrowL)" markerEnd="url(#dimArrowR)" />
+      {/* Value */}
+      <rect x={midX + nx - 7} y={midY + ny - 2.5} width={14} height={4} rx={0.5}
+        fill={darkCanvas ? '#1e1e2e' : 'white'} stroke={c} strokeWidth={0.1} />
+      <text x={midX + nx} y={midY + ny + 0.3} textAnchor="middle" fontSize={2.5} fill={c} fontWeight="bold" fontFamily="monospace">
+        {fmtVal(dim.value)}
+      </text>
+      {isManual && <g>
+        <rect x={midX + nx + 8} y={midY + ny - 2} width={3} height={3} rx={0.5} fill={c} fillOpacity={0.15}
+          className="cursor-pointer hover:fill-opacity-40" onClick={e => { e.stopPropagation(); onRemove?.(); }} />
+        <text x={midX + nx + 9.5} y={midY + ny + 0.3} textAnchor="middle" fontSize={2} fill={c} fontWeight="bold">×</text>
+      </g>}
+    </g>;
+  }
+
+  // ─── RADIUS (hole diameter) ───
   if (dim.type === 'radius') {
     const trou = piece.trous.find((t: Trou) => t.id === dim.source.id1);
     if (!trou) return null;
-    return <g className="pointer-events-none">
-      <text x={trou.x + trou.diametre / 2 + 2} y={trou.y - 1} fontSize={2} fill={color} fontWeight="bold" fontFamily="monospace">
-        ∅{dim.value}
+    const tx = trou.x + trou.diametre / 2 + 2, ty = trou.y;
+    return <g className="cursor-pointer" onDoubleClick={e => { e.stopPropagation(); onStartEdit?.(); }}>
+      {/* Leader line */}
+      <line x1={trou.x} y1={trou.y} x2={tx} y2={ty - 1.5} stroke={c} strokeWidth={0.1} />
+      <rect x={tx - 1} y={ty - 3} width={10} height={3} rx={0.4}
+        fill={darkCanvas ? '#1e1e2e' : 'white'} stroke={c} strokeWidth={0.08} />
+      <text x={tx + 4} y={ty - 1} textAnchor="middle" fontSize={2} fill={c} fontWeight="bold" fontFamily="monospace">
+        ∅{fmtVal(dim.value)}
       </text>
     </g>;
   }
@@ -1353,7 +1595,7 @@ function Canvas3DFull({ piece, darkCanvas, usePBR, animProgress, enableMeasure, 
 
 // ═══ PDF EXPORTS ═══
 
-function exportPlanPDF(p: PieceConfig, mc: MatiereConfig) {
+function exportPlanPDF(p: PieceConfig, mc: MatiereConfig, dims?: SmartDimension[]) {
   const pdf = new PDFBuilder('Plan Technique', p.reference, 'landscape');
   pdf.docTitle('Plan de Fabrication', p.reference);
   pdf.docSubtitle(`${p.nom} — ${mc.nom} ép. ${p.epaisseur} mm`);
@@ -1365,36 +1607,231 @@ function exportPlanPDF(p: PieceConfig, mc: MatiereConfig) {
     { label: 'Qté', value: String(p.quantite) },
   ]);
 
-  // Vue développée
-  pdf.section('Vue développée + Isométrique');
+  // ─── Vue développée avec cotations ───
+  pdf.section('Vue développée cotée');
   const d = pdf.doc, dy = pdf.y;
-  const sc = Math.min((pdf.cw * 0.5) / p.largeur, 50 / p.hauteur);
-  const dW = p.largeur * sc, dH = p.hauteur * sc, dX = 25;
-  d.setFillColor(240, 240, 245); d.setDrawColor(100, 100, 120); d.setLineWidth(0.15);
-  d.rect(dX, dy, dW, dH, 'FD');
-  p.plis.forEach(x => { d.setDrawColor(59, 130, 246); d.setLineWidth(0.1); d.setLineDashPattern([1, 1], 0); d.line(dX + x.position * sc, dy - 1, dX + x.position * sc, dy + dH + 1); d.setLineDashPattern([], 0); });
-  p.trous.forEach(t => { d.setDrawColor(5, 150, 105); d.setLineWidth(0.1); d.circle(dX + t.x * sc, dy + t.y * sc, Math.max((t.diametre / 2) * sc, 0.25), 'S'); });
+  // Marges pour les cotations extérieures
+  const dimMarginL = 18, dimMarginT = 14, dimMarginR = 8, dimMarginB = 8;
+  const availW = pdf.cw * 0.55, availH = 65;
+  const sc = Math.min((availW - dimMarginL - dimMarginR) / p.largeur, (availH - dimMarginT - dimMarginB) / p.hauteur);
+  const dW = p.largeur * sc, dH = p.hauteur * sc;
+  const dX = 25 + dimMarginL, dY = dy + dimMarginT;
+  const fmtV = (v: number) => v.toFixed(v % 1 === 0 ? 0 : 1);
 
-  // Nomenclature
-  pdf.y = dy + dH + 8;
+  // Background
+  d.setFillColor(245, 246, 250); d.setDrawColor(120, 120, 140); d.setLineWidth(0.2);
+  d.rect(dX, dY, dW, dH, 'FD');
+
+  // Plis (tirets bleus)
+  p.plis.forEach(pli => {
+    d.setDrawColor(59, 130, 246); d.setLineWidth(0.12);
+    d.setLineDashPattern([1.2, 0.8], 0);
+    d.line(dX + pli.position * sc, dY - 1, dX + pli.position * sc, dY + dH + 1);
+    d.setLineDashPattern([], 0);
+    // Angle label
+    d.setFontSize(5); d.setTextColor(59, 130, 246);
+    d.text(`${pli.angle}°`, dX + pli.position * sc, dY - 2, { align: 'center' });
+  });
+
+  // Trous (cercles verts + point centre)
+  p.trous.forEach(t => {
+    d.setDrawColor(5, 150, 105); d.setLineWidth(0.12);
+    const r = Math.max((t.diametre / 2) * sc, 0.3);
+    d.circle(dX + t.x * sc, dY + t.y * sc, r, 'S');
+    d.setFillColor(5, 150, 105);
+    d.circle(dX + t.x * sc, dY + t.y * sc, 0.15, 'F');
+  });
+
+  // Encoches (tirets orange)
+  p.encoches.forEach(e => {
+    d.setDrawColor(234, 88, 12); d.setLineWidth(0.1);
+    d.setLineDashPattern([0.8, 0.4], 0);
+    d.rect(dX + e.x * sc, dY + e.y * sc, e.largeur * sc, e.hauteur * sc, 'S');
+    d.setLineDashPattern([], 0);
+  });
+
+  // ─── COTATIONS SUR LE PLAN ───
+  const dimColor = { r: 37, g: 99, b: 235 }; // #2563EB
+  const manualColor = { r: 217, g: 119, b: 6 }; // #D97706
+  const allDims = dims || autoSmartDimensions(p);
+
+  allDims.forEach(dim => {
+    const isManual = (dim as any)._manual;
+    const col = isManual ? manualColor : dimColor;
+    d.setDrawColor(col.r, col.g, col.b); d.setTextColor(col.r, col.g, col.b);
+    d.setLineWidth(0.1); d.setFontSize(5);
+
+    const mp1 = (dim as any)._p1 as { x: number; y: number } | undefined;
+    const mp2 = (dim as any)._p2 as { x: number; y: number } | undefined;
+
+    if (dim.type === 'horizontal') {
+      let x1Src: number, x2Src: number;
+      if (mp1 && mp2) { x1Src = Math.min(mp1.x, mp2.x); x2Src = Math.max(mp1.x, mp2.x); }
+      else {
+        x1Src = dim.source.type === 'hole_center' ? (p.trous.find(t => t.id === dim.source.id1)?.x || 0) : 0;
+        x2Src = dim.source.id2 ? (p.trous.find(t => t.id === dim.source.id2)?.x || p.largeur) : p.largeur;
+      }
+      const px1 = dX + x1Src * sc, px2 = dX + x2Src * sc;
+      const isAbove = dim.displayOffset < 0 || (mp1 && mp1.y < p.hauteur / 2);
+      // Stagger: use displayOffset index for spacing
+      const offsetIdx = allDims.filter(dd => dd.type === 'horizontal').indexOf(dim);
+      const yOff = isAbove
+        ? dY - 3.5 - offsetIdx * 3.5
+        : dY + dH + 3.5 + offsetIdx * 3.5;
+
+      // Extension lines (dashed)
+      d.setLineDashPattern([0.4, 0.3], 0);
+      d.line(px1, isAbove ? dY : dY + dH, px1, yOff);
+      d.line(px2, isAbove ? dY : dY + dH, px2, yOff);
+      d.setLineDashPattern([], 0);
+      // Dimension line
+      d.line(px1, yOff, px2, yOff);
+      // Arrows (small triangles)
+      drawPDFArrow(d, px1, yOff, 'right', col);
+      drawPDFArrow(d, px2, yOff, 'left', col);
+      // Tick marks
+      d.line(px1, yOff - 1, px1, yOff + 1);
+      d.line(px2, yOff - 1, px2, yOff + 1);
+      // Value label (white box background)
+      const midPx = (px1 + px2) / 2;
+      const label = fmtV(dim.value) + (dim.tolerance ? ` +${dim.tolerance.plus}/-${dim.tolerance.minus}` : '');
+      const labelW = d.getTextWidth(label) + 1.5;
+      d.setFillColor(255, 255, 255); d.rect(midPx - labelW / 2, yOff - 2.2, labelW, 3, 'F');
+      d.text(label, midPx, yOff + 0.2, { align: 'center' });
+    }
+
+    else if (dim.type === 'vertical') {
+      let y1Src: number, y2Src: number;
+      if (mp1 && mp2) { y1Src = Math.min(mp1.y, mp2.y); y2Src = Math.max(mp1.y, mp2.y); }
+      else { y1Src = 0; y2Src = p.hauteur; }
+      const py1 = dY + y1Src * sc, py2 = dY + y2Src * sc;
+      const isLeft = dim.displayOffset < 0 || (mp1 && mp1.x < p.largeur / 2);
+      const offsetIdx = allDims.filter(dd => dd.type === 'vertical').indexOf(dim);
+      const xOff = isLeft
+        ? dX - 3.5 - offsetIdx * 3.5
+        : dX + dW + 3.5 + offsetIdx * 3.5;
+
+      // Extension lines
+      d.setLineDashPattern([0.4, 0.3], 0);
+      d.line(isLeft ? dX : dX + dW, py1, xOff, py1);
+      d.line(isLeft ? dX : dX + dW, py2, xOff, py2);
+      d.setLineDashPattern([], 0);
+      // Dimension line
+      d.line(xOff, py1, xOff, py2);
+      // Arrows
+      drawPDFArrow(d, xOff, py1, 'down', col);
+      drawPDFArrow(d, xOff, py2, 'up', col);
+      // Tick marks
+      d.line(xOff - 1, py1, xOff + 1, py1);
+      d.line(xOff - 1, py2, xOff + 1, py2);
+      // Value label (rotated -90°)
+      const midPy = (py1 + py2) / 2;
+      const label = fmtV(dim.value);
+      // jsPDF text rotation: use save/restore + translate + rotate
+      d.saveGraphicsState();
+      // White background box (drawn at rotated coords)
+      const labelW = d.getTextWidth(label) + 1.5;
+      d.setFillColor(255, 255, 255);
+      d.rect(xOff - 1.5, midPy - labelW / 2, 3, labelW, 'F');
+      // Draw text rotated
+      const textOpts = { angle: 90, align: 'center' as const };
+      d.text(label, xOff + 0.2, midPy, textOpts);
+      d.restoreGraphicsState();
+    }
+
+    else if (dim.type === 'distance' && mp1 && mp2) {
+      const px1 = dX + mp1.x * sc, py1 = dY + mp1.y * sc;
+      const px2 = dX + mp2.x * sc, py2 = dY + mp2.y * sc;
+      const angle = Math.atan2(py2 - py1, px2 - px1);
+      const perpOff = 3;
+      const nx = -Math.sin(angle) * perpOff, ny = Math.cos(angle) * perpOff;
+      // Extension
+      d.setLineDashPattern([0.4, 0.3], 0);
+      d.line(px1, py1, px1 + nx, py1 + ny);
+      d.line(px2, py2, px2 + nx, py2 + ny);
+      d.setLineDashPattern([], 0);
+      // Dim line
+      d.line(px1 + nx, py1 + ny, px2 + nx, py2 + ny);
+      // Value
+      const midX = (px1 + px2) / 2 + nx, midY = (py1 + py2) / 2 + ny;
+      const label = fmtV(dim.value);
+      const labelW = d.getTextWidth(label) + 1.5;
+      d.setFillColor(255, 255, 255); d.rect(midX - labelW / 2, midY - 2, labelW, 3, 'F');
+      d.text(label, midX, midY + 0.3, { align: 'center' });
+    }
+
+    else if (dim.type === 'radius') {
+      const trou = p.trous.find(t => t.id === dim.source.id1);
+      if (!trou) return;
+      const cx = dX + trou.x * sc, cy = dY + trou.y * sc;
+      const label = `∅${fmtV(dim.value)}`;
+      // Leader line
+      d.setLineWidth(0.08);
+      d.line(cx, cy, cx + 6, cy - 3);
+      d.line(cx + 6, cy - 3, cx + 12, cy - 3);
+      // Label
+      d.setFillColor(255, 255, 255);
+      const labelW = d.getTextWidth(label) + 1;
+      d.rect(cx + 6, cy - 5, labelW, 3, 'F');
+      d.text(label, cx + 6.5, cy - 2.8);
+    }
+  });
+
+  // Position cursor after the drawing
+  const drawingBottom = dY + dH + 12 + allDims.filter(dd => dd.type === 'horizontal' && (dd.displayOffset >= 0 || (dd as any)._manual)).length * 3.5;
+  pdf.y = Math.max(drawingBottom, dY + dH + 10);
+
+  // ─── Nomenclature ───
   pdf.section('Nomenclature');
   pdf.info([['Réf', p.reference], ['Matière', mc.nom], ['Ép.', `${p.epaisseur}mm`],
     ['Finition', FINITIONS.find(f => f.id === p.finition)?.nom || 'Brut'], ['Statut', p.statut]], 3);
 
   if (p.plis.length > 0) {
     pdf.section('Pliage');
-    pdf.table(['#', 'Pos', 'Angle', 'Ri', 'Dir', 'BA', 'Force'],
+    pdf.table(['#', 'Pos', 'Angle', 'Ri', 'Dir', 'BA', 'Force', 'Vé'],
       p.plis.map((x, i) => [
-        String(i + 1), String(x.position), `${x.angle}°`, String(x.rayonInterne),
+        String(i + 1), `${x.position}mm`, `${x.angle}°`, `${x.rayonInterne}mm`,
         x.direction === 'haut' ? '↑' : '↓',
-        bendAllowance(x.rayonInterne, p.epaisseur, x.angle, getKFactor(p.matiere, x.rayonInterne, p.epaisseur)).toFixed(2),
+        bendAllowance(x.rayonInterne, p.epaisseur, x.angle, getKFactor(p.matiere, x.rayonInterne, p.epaisseur)).toFixed(2) + 'mm',
         `${bendingForce(p.hauteur, p.epaisseur, p.matiere, recommendedVOpening(p.epaisseur), x.angle).toFixed(1)}t`,
+        `V${recommendedVOpening(p.epaisseur)}`,
       ]));
   }
   if (p.trous.length > 0) {
     pdf.section('Perçages');
-    pdf.table(['#', 'Type', 'X', 'Y', '∅'], p.trous.map((t, i) => [String(i + 1), t.type, String(t.x), String(t.y), String(t.diametre)]));
+    pdf.table(['#', 'Type', 'X', 'Y', '∅', 'Dist. bord min'], p.trous.map((t, i) => {
+      const dL = t.x - t.diametre / 2, dR = p.largeur - t.x - t.diametre / 2;
+      const dT = t.y - t.diametre / 2, dB = p.hauteur - t.y - t.diametre / 2;
+      const minDist = Math.min(dL, dR, dT, dB);
+      return [String(i + 1), t.type, `${t.x}mm`, `${t.y}mm`, `∅${t.diametre}`, `${minDist.toFixed(1)}mm${minDist < p.epaisseur * 2 ? ' ⚠' : ''}`];
+    }));
   }
+
+  // ─── Tableau récapitulatif des cotes ───
+  if (allDims.length > 0) {
+    pdf.section('Cotations');
+    pdf.table(['#', 'Type', 'Valeur', 'Tolérance', 'Source'],
+      allDims.map((dim, i) => [
+        String(i + 1),
+        dim.type === 'horizontal' ? 'Horiz.' : dim.type === 'vertical' ? 'Vert.' : dim.type === 'radius' ? 'Diamètre' : 'Distance',
+        `${fmtV(dim.value)}mm`,
+        dim.tolerance ? `+${dim.tolerance.plus}/-${dim.tolerance.minus}` : '—',
+        (dim as any)._manual ? 'Manuelle' : dim.source.type === 'edge' ? 'Encombrement' : dim.source.type === 'hole_center' ? 'Entraxe' : dim.source.type === 'bend' ? 'Pli' : dim.source.type,
+      ]));
+  }
+
   if (p.remarques) { pdf.section('Remarques'); pdf.noteBox(p.remarques); }
   pdf.save(`Plan-${p.reference}-${fmtDate(new Date(), 'yyyyMMdd')}.pdf`);
+}
+
+/** Dessiner une flèche de cotation dans le PDF */
+function drawPDFArrow(d: any, x: number, y: number, direction: 'left' | 'right' | 'up' | 'down', col: { r: number; g: number; b: number }) {
+  d.setFillColor(col.r, col.g, col.b);
+  const s = 0.8;
+  switch (direction) {
+    case 'right': d.triangle(x, y, x + s, y - s * 0.5, x + s, y + s * 0.5, 'F'); break;
+    case 'left': d.triangle(x, y, x - s, y - s * 0.5, x - s, y + s * 0.5, 'F'); break;
+    case 'down': d.triangle(x, y, x - s * 0.5, y + s, x + s * 0.5, y + s, 'F'); break;
+    case 'up': d.triangle(x, y, x - s * 0.5, y - s, x + s * 0.5, y - s, 'F'); break;
+  }
 }
