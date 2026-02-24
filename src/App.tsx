@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { Layout } from '@/components/Layout';
@@ -32,13 +32,18 @@ import { useRealtimeSubscriptions } from '@/hooks/useRealtimeSubscriptions';
 import { supabase } from '@/services/supabase';
 import type { Session } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+// ═══ SÉCURITÉ : Timeout d'inactivité ═══
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll'] as const;
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
-      staleTime: 1000 * 60 * 2, // 2 minutes (réduit car temps réel)
+      staleTime: 1000 * 60 * 2,
     },
   },
 });
@@ -101,7 +106,6 @@ function AppContent() {
     }
   };
 
-  // Styles du Toaster selon le thème
   const toastStyles = theme === 'dark' 
     ? {
         background: '#27272a',
@@ -141,12 +145,53 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <div className="text-center">
-        <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-        <p className="text-slate-400">Chargement...</p>
+        <Loader2 className="w-12 h-12 text-[#B91C1C] animate-spin mx-auto mb-4" />
+        <p className="text-slate-400">Chargement…</p>
       </div>
     </div>
   );
 }
+
+// ═══ HOOK : Session timeout par inactivité ═══
+
+function useInactivityTimeout(session: Session | null) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleLogout = useCallback(async () => {
+    if (!session) return;
+    try {
+      await supabase.auth.signOut();
+      toast('Session expirée par inactivité', { icon: '🔒', duration: 5000 });
+    } catch {
+      // signOut échoue silencieusement si déjà déconnecté
+    }
+  }, [session]);
+
+  const resetTimer = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (session) {
+      timerRef.current = setTimeout(handleLogout, INACTIVITY_TIMEOUT_MS);
+    }
+  }, [session, handleLogout]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    // Reset au montage
+    resetTimer();
+
+    // Écouter les événements d'activité
+    const handler = () => resetTimer();
+    ACTIVITY_EVENTS.forEach(evt => window.addEventListener(evt, handler, { passive: true }));
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      ACTIVITY_EVENTS.forEach(evt => window.removeEventListener(evt, handler));
+    };
+  }, [session, resetTimer]);
+}
+
+// ═══ APP PRINCIPALE ═══
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -160,24 +205,36 @@ export default function App() {
     });
 
     // Écouter les changements d'authentification
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+
+      // Déconnexion forcée si le token est invalidé
+      if (event === 'TOKEN_REFRESHED' && !session) {
+        setSession(null);
+      }
+      if (event === 'SIGNED_OUT') {
+        // Vider le cache React Query à la déconnexion
+        queryClient.clear();
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Afficher l'écran de chargement pendant la vérification de session
+  // Timeout d'inactivité
+  useInactivityTimeout(session);
+
+  // Écran de chargement
   if (loading) {
     return <LoadingScreen />;
   }
 
-  // Si pas de session, afficher la page d'authentification
+  // Pas authentifié → page de connexion
   if (!session) {
     return <AuthPage onAuthSuccess={() => {}} />;
   }
 
-  // Utilisateur authentifié
+  // Authentifié
   return (
     <QueryClientProvider client={queryClient}>
       <RealtimeProvider>
