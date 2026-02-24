@@ -28,6 +28,10 @@ import { format, formatDistanceToNow, parseISO, differenceInHours, differenceInD
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { IoTStatusDot, IoTStatusInline, IoTStatusPanel } from '@/components/integrations/IoTStatusBadge';
+import {
+  getEnsembleLabel, getCauseLabel, getPannesLabel, getPanneDisplayLabel,
+  getEnsembleColor, getEnsembleIcon,
+} from '@/services/progiliftCodes';
 
 // =============================================
 // CONFIGURATION SYNC API
@@ -1109,9 +1113,9 @@ function PanneDetailModal({ panne, onClose }: { panne: any; onClose: () => void 
                 <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                   <Wrench className="w-4 h-4 text-orange-400" /> Type de panne
                 </h3>
-                <p className="text-sm font-medium">{typePanne}</p>
+                <p className="text-sm font-medium">{typePanne ? getPannesLabel(typePanne) : typePanne}</p>
                 {ensemble && (
-                  <p className="text-xs text-[var(--text-muted)] mt-1">Ensemble : {ensemble}</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">{getEnsembleIcon(ensemble)} Ensemble : {getEnsembleLabel(ensemble)}</p>
                 )}
               </div>
             )}
@@ -1155,7 +1159,7 @@ function PanneDetailModal({ panne, onClose }: { panne: any; onClose: () => void 
               <Badge variant="gray">Secteur {panne.secteur}</Badge>
               {panne.marque && <Badge variant="gray">{panne.marque}</Badge>}
               {panne.type_planning && <Badge variant="blue">{panne.type_planning}</Badge>}
-              {causeCode && <Badge variant="orange">Cause {causeCode}</Badge>}
+              {causeCode && <Badge variant="orange">{getCauseLabel(causeCode)}</Badge>}
             </div>
           </div>
         </CardBody>
@@ -2188,7 +2192,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     const heureFinInter = formatHeureHHMM(data.HRFININTER);
     const technicien = data.DEPANNEUR || data.CLEPERSO || item.depanneur;
     const notes = decodeHtml(data.NOTE2);
-    const motif = data.Libelle || data.PANNES || item.motif;
+    const motif = data.Libelle || (data.PANNES ? getPannesLabel(data.PANNES) : null) || item.motif;
     
     return (
       <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
@@ -2326,7 +2330,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
         {typePanne && (
           <div className="mb-3 p-3 bg-orange-500/10 rounded-lg border border-orange-500/20">
             <p className="text-xs text-orange-400 mb-1">Type de panne:</p>
-            <p className="text-sm text-[var(--text-secondary)]">{typePanne}</p>
+            <p className="text-sm text-[var(--text-secondary)]">{getPannesLabel(typePanne)}</p>
           </div>
         )}
         
@@ -2349,8 +2353,8 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
           {causeCode && (
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-[var(--text-muted)]" />
-              <span className="text-[var(--text-muted)]">Code cause:</span>
-              <span className="font-medium">{causeCode}</span>
+              <span className="text-[var(--text-muted)]">Cause:</span>
+              <span className="font-medium">{getCauseLabel(causeCode)}</span>
             </div>
           )}
         </div>
@@ -2413,7 +2417,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     const heureFinInter = formatHeureHHMM(data.HRFININTER);
     const technicien = data.DEPANNEUR || data.CLEPERSO || item.depanneur;
     const notes = decodeHtml(data.NOTE2);
-    const motif = data.Libelle || data.PANNES || item.motif;
+    const motif = data.Libelle || (data.PANNES ? getPannesLabel(data.PANNES) : null) || item.motif;
     
     return (
       <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
@@ -2872,7 +2876,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                                 {data.CAUSE && (
                                   <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
                                     <p className="text-xs text-[var(--text-muted)]">Cause</p>
-                                    <p className="font-medium">{data.CAUSE}</p>
+                                    <p className="font-medium">{getCauseLabel(data.CAUSE)}</p>
                                   </div>
                                 )}
                                 {rawData.motif && (
@@ -2897,13 +2901,13 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                                   {data.ENSEMBLE && (
                                     <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
                                       <p className="text-xs text-[var(--text-muted)]">Ensemble</p>
-                                      <p className="font-medium">{data.ENSEMBLE}</p>
+                                      <p className="font-medium">{getEnsembleIcon(data.ENSEMBLE)} {getEnsembleLabel(data.ENSEMBLE)}</p>
                                     </div>
                                   )}
                                   {data.ORGANE && (
                                     <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
                                       <p className="text-xs text-[var(--text-muted)]">Organe</p>
-                                      <p className="font-medium">{data.ORGANE}</p>
+                                      <p className="font-medium">{getEnsembleLabel(data.ORGANE)}</p>
                                     </div>
                                   )}
                                 </div>
@@ -2959,16 +2963,45 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                   // Statistiques de l'ascenseur
                   const totalInterventions = visites.length + controles.length + pannes.length;
                   
-                  // Pannes par type (ensemble/organe)
-                  const pannesParType: Record<string, number> = {};
+                  // Pannes par type de panne (champ PANNES = "Type de panne")
+                  const pannesParType: Record<string, { count: number; code: string; ensembleCode: string }> = {};
                   pannes.forEach((p: any) => {
                     const data = p.data_wpanne || {};
-                    const ensemble = data.ENSEMBLE || data.PANNES || 'Non défini';
-                    pannesParType[ensemble] = (pannesParType[ensemble] || 0) + 1;
+                    // Clé de regroupement : PANNES d'abord, puis ENSEMBLE, puis motif
+                    const rawPannes = data.PANNES != null ? String(data.PANNES).trim() : '';
+                    const rawEnsemble = data.ENSEMBLE != null ? String(data.ENSEMBLE).trim() : '';
+                    
+                    // Résoudre le libellé
+                    let label: string;
+                    let code = rawPannes || rawEnsemble || '?';
+                    let ensCode = rawEnsemble;
+                    
+                    if (rawPannes) {
+                      label = getPannesLabel(rawPannes);
+                      // Si getPannesLabel retourne "Type X" c'est un code inconnu
+                      // → enrichir avec ENSEMBLE si disponible
+                      if (label.startsWith('Type ') && /^\d+$/.test(rawPannes) && rawEnsemble) {
+                        const eLabel = getEnsembleLabel(rawEnsemble);
+                        if (!eLabel.startsWith('Ensemble ')) {
+                          label = `${label} — ${eLabel}`;
+                        }
+                      }
+                    } else if (rawEnsemble) {
+                      label = getEnsembleLabel(rawEnsemble);
+                      code = rawEnsemble;
+                    } else {
+                      label = getPanneDisplayLabel(data, p.motif);
+                      code = '?';
+                    }
+                    
+                    if (!pannesParType[label]) {
+                      pannesParType[label] = { count: 0, code, ensembleCode: ensCode };
+                    }
+                    pannesParType[label].count++;
                   });
                   const topPanneTypes = Object.entries(pannesParType)
-                    .sort(([,a], [,b]) => b - a)
-                    .slice(0, 5);
+                    .sort(([,a], [,b]) => b.count - a.count)
+                    .slice(0, 8);
                   
                   // Détection de pannes récurrentes (même type dans les 6 derniers mois)
                   const sixMonthsAgo = new Date();
@@ -2989,8 +3022,21 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                   const pannesRecentesParType: Record<string, number> = {};
                   pannesRecentes.forEach((p: any) => {
                     const data = p.data_wpanne || {};
-                    const ensemble = data.ENSEMBLE || data.PANNES || 'Non défini';
-                    pannesRecentesParType[ensemble] = (pannesRecentesParType[ensemble] || 0) + 1;
+                    const rawPannes = data.PANNES != null ? String(data.PANNES).trim() : '';
+                    const rawEnsemble = data.ENSEMBLE != null ? String(data.ENSEMBLE).trim() : '';
+                    let label: string;
+                    if (rawPannes) {
+                      label = getPannesLabel(rawPannes);
+                      if (label.startsWith('Type ') && /^\d+$/.test(rawPannes) && rawEnsemble) {
+                        const eLabel = getEnsembleLabel(rawEnsemble);
+                        if (!eLabel.startsWith('Ensemble ')) label = `${label} — ${eLabel}`;
+                      }
+                    } else if (rawEnsemble) {
+                      label = getEnsembleLabel(rawEnsemble);
+                    } else {
+                      label = getPanneDisplayLabel(data, p.motif);
+                    }
+                    pannesRecentesParType[label] = (pannesRecentesParType[label] || 0) + 1;
                   });
                   
                   const pannesRecurrentes = Object.entries(pannesRecentesParType)
@@ -3103,20 +3149,28 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                             Types de pannes les plus fréquents
                           </h4>
                           <div className="space-y-2">
-                            {topPanneTypes.map(([type, count], idx) => {
-                              const maxCount = topPanneTypes[0][1] as number;
+                            {topPanneTypes.map(([label, info], idx) => {
+                              const maxCount = (topPanneTypes[0][1] as any).count;
+                              const { count, code, ensembleCode } = info as any;
+                              const color = ensembleCode ? getEnsembleColor(ensembleCode) : '#EA580C';
+                              const icon = ensembleCode ? getEnsembleIcon(ensembleCode) : '🔧';
                               return (
-                                <div key={type} className="flex items-center gap-3">
-                                  <span className="text-sm w-6 font-bold text-[var(--text-muted)]">#{idx + 1}</span>
+                                <div key={label} className="flex items-center gap-3">
+                                  <span className="text-sm w-6 text-center">{icon}</span>
                                   <div className="flex-1">
                                     <div className="flex items-center justify-between mb-1">
-                                      <span className="text-sm truncate">{type}</span>
-                                      <span className="text-sm font-semibold">{count}</span>
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="text-sm truncate">{label}</span>
+                                        {code && code !== '?' && (
+                                          <span className="text-[10px] text-[var(--text-muted)] font-mono flex-shrink-0">({code})</span>
+                                        )}
+                                      </div>
+                                      <span className="text-sm font-bold flex-shrink-0 ml-2" style={{ color }}>{count}</span>
                                     </div>
                                     <div className="w-full bg-[var(--bg-secondary)] rounded-full h-2">
                                       <div 
-                                        className="h-full bg-orange-500 rounded-full"
-                                        style={{ width: `${(count / maxCount) * 100}%` }}
+                                        className="h-full rounded-full transition-all"
+                                        style={{ width: `${(count / maxCount) * 100}%`, backgroundColor: color }}
                                       ></div>
                                     </div>
                                   </div>
@@ -4289,7 +4343,7 @@ export function ParcAscenseursPage() {
                       
                       {panneType && (
                         <div className="p-2 bg-orange-500/10 rounded-lg border border-orange-500/20 mb-2">
-                          <p className="text-sm truncate">{panneType}</p>
+                          <p className="text-sm truncate">{getPannesLabel(panneType)}</p>
                         </div>
                       )}
                       
