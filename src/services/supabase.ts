@@ -12,6 +12,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    flowType: 'pkce',                        // PKCE flow (plus sécurisé que implicit)
+    storageKey: 'auvergne-tech-auth',        // Namespace dédié (évite collisions)
+    storage: localStorage,                    // Explicite
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'auvergne-tech-app',  // Identifier le client côté serveur
+    },
+  },
+  db: {
+    schema: 'public',
   },
 });
 
