@@ -7,14 +7,18 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Radio, AlertTriangle, Wifi, WifiOff, Activity,
-  ArrowRight, CheckCircle2, XCircle, Wrench, Loader2,
+  ArrowRight, CheckCircle2, Loader2,
   TrendingUp, TrendingDown, Minus,
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
+import { cn } from '@/lib/utils';
 import {
   isConnectedToSigma4, getLifts, getSigma4Session,
   Sigma4Lift,
 } from '@/services/sigma4liftsApi';
+import {
+  getEstadoInfo, isConnected as isEstadoConnected, isOperational, hasProblem, getEstadoPriority,
+} from '@/services/sigma4LiftStates';
 import { fullSigma4Sync } from '@/services/sigma4SyncService';
 import { WidgetWrapper } from './widgets';
 import { Badge } from '@/components/ui';
@@ -44,12 +48,12 @@ export function IoTFleetWidget({ onRemove }: { onRemove?: () => void }) {
 
   const stats = useMemo(() => {
     if (!lifts) return null;
-    const active = lifts.filter(l => !l.baja && l.estado < 90); // Exclure sans connexion / résiliés
+    const active = lifts.filter(l => !l.baja && isEstadoConnected(l.estado));
     return {
       total: active.length,
-      ok: active.filter(l => l.estado >= 0 && l.estado <= 9).length,
-      arret: active.filter(l => (l.estado >= 10 && l.estado <= 19) || (l.estado >= 60 && l.estado <= 89)).length,
-      maintenance: active.filter(l => (l.estado >= 20 && l.estado <= 39) || (l.estado >= 40 && l.estado <= 59)).length,
+      ok: active.filter(l => isOperational(l.estado)).length,
+      arret: active.filter(l => hasProblem(l.estado)).length,
+      maintenance: active.filter(l => !isOperational(l.estado) && !hasProblem(l.estado)).length,
     };
   }, [lifts]);
 
@@ -160,38 +164,10 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
   const problemLifts = useMemo(() => {
     if (!lifts) return [];
     return lifts
-      .filter(l => !l.baja && l.estado !== 0 && l.estado < 90)
-      .sort((a, b) => {
-        const prio = (e: number) => {
-          if (e >= 10 && e <= 19 || e >= 60 && e <= 69) return 0;
-          return 2;
-        };
-        return prio(a.estado) - prio(b.estado);
-      })
+      .filter(l => !l.baja && !isOperational(l.estado) && isEstadoConnected(l.estado))
+      .sort((a, b) => getEstadoPriority(a.estado) - getEstadoPriority(b.estado))
       .slice(0, 6);
   }, [lifts]);
-
-  const getStatusInfo = (estado: number) => {
-    switch (estado) {
-      case 0: return { label: 'En marche (0)', color: '#059669', icon: CheckCircle2, pulse: false };
-      case 1: return { label: 'SOS (1)', color: '#DC2626', icon: XCircle, pulse: true };
-      case 7: return { label: 'Reset position (7)', color: '#CA8A04', icon: AlertTriangle, pulse: false };
-      case 8: return { label: 'MES (8)', color: '#3B82F6', icon: Wrench, pulse: false };
-      case 10: return { label: 'Arrêté (10)', color: '#DC2626', icon: XCircle, pulse: true };
-      case 15: return { label: 'Panne (15)', color: '#DC2626', icon: XCircle, pulse: true };
-      case 20: return { label: 'Maintenance (20)', color: '#8B5CF6', icon: Wrench, pulse: false };
-      case 90: return { label: 'Sans connexion (90)', color: '#EA580C', icon: WifiOff, pulse: false };
-      case 91: return { label: 'Résilié (91)', color: '#64748B', icon: AlertTriangle, pulse: false };
-      default:
-        if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, color: '#059669', icon: CheckCircle2, pulse: false };
-        if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, color: '#DC2626', icon: XCircle, pulse: true };
-        if (estado >= 20 && estado <= 39) return { label: `Maintenance (${estado})`, color: '#8B5CF6', icon: Wrench, pulse: false };
-        if (estado >= 40 && estado <= 59) return { label: `Hors service (${estado})`, color: '#64748B', icon: AlertTriangle, pulse: false };
-        if (estado >= 60 && estado <= 89) return { label: `Urgence (${estado})`, color: '#DC2626', icon: XCircle, pulse: true };
-        if (estado >= 90) return { label: `Déconnecté (${estado})`, color: '#EA580C', icon: WifiOff, pulse: false };
-        return { label: `État (${estado})`, color: '#64748B', icon: AlertTriangle, pulse: false };
-    }
-  };
 
   if (!connected) {
     return (
@@ -213,15 +189,13 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
       ) : (
         <div className="space-y-1.5">
           {problemLifts.map(lift => {
-            const status = getStatusInfo(lift.estado);
-            const Icon = status.icon;
+            const status = getEstadoInfo(lift.estado);
             return (
               <div key={lift.id}
-                className="flex items-center gap-2.5 p-2 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] transition-colors">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0`}
+                className={cn('flex items-center gap-2.5 p-2 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] transition-colors', status.pulse && 'animate-pulse')}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-sm"
                   style={{ backgroundColor: `${status.color}15` }}>
-                  <Icon className={`w-3.5 h-3.5 ${status.pulse ? 'animate-pulse' : ''}`}
-                    style={{ color: status.color }} />
+                  {status.icon}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-[var(--text-primary)] truncate">{lift.liftCompRef}</p>
@@ -229,14 +203,14 @@ export function IoTAlertsWidget({ onRemove }: { onRemove?: () => void }) {
                 </div>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0"
                   style={{ backgroundColor: `${status.color}15`, color: status.color }}>
-                  {status.label}
+                  {status.short}
                 </span>
               </div>
             );
           })}
-          {lifts && lifts.filter(l => !l.baja && l.estado !== 0 && l.estado < 90).length > 6 && (
+          {lifts && lifts.filter(l => !l.baja && !isOperational(l.estado) && isEstadoConnected(l.estado)).length > 6 && (
             <p className="text-[10px] text-center text-[var(--text-muted)]">
-              +{lifts.filter(l => !l.baja && l.estado !== 0 && l.estado < 90).length - 6} autres alertes
+              +{lifts.filter(l => !l.baja && !isOperational(l.estado) && isEstadoConnected(l.estado)).length - 6} autres alertes
             </p>
           )}
         </div>
@@ -278,10 +252,10 @@ export function IoTAvailabilityWidget({ onRemove }: { onRemove?: () => void }) {
 
   const stats = useMemo(() => {
     if (!lifts) return null;
-    const active = lifts.filter(l => !l.baja && l.estado < 90);
+    const active = lifts.filter(l => !l.baja && isEstadoConnected(l.estado));
     const total = active.length;
     if (total === 0) return null;
-    const ok = active.filter(l => l.estado >= 0 && l.estado <= 9).length;
+    const ok = active.filter(l => isOperational(l.estado)).length;
     const rate = (ok / total) * 100;
 
     // Tendance basée sur les alertes
