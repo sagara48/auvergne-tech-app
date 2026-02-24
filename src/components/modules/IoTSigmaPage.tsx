@@ -32,6 +32,12 @@ import {
   lookupSuceso, lookupAviso,
   SEVERITY_LEVELS, CAUSA_CATEGORIES, S4LErrorCode, SeverityKey, S4LApiErrorEntry,
 } from '@/services/sigma4ErrorCodes';
+import {
+  getEstadoInfo, getLiftState, getEstadoPriority,
+  isCategory, isConnected, hasProblem, isOperational, isUrgent,
+  CATEGORY_COLORS, CODES_BY_CATEGORY, getLiftStateOptions,
+  EstadoCategory,
+} from '@/services/sigma4LiftStates';
 
 // ═══ TABS ═══
 type Tab = 'dashboard' | 'lifts' | 'monitor' | 'catalog';
@@ -275,20 +281,11 @@ function DashboardTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => vo
   const problemLifts = useMemo(() => {
     if (!lifts) return [];
     return lifts
-      .filter(l => !l.baja && l.estado !== 0 && l.estado < 90)
-      .sort((a, b) => {
-        const priority = (e: number) => {
-          if (e >= 10 && e <= 19 || e >= 60 && e <= 61) return 0;
-          if (e >= 20 && e <= 32) return 1;
-          if (e >= 40 && e <= 51) return 2;
-          if (e >= 70 && e <= 80) return 3;
-          return 5;
-        };
-        return priority(a.estado) - priority(b.estado) || a.liftCompRef.localeCompare(b.liftCompRef);
-      });
+      .filter(l => !l.baja && !isOperational(l.estado) && isConnected(l.estado))
+      .sort((a, b) => getEstadoPriority(a.estado) - getEstadoPriority(b.estado) || a.liftCompRef.localeCompare(b.liftCompRef));
   }, [lifts]);
 
-  const totalLifts = lifts?.filter(l => !l.baja && l.estado < 90).length || 0;
+  const totalLifts = lifts?.filter(l => !l.baja && isConnected(l.estado)).length || 0;
 
   if (isLoading) return <LoadingState text="Chargement dashboard Sigma4..." />;
   if (error) return <ErrorState error={error} onRetry={() => qc.invalidateQueries({ queryKey: ['sigma4', 'dashboard'] })} />;
@@ -312,16 +309,18 @@ function DashboardTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => vo
               {problemLifts.map(lift => {
                 const st = getEstadoInfo(lift.estado);
                 return (
-                  <div key={lift.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors">
-                    <div className="w-1.5 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                  <div key={lift.id} className={cn('flex items-center gap-3 p-2.5 rounded-xl bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors', st.pulse && 'animate-pulse')}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-base" style={{ backgroundColor: st.color + '15' }}>
+                      {st.icon}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-extrabold text-[var(--text-primary)]">{lift.liftCompRef}</span>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: st.color + '18', color: st.color }}>{st.label}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: st.color + '18', color: st.color }}>{st.short}</span>
                         {lift.en8128 && <Shield className="w-3 h-3 text-[#059669]" />}
                       </div>
                       <p className="text-xs text-[var(--text-muted)] truncate">
-                        {[lift.city, lift.descripcion].filter(Boolean).join(' · ') || '—'}
+                        {st.label} · {[lift.city, lift.descripcion].filter(Boolean).join(' · ') || '—'}
                       </p>
                     </div>
                     <button onClick={() => onOpenMonitor(lift.id)}
@@ -410,10 +409,13 @@ function LiftsTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => void }
     else if (statusFilter === 'en8128_ko') list = list.filter(l => !l.en8128);
     else if (statusFilter === 'has_coords') list = list.filter(l => l.latitude !== 0 && l.longitude !== 0);
     else if (statusFilter === 'no_group') list = list.filter(l => l.groups.length === 0);
-    else if (statusFilter === 'anomalie') list = list.filter(l => l.estado !== 0);
-    else if (statusFilter === 'arrets') list = list.filter(l => l.estado >= 10 && l.estado <= 19 || l.estado >= 60 && l.estado <= 61);
-    else if (statusFilter === 'maintenance') list = list.filter(l => l.estado >= 20 && l.estado <= 32);
-    else if (statusFilter === 'hors_service') list = list.filter(l => l.estado >= 40 && l.estado <= 51);
+    else if (statusFilter === 'anomalie') list = list.filter(l => !isOperational(l.estado) && isConnected(l.estado));
+    else if (statusFilter === 'critique') list = list.filter(l => isCategory(l.estado, 'critique'));
+    else if (statusFilter === 'attention') list = list.filter(l => isCategory(l.estado, 'attention'));
+    else if (statusFilter === 'special') list = list.filter(l => isCategory(l.estado, 'special'));
+    else if (statusFilter === 'information') list = list.filter(l => isCategory(l.estado, 'information'));
+    else if (statusFilter === 'connexion') list = list.filter(l => isCategory(l.estado, 'connexion'));
+    else if (statusFilter === 'urgent') list = list.filter(l => isUrgent(l.estado));
     else if (statusFilter.startsWith('estado_')) {
       const code = Number(statusFilter.split('_')[1]);
       list = list.filter(l => l.estado === code);
@@ -476,16 +478,35 @@ function LiftsTab({ onOpenMonitor }: { onOpenMonitor: (liftId: number) => void }
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
           className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-sm outline-none min-w-0">
           <option value="all">Tous statuts</option>
-          <option value="estado_0">En marche</option>
+          <option value="estado_0">✅ Normal (0)</option>
           <option value="anomalie">⚠ Toutes anomalies</option>
-          <option value="arrets">Arrêtés / Urgences</option>
-          <option value="maintenance">Maintenance / Inspection</option>
-          <option value="hors_service">Hors service / Test</option>
-          <option value="estado_90">Sans connexion</option>
-          <option value="en8128_ok">EN 81-28 ✓</option>
-          <option value="en8128_ko">EN 81-28 ✗</option>
-          <option value="has_coords">Géolocalisés</option>
-          <option value="no_group">Sans groupe</option>
+          <option value="urgent">🆘 Urgences (priorité 0-1)</option>
+          <optgroup label="── Par catégorie ──">
+            <option value="critique">🔴 Critique</option>
+            <option value="attention">⚠️ Attention</option>
+            <option value="special">🔧 Spécial / Maintenance</option>
+            <option value="information">ℹ️ Information</option>
+            <option value="connexion">📡 Connexion</option>
+          </optgroup>
+          <optgroup label="── Codes fréquents ──">
+            <option value="estado_1">🆘 Secours (1)</option>
+            <option value="estado_9">🔥 Incendies (9)</option>
+            <option value="estado_15">❌ Panne (15)</option>
+            <option value="estado_50">⛔ Hors service (50)</option>
+            <option value="estado_2">⚠️ Normal + anomalie (2)</option>
+            <option value="estado_17">⏸️ Indisponible (17)</option>
+            <option value="estado_22">🔧 Maintenance (22)</option>
+            <option value="estado_3">🔍 Inspection toit (3)</option>
+            <option value="estado_27">🕳️ Inspection cuvette (27)</option>
+            <option value="estado_90">📡 Sans connexion (90)</option>
+            <option value="estado_91">⚙️ Pas de données (91)</option>
+          </optgroup>
+          <optgroup label="── Filtres techniques ──">
+            <option value="en8128_ok">EN 81-28 ✓</option>
+            <option value="en8128_ko">EN 81-28 ✗</option>
+            <option value="has_coords">Géolocalisés</option>
+            <option value="no_group">Sans groupe</option>
+          </optgroup>
         </select>
         <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
           className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-sm outline-none min-w-0">
@@ -531,19 +552,21 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
   const status = getEstadoInfo(lift.estado);
 
   return (
-    <Card className={cn('transition-all', isExpanded && 'ring-1 ring-[#059669]/30')}>
+    <Card className={cn('transition-all', isExpanded && 'ring-1 ring-[#059669]/30', status.pulse && 'border-l-2')} style={status.pulse ? { borderLeftColor: status.color } : undefined}>
       <CardBody className="p-0">
         {/* Summary Row */}
         <div className="flex items-center gap-2 p-2">
-          {/* Status indicator bar */}
-          <div className={cn('w-1 h-8 rounded-full flex-shrink-0')}
-            style={{ backgroundColor: status.color }} />
+          {/* Status icon */}
+          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-sm', status.pulse && 'animate-pulse')}
+            style={{ backgroundColor: status.color + '15' }}>
+            {status.icon}
+          </div>
 
           {/* Main info — clickable to expand */}
           <button onClick={onToggle} className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-extrabold text-[var(--text-primary)]">{lift.liftCompRef}</span>
-              <span className="px-1 py-0.5 rounded-md text-sm font-bold" style={{ backgroundColor: status.color + '18', color: status.color }}>{status.label}</span>
+              <span className="px-1 py-0.5 rounded-md text-sm font-bold" style={{ backgroundColor: status.color + '18', color: status.color }}>{status.short}</span>
               {lift.groups.map(g => (
                 <span key={g.id} className="px-1.5 py-0.5 rounded-full bg-[#3B82F6]/10 text-sm font-bold text-[#3B82F6]">
                   {g.groupName}
@@ -601,7 +624,7 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
               <DetailItem label="Version SW" value={lift.versionSW || '—'} />
               <DetailItem label="Accès PV" value={lift.accesoPv ? 'Oui' : 'Non'} />
               <DetailItem label="CCID" value={lift.ccid ? `...${lift.ccid.slice(-8)}` : '—'} />
-              <DetailItem label="État (código)" value={`${getEstadoInfo(lift.estado).label} (${lift.estado})`} />
+              <DetailItem label="État (código)" value={`${getEstadoInfo(lift.estado).icon} ${getEstadoInfo(lift.estado).label} (${lift.estado})`} color={getEstadoInfo(lift.estado).color} />
             </div>
 
             {/* Network info (if available) */}
@@ -664,11 +687,11 @@ function LiftCard({ lift, isExpanded, onToggle, onOpenMonitor }: { lift: Sigma4L
   );
 }
 
-function DetailItem({ label, value }: { label: string; value: string }) {
+function DetailItem({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div>
       <p className="text-xs text-[var(--text-muted)] font-semibold uppercase">{label}</p>
-      <p className="text-sm font-bold text-[var(--text-primary)] truncate">{value}</p>
+      <p className="text-sm font-bold truncate" style={{ color: color || 'var(--text-primary)' }}>{value}</p>
     </div>
   );
 }
@@ -981,9 +1004,15 @@ function MonitorTab({ selectedLiftId, onLiftChange, onBackToLifts }: {
 
         {/* Lift info */}
         <div className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: status.color }} />
+          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-sm', status.pulse && 'animate-pulse')}
+            style={{ backgroundColor: status.color + '15' }}>
+            {status.icon}
+          </div>
           <div>
-            <h3 className="text-sm font-extrabold text-[var(--text-primary)] leading-tight">{selectedLift.liftCompRef}</h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-extrabold text-[var(--text-primary)] leading-tight">{selectedLift.liftCompRef}</h3>
+              <span className="px-1.5 py-0.5 rounded-md text-xs font-bold" style={{ backgroundColor: status.color + '18', color: status.color }}>{status.short}</span>
+            </div>
             <p className="text-xs text-[var(--text-muted)] leading-tight">{selectedLift.city}{selectedLift.city && selectedLift.descripcion ? ' · ' : ''}{selectedLift.descripcion}</p>
           </div>
         </div>
@@ -2723,28 +2752,7 @@ function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void })
 
 // ═══ HELPERS ═══
 
-function getEstadoInfo(estado: number): { label: string; color: string } {
-  switch (estado) {
-    case 0: return { label: 'En marche (0)', color: '#059669' };
-    case 1: return { label: 'SOS (1)', color: '#DC2626' };
-    case 7: return { label: 'Reset de position (7)', color: '#CA8A04' };
-    case 8: return { label: 'MES (8)', color: '#3B82F6' };
-    case 10: return { label: 'Arrêté (10)', color: '#DC2626' };
-    case 15: return { label: 'Panne (15)', color: '#DC2626' };
-    case 20: return { label: 'Maintenance (20)', color: '#8B5CF6' };
-    case 90: return { label: 'Sans connexion (90)', color: '#EA580C' };
-    case 91: return { label: 'Résilié (91)', color: '#64748B' };
-    default:
-      console.warn(`[Sigma4] Estado inconnu: ${estado}`);
-      if (estado >= 1 && estado <= 9) return { label: `Opérationnel (${estado})`, color: '#059669' };
-      if (estado >= 10 && estado <= 19) return { label: `Arrêté (${estado})`, color: '#DC2626' };
-      if (estado >= 20 && estado <= 39) return { label: `Maintenance (${estado})`, color: '#8B5CF6' };
-      if (estado >= 40 && estado <= 59) return { label: `Hors service (${estado})`, color: '#64748B' };
-      if (estado >= 60 && estado <= 89) return { label: `Urgence (${estado})`, color: '#DC2626' };
-      if (estado >= 90) return { label: `Déconnecté (${estado})`, color: '#EA580C' };
-      return { label: `État (${estado})`, color: '#64748B' };
-  }
-}
+// getEstadoInfo importé depuis @/services/sigma4LiftStates
 
 function getTipoEnlaceLabel(tipo: number): string {
   switch (tipo) {
