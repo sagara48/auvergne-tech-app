@@ -8,7 +8,7 @@ import type { PieceConfig, StatutFabrication } from './tolerie';
 function dbToPiece(row: any): PieceConfig {
   return {
     id: row.id, created_at: row.created_at, updated_at: row.updated_at,
-    technicien_id: row.technicien_id, travaux_id: row.travaux_id,
+    technicien_id: row.technicien_id, travaux_id: row.travaux_id, mise_en_service_id: row.mise_en_service_id,
     statut: row.statut || 'brouillon',
     statut_historique: row.statut_historique || [],
     matiere: row.matiere, epaisseur: row.epaisseur, finition: row.finition,
@@ -22,7 +22,7 @@ function dbToPiece(row: any): PieceConfig {
 
 function pieceToDb(p: PieceConfig) {
   return {
-    technicien_id: p.technicien_id, travaux_id: p.travaux_id,
+    technicien_id: p.technicien_id, travaux_id: p.travaux_id, mise_en_service_id: p.mise_en_service_id,
     statut: p.statut, statut_historique: p.statut_historique,
     matiere: p.matiere, epaisseur: p.epaisseur, finition: p.finition,
     forme_base: p.formeBase, largeur: p.largeur, hauteur: p.hauteur,
@@ -48,6 +48,11 @@ export async function getPiecesByTravaux(travauxId: string): Promise<PieceConfig
   if (error) throw error; return (data || []).map(dbToPiece);
 }
 
+export async function getPiecesByMes(mesId: string): Promise<PieceConfig[]> {
+  const { data, error } = await supabase.from('tolerie_pieces').select('*').eq('mise_en_service_id', mesId).order('created_at', { ascending: false });
+  if (error) throw error; return (data || []).map(dbToPiece);
+}
+
 export async function createPiece(piece: PieceConfig): Promise<PieceConfig> {
   const { data: { user } } = await supabase.auth.getUser();
   const dbData = { ...pieceToDb(piece), technicien_id: piece.technicien_id || user?.id };
@@ -60,7 +65,7 @@ export async function updatePiece(id: string, piece: Partial<PieceConfig>): Prom
   const map: Record<string, string> = { matiere: 'matiere', epaisseur: 'epaisseur', finition: 'finition', formeBase: 'forme_base',
     largeur: 'largeur', hauteur: 'hauteur', brancheL: 'branche_l', profondeurU: 'profondeur_u', decalageZ: 'decalage_z',
     plis: 'plis', trous: 'trous', encoches: 'encoches', chanfreins: 'chanfreins', marquages: 'marquages', annotations: 'annotations',
-    nom: 'nom', reference: 'reference', quantite: 'quantite', remarques: 'remarques', travaux_id: 'travaux_id',
+    nom: 'nom', reference: 'reference', quantite: 'quantite', remarques: 'remarques', travaux_id: 'travaux_id', mise_en_service_id: 'mise_en_service_id',
     statut: 'statut', statut_historique: 'statut_historique' };
   Object.entries(map).forEach(([k, col]) => { if ((piece as any)[k] !== undefined) updates[col] = (piece as any)[k]; });
   const { data, error } = await supabase.from('tolerie_pieces').update(updates).eq('id', id).select().single();
@@ -94,6 +99,11 @@ export async function getPiecesMultiple(ids: string[]): Promise<PieceConfig[]> {
 
 export async function getTravauxListe(): Promise<{ id: string; code: string; titre: string }[]> {
   const { data, error } = await supabase.from('travaux').select('id, code, titre').order('created_at', { ascending: false }).limit(50);
+  if (error) throw error; return data || [];
+}
+
+export async function getMesListe(): Promise<{ id: string; code: string; ascenseur_id?: string; statut: string; date_prevue?: string }[]> {
+  const { data, error } = await supabase.from('mise_en_service').select('id, code, ascenseur_id, statut, date_prevue').order('date_prevue', { ascending: false }).limit(50);
   if (error) throw error; return data || [];
 }
 
