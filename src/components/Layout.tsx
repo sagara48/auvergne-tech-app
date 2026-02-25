@@ -25,7 +25,6 @@ import {
   Settings,
   Shield,
   Wrench,
-  Route,
   Search,
   Scissors,
   Radio,
@@ -61,7 +60,6 @@ const NAV_GROUPS = [
       { id: 'planning', name: 'Planning', icon: Calendar },
       { id: 'travaux', name: 'Travaux', icon: Hammer },
       { id: 'miseservice', name: 'Mise en service', icon: FileCheck },
-      { id: 'tournees', name: 'Tournées', icon: Route },
       { id: 'tolerie', name: 'Atelier Tôlerie', icon: Scissors },
     ],
   },
@@ -72,7 +70,6 @@ const NAV_GROUPS = [
       { id: 'controles', name: 'Contrôles Techniques', icon: Shield },
       { id: 'iot', name: 'IoT Sigma4Lifts', icon: Radio },
       { id: 'vehicules', name: 'Véhicules', icon: Car },
-      { id: 'nfc', name: 'QR Codes', icon: QrCode },
     ],
   },
   {
@@ -105,7 +102,7 @@ const allModules = NAV_GROUPS.flatMap(g => g.items);
 
 export function Layout({ children }: LayoutProps) {
   const { moduleActif, setModuleActif, user, theme, toggleTheme } = useAppStore();
-  const [showNFCScan, setShowNFCScan] = useState(false);
+  const [showQRScan, setShowQRScan] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { isOnline } = useOnlineStatus();
   
@@ -126,7 +123,7 @@ export function Layout({ children }: LayoutProps) {
   useEffect(() => { initAlertService(); }, []);
 
   const toggleSidebar = () => setSidebarCollapsed(!sidebarCollapsed);
-  const openScanner = () => setShowNFCScan(true);
+  const openScanner = () => setShowQRScan(true);
   
   useKeyboardShortcuts();
   useStockAlerts();
@@ -431,8 +428,8 @@ export function Layout({ children }: LayoutProps) {
       </main>
 
       <PanierDrawer />
-      {showNFCScan && (
-        <QRScanner fullScreen autoStart onClose={() => setShowNFCScan(false)} />
+      {showQRScan && (
+        <QRScanner fullScreen autoStart onClose={() => setShowQRScan(false)} />
       )}
       <GlobalSearch />
     </div>
