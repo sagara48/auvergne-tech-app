@@ -35,7 +35,7 @@ import {
 import FreeDrawCanvas from '@/components/integrations/FreeDrawCanvas';
 import {
   getPieces, createPiece, updatePiece, deletePiece, creerCommandeDepuisPiece,
-  changerStatut, getTravauxListe, subscribeToPiece, subscribeCursors, broadcastCursor,
+  changerStatut, getTravauxListe, getMesListe, subscribeToPiece, subscribeCursors, broadcastCursor,
 } from '@/services/tolerieApi';
 import {
   buildScene, detectCollisions, telechargerSTEP, isARAvailable, startARSession,
@@ -154,6 +154,7 @@ export default function AtelierToleriePage() {
   // DB (must be above useEffects that reference savedPieces)
   const { data: savedPieces = [] } = useQuery({ queryKey: ['tolerie-pieces'], queryFn: getPieces, enabled: showSaved });
   const { data: travauxList = [] } = useQuery({ queryKey: ['travaux-list'], queryFn: getTravauxListe });
+  const { data: mesList = [] } = useQuery({ queryKey: ['mes-list'], queryFn: getMesListe });
 
   // Feature 53: Cache server pieces locally when online
   useEffect(() => { if (online && savedPieces.length > 0) cacheAllPieces(savedPieces).catch(() => {}); }, [savedPieces, online]);
@@ -310,7 +311,7 @@ export default function AtelierToleriePage() {
       {/* CONTENT */}
       <div className="flex-1 flex gap-2.5 min-h-0">
         <div className="w-[290px] flex-shrink-0 overflow-y-auto space-y-1.5 pr-0.5">
-          {step === 1 && <Step1 piece={piece} update={update} reset={reset} matConfig={matConfig} travauxList={travauxList} />}
+          {step === 1 && <Step1 piece={piece} update={update} reset={reset} matConfig={matConfig} travauxList={travauxList} mesList={mesList} />}
           {step === 2 && <Step2 piece={piece} update={update} />}
           {step === 3 && <Step3 piece={piece} update={update} selPli={selectedPli} setSelPli={setSelectedPli} selTrou={selectedTrou} setSelTrou={setSelectedTrou} issues={issues} />}
           {step === 4 && <Step4 piece={piece} update={update} matConfig={matConfig} issues={issues} onCmd={() => cmdMut.mutate(piece)} saved={savedPieces} />}
@@ -404,7 +405,8 @@ export default function AtelierToleriePage() {
           <span>Dév <b className="font-mono">{longueurDeveloppee(piece).toFixed(1)}</b>mm</span>
           <span><b className="font-mono">{poidsEstime(piece).toFixed(3)}</b>kg</span>
           <span>{piece.plis.length}P {piece.trous.length}T {piece.encoches.length}E {piece.marquages.length}M</span>
-          {piece.travaux_id && <span className="text-[#3B82F6]">🔗 Travaux lié</span>}
+          {piece.travaux_id && <span className="text-[#3B82F6]">🔗 Travaux</span>}
+          {piece.mise_en_service_id && <span className="text-[#10B981]">🔗 MES</span>}
         </div>
         <button onClick={() => step < 4 && setStep(step + 1)} disabled={step === 4} className="flex items-center gap-0.5 px-2.5 py-1 rounded text-[9px] font-semibold bg-[#B91C1C] text-white disabled:opacity-20">Suiv. <ChevronRight className="w-2.5 h-2.5" /></button>
       </div>
@@ -414,7 +416,7 @@ export default function AtelierToleriePage() {
 
 // ═══ STEP 1 — MATIÈRE + BIBLIO + TRAVAUX (26) ═══
 
-function Step1({ piece, update, reset, matConfig, travauxList }: { piece: PieceConfig; update: (p: Partial<PieceConfig>) => void; reset: (p: PieceConfig) => void; matConfig: MatiereConfig; travauxList: { id: string; code: string; titre: string }[] }) {
+function Step1({ piece, update, reset, matConfig, travauxList, mesList }: { piece: PieceConfig; update: (p: Partial<PieceConfig>) => void; reset: (p: PieceConfig) => void; matConfig: MatiereConfig; travauxList: { id: string; code: string; titre: string }[]; mesList: { id: string; code: string; ascenseur_id?: string; statut: string; date_prevue?: string }[] }) {
   const [showLib, setShowLib] = useState(false);
   const [showIA, setShowIA] = useState(false);
   const [iaText, setIAText] = useState('');
@@ -483,14 +485,24 @@ function Step1({ piece, update, reset, matConfig, travauxList }: { piece: PieceC
         <p className="text-[6px] text-[var(--text-muted)] text-center">Ctrl+Entrée pour générer • Claude Sonnet 4</p>
       </div>}
     </CardBody></Card>
-    {/* Feature 26: Travaux link */}
-    <Card><CardBody className="p-2">
-      <div className="flex items-center gap-1.5 mb-1"><Link2 className="w-3 h-3 text-[#3B82F6]" /><p className="text-[9px] font-bold">Rattacher à un travaux</p></div>
-      <select value={piece.travaux_id || ''} onChange={e => update({ travaux_id: e.target.value || undefined })}
-        className="w-full px-2 py-1 text-[9px] bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded focus:border-[#B91C1C] focus:outline-none">
-        <option value="">— Aucun —</option>
-        {travauxList.map(t => <option key={t.id} value={t.id}>{t.code} — {t.titre}</option>)}
-      </select>
+    {/* Feature 26: Travaux + Mise en service link */}
+    <Card><CardBody className="p-2 space-y-2">
+      <div>
+        <div className="flex items-center gap-1.5 mb-1"><Link2 className="w-3 h-3 text-[#3B82F6]" /><p className="text-[9px] font-bold">Rattacher à un travaux</p></div>
+        <select value={piece.travaux_id || ''} onChange={e => update({ travaux_id: e.target.value || undefined })}
+          className="w-full px-2 py-1 text-[9px] bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded focus:border-[#B91C1C] focus:outline-none">
+          <option value="">— Aucun —</option>
+          {travauxList.map(t => <option key={t.id} value={t.id}>{t.code} — {t.titre}</option>)}
+        </select>
+      </div>
+      <div>
+        <div className="flex items-center gap-1.5 mb-1"><Link2 className="w-3 h-3 text-[#10B981]" /><p className="text-[9px] font-bold">Rattacher à une mise en service</p></div>
+        <select value={piece.mise_en_service_id || ''} onChange={e => update({ mise_en_service_id: e.target.value || undefined })}
+          className="w-full px-2 py-1 text-[9px] bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded focus:border-[#10B981] focus:outline-none">
+          <option value="">— Aucune —</option>
+          {mesList.map(m => <option key={m.id} value={m.id}>{m.code}{m.date_prevue ? ` — ${m.date_prevue.slice(0,10)}` : ''} ({m.statut})</option>)}
+        </select>
+      </div>
     </CardBody></Card>
 
     <button onClick={() => setShowLib(!showLib)} className={cn('w-full flex items-center gap-1.5 p-2 rounded border', showLib ? 'bg-[var(--accent-bg)] border-[#B91C1C]/20 text-[#B91C1C]' : 'border-[var(--border-secondary)] text-[var(--text-secondary)]')}>
