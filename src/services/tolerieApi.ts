@@ -102,8 +102,8 @@ export async function getTravauxListe(): Promise<{ id: string; code: string; tit
   if (error) throw error; return data || [];
 }
 
-export async function getMesListe(): Promise<{ id: string; code: string; ascenseur_id?: string; statut: string; date_prevue?: string }[]> {
-  const { data, error } = await supabase.from('mise_en_service').select('id, code, ascenseur_id, statut, date_prevue').order('date_prevue', { ascending: false }).limit(50);
+export async function getMesListe(): Promise<{ id: string; device_number: string; site_name: string; status: string; manufacturer?: string; model?: string }[]> {
+  const { data, error } = await supabase.from('mise_en_service').select('id, device_number, site_name, status, manufacturer, model').order('updated_at', { ascending: false }).limit(50);
   if (error) throw error; return data || [];
 }
 
