@@ -416,7 +416,7 @@ export default function AtelierToleriePage() {
 
 // ═══ STEP 1 — MATIÈRE + BIBLIO + TRAVAUX (26) ═══
 
-function Step1({ piece, update, reset, matConfig, travauxList, mesList }: { piece: PieceConfig; update: (p: Partial<PieceConfig>) => void; reset: (p: PieceConfig) => void; matConfig: MatiereConfig; travauxList: { id: string; code: string; titre: string }[]; mesList: { id: string; code: string; ascenseur_id?: string; statut: string; date_prevue?: string }[] }) {
+function Step1({ piece, update, reset, matConfig, travauxList, mesList }: { piece: PieceConfig; update: (p: Partial<PieceConfig>) => void; reset: (p: PieceConfig) => void; matConfig: MatiereConfig; travauxList: { id: string; code: string; titre: string }[]; mesList: { id: string; device_number: string; site_name: string; status: string; manufacturer?: string; model?: string }[] }) {
   const [showLib, setShowLib] = useState(false);
   const [showIA, setShowIA] = useState(false);
   const [iaText, setIAText] = useState('');
@@ -500,7 +500,7 @@ function Step1({ piece, update, reset, matConfig, travauxList, mesList }: { piec
         <select value={piece.mise_en_service_id || ''} onChange={e => update({ mise_en_service_id: e.target.value || undefined })}
           className="w-full px-2 py-1 text-[9px] bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded focus:border-[#10B981] focus:outline-none">
           <option value="">— Aucune —</option>
-          {mesList.map(m => <option key={m.id} value={m.id}>{m.code || m.id.slice(0,8)}{m.date_prevue ? ` — ${m.date_prevue.slice(0,10)}` : ''}{m.statut ? ` (${m.statut})` : ''}</option>)}
+          {mesList.map(m => <option key={m.id} value={m.id}>{m.device_number} — {m.site_name} ({m.status})</option>)}
         </select>
       </div>
     </CardBody></Card>
