@@ -1,0 +1,21 @@
+export { PlanningPage } from './PlanningPage';
+export { TravauxPage } from './TravauxPage';
+export { MiseEnServicePage } from './MiseEnServicePage';
+export { TourneesPage } from './TourneesPage';
+export { AscenseursPage } from './AscenseursPage';
+export { ParcAscenseursPage } from './ParcAscenseursPage';
+export { StockPage } from './StockPage';
+export { VehiculesPage } from './VehiculesPage';
+export { DemandesPage } from './DemandesPage';
+export { GEDPage } from './GEDPage';
+export { ChatPage, ContextChat } from './ChatPage';
+export { NotesPage, NoteFormModal, ContextNotes } from './NotesPage';
+export { ArchivesPage, ArchiveModal } from './ArchivesPage';
+export { CommandesPage } from './CommandesPage';
+export { AdminPage } from './AdminPage';
+export { PiecesPage } from './PiecesPage';
+export { StockMouvements } from './StockMouvements';
+export { default as AtelierToleriePage } from './AtelierToleriePage';
+export { ControlesPage } from './ControlesPage';
+export { IoTSigmaPage } from './IoTSigmaPage';
+
