@@ -500,7 +500,7 @@ function Step1({ piece, update, reset, matConfig, travauxList, mesList }: { piec
         <select value={piece.mise_en_service_id || ''} onChange={e => update({ mise_en_service_id: e.target.value || undefined })}
           className="w-full px-2 py-1 text-[9px] bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded focus:border-[#10B981] focus:outline-none">
           <option value="">— Aucune —</option>
-          {mesList.map(m => <option key={m.id} value={m.id}>{m.code}{m.date_prevue ? ` — ${m.date_prevue.slice(0,10)}` : ''} ({m.statut})</option>)}
+          {mesList.map(m => <option key={m.id} value={m.id}>{m.code || m.id.slice(0,8)}{m.date_prevue ? ` — ${m.date_prevue.slice(0,10)}` : ''}{m.statut ? ` (${m.statut})` : ''}</option>)}
         </select>
       </div>
     </CardBody></Card>
