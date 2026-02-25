@@ -8,10 +8,12 @@ import {
   LayoutGrid, List, Filter, MoreVertical, RefreshCw, FileCheck,
   Wrench, Cable, Lock, Ruler, Weight, Layers, Box, CheckSquare,
   XCircle, MinusCircle, HelpCircle, Save, ClipboardCheck, BadgeCheck,
-  Building, Phone, FileWarning
+  Building, Phone, FileWarning, Package
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Select, Input, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
+import { getPiecesByMes } from '@/services/tolerieApi';
+import { STATUTS_FABRICATION } from '@/services/tolerie';
 import { ContextChat } from './ChatPage';
 import { ContextNotes } from './NotesPage';
 import { ArchiveModal } from './ArchivesPage';
@@ -778,6 +780,11 @@ function AppareilDetailModal({ appareil, onClose, onEdit, onArchive, onRefresh }
   const [showBC, setShowBC] = useState(false);
   const queryClient = useQueryClient();
 
+  const { data: piecesTolerie = [], isLoading: loadingTolerie } = useQuery({
+    queryKey: ['tolerie-mes', appareil.id],
+    queryFn: () => getPiecesByMes(appareil.id),
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: async (newStatus: string) => { const { error } = await supabase.from('mise_en_service').update({ status: newStatus }).eq('id', appareil.id); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['mise-en-service'] }); onRefresh(); toast.success('Statut mis à jour'); },
@@ -785,7 +792,7 @@ function AppareilDetailModal({ appareil, onClose, onEdit, onArchive, onRefresh }
   });
 
   const statusInfo = getStatusInfo(appareil.status);
-  const tabs = [{ id: 'info', label: 'Informations', icon: FileText }, { id: 'technique', label: 'Technique', icon: Settings }, { id: 'checklist', label: 'Checklist', icon: ClipboardList }, { id: 'bc', label: 'Bureau Contrôle', icon: BadgeCheck }];
+  const tabs = [{ id: 'info', label: 'Informations', icon: FileText }, { id: 'technique', label: 'Technique', icon: Settings }, { id: 'tolerie', label: `Tôlerie${piecesTolerie.length ? ` (${piecesTolerie.length})` : ''}`, icon: Package }, { id: 'checklist', label: 'Checklist', icon: ClipboardList }, { id: 'bc', label: 'Bureau Contrôle', icon: BadgeCheck }];
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -801,6 +808,38 @@ function AppareilDetailModal({ appareil, onClose, onEdit, onArchive, onRefresh }
             {activeTab === 'info' && (<div className="space-y-4"><div className="grid grid-cols-2 gap-4"><div className="p-4 bg-[var(--bg-tertiary)] rounded-xl"><h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Building2 className="w-4 h-4" /> Identification</h3><div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-[var(--text-muted)]">Fabricant</span><span className="font-medium">{appareil.manufacturer || '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Modèle</span><span className="font-medium">{appareil.model || '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Type</span><span className="font-medium">{TYPES_APPAREIL.find(t => t.value === appareil.elevator_type)?.label || '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Bâtiment</span><span className="font-medium">{TYPES_BATIMENT.find(t => t.value === appareil.building_type)?.label || '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Année</span><span className="font-medium">{appareil.installation_year || '-'}</span></div></div></div><div className="p-4 bg-[var(--bg-tertiary)] rounded-xl"><h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Gauge className="w-4 h-4" /> Caractéristiques</h3><div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-[var(--text-muted)]">Charge</span><span className="font-medium">{appareil.load_capacity ? `${appareil.load_capacity} kg` : '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Vitesse</span><span className="font-medium">{appareil.speed ? `${appareil.speed} m/s` : '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Course</span><span className="font-medium">{appareil.course ? `${appareil.course} m` : '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Niveaux</span><span className="font-medium">{appareil.levels_count || '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Accès</span><span className="font-medium">{appareil.access_count || 1}</span></div></div></div></div>{appareil.notes && <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl"><h3 className="text-sm font-semibold mb-2">Notes</h3><p className="text-sm whitespace-pre-wrap">{appareil.notes}</p></div>}<ContextChat contextType="mise_service" contextId={appareil.id} contextLabel={appareil.device_number} /><ContextNotes contextType="mise_service" contextId={appareil.id} contextLabel={appareil.device_number} /></div>)}
             {activeTab === 'technique' && (<div className="space-y-4"><div className="grid grid-cols-2 gap-4"><div className="p-4 bg-[var(--bg-tertiary)] rounded-xl"><h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Ruler className="w-4 h-4" /> Dimensions</h3><div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-[var(--text-muted)]">Cabine</span><span>{appareil.cabin_dimensions || '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Cuvette</span><span>{appareil.pit_depth ? `${appareil.pit_depth} m` : '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Passage tête</span><span>{appareil.headroom ? `${appareil.headroom} m` : '-'}</span></div></div></div><div className="p-4 bg-[var(--bg-tertiary)] rounded-xl"><h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Cable className="w-4 h-4" /> Suspension</h3><div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-[var(--text-muted)]">Câbles</span><span>{appareil.cables_count ? `${appareil.cables_count} x ${appareil.cables_diameter || '?'} mm` : '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Mouflage</span><span>{appareil.suspension_ratio || '-'}</span></div></div></div></div><div className="grid grid-cols-2 gap-4"><div className="p-4 bg-[var(--bg-tertiary)] rounded-xl"><h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Sécurités</h3><div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-[var(--text-muted)]">Parachute</span><span>{appareil.parachute_type || '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Serrures</span><span>{appareil.lock_type || '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Alarme</span><span>{appareil.alarm_system || '-'}</span></div></div></div><div className="p-4 bg-[var(--bg-tertiary)] rounded-xl"><h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Wrench className="w-4 h-4" /> Machine</h3><div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-[var(--text-muted)]">Puissance</span><span>{appareil.motor_power ? `${appareil.motor_power} kW` : '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Type</span><span>{appareil.motor_type || '-'}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Variateur</span><span>{appareil.variator_type || '-'}</span></div></div></div></div></div>)}
             {activeTab === 'checklist' && (<div className="text-center py-8"><ClipboardList className="w-16 h-16 mx-auto mb-4 text-[var(--text-muted)] opacity-50" /><h3 className="text-lg font-semibold mb-2">Checklist d'inspection COPREC</h3><p className="text-sm text-[var(--text-muted)] mb-4">{CHECKLIST_COPREC.length} points de contrôle</p><Button variant="primary" onClick={() => setShowChecklist(true)}><ClipboardList className="w-4 h-4" /> Ouvrir la checklist</Button></div>)}
+            {activeTab === 'tolerie' && (<div className="space-y-3">
+              {loadingTolerie && <div className="text-center py-8"><Loader2 className="w-8 h-8 mx-auto animate-spin text-orange-400" /></div>}
+              {!loadingTolerie && piecesTolerie.length === 0 && (
+                <div className="text-center py-8">
+                  <Package className="w-16 h-16 mx-auto mb-4 text-[var(--text-muted)] opacity-50" />
+                  <h3 className="text-lg font-semibold mb-2">Aucune pièce tôlerie</h3>
+                  <p className="text-sm text-[var(--text-muted)]">Les pièces rattachées à cette MES depuis l'atelier tôlerie apparaîtront ici.</p>
+                </div>
+              )}
+              {!loadingTolerie && piecesTolerie.length > 0 && piecesTolerie.map(p => {
+                const statutInfo = STATUTS_FABRICATION.find(s => s.id === p.statut);
+                return (
+                  <div key={p.id} className="p-3 bg-[var(--bg-tertiary)] rounded-xl flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+                      <Package className="w-5 h-5 text-orange-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-bold text-orange-400">{p.reference}</span>
+                        {statutInfo && <Badge style={{ backgroundColor: statutInfo.couleur }} className="text-white text-[10px]">{statutInfo.icon} {statutInfo.nom}</Badge>}
+                      </div>
+                      <p className="text-sm font-medium truncate">{p.nom}</p>
+                      <p className="text-xs text-[var(--text-muted)]">{p.matiere} — ép. {p.epaisseur}mm — {p.largeur}×{p.hauteur}mm — ×{p.quantite}</p>
+                    </div>
+                    <div className="text-right text-xs text-[var(--text-muted)] flex-shrink-0">
+                      <div>{p.plis.length}P {p.trous.length}T</div>
+                      {p.updated_at && <div>{new Date(p.updated_at).toLocaleDateString('fr-FR')}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>)}
             {activeTab === 'bc' && (<div className="text-center py-8"><BadgeCheck className="w-16 h-16 mx-auto mb-4 text-[var(--text-muted)] opacity-50" /><h3 className="text-lg font-semibold mb-2">Bureau de Contrôle</h3><p className="text-sm text-[var(--text-muted)] mb-4">Gérez les rapports et réserves BC</p><Button variant="primary" onClick={() => setShowBC(true)}><BadgeCheck className="w-4 h-4" /> Ouvrir Bureau Contrôle</Button></div>)}
           </div>
           <div className="p-4 border-t border-[var(--border-primary)] flex gap-3"><Button variant="secondary" className="flex-1" onClick={onClose}>Fermer</Button><Button variant="primary" className="flex-1" onClick={onEdit}><Edit className="w-4 h-4" /> Modifier</Button></div>
