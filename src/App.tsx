@@ -20,7 +20,6 @@ import {
   NotesPage,
   ArchivesPage,
   CommandesPage,
-  NFCPage,
   AdminPage,
   PiecesPage,
   AtelierToleriePage,
@@ -89,8 +88,6 @@ function AppContent() {
         return <ArchivesPage />;
       case 'commandes':
         return <CommandesPage />;
-      case 'nfc':
-        return <NFCPage />;
       case 'pieces':
         return <PiecesPage />;
       case 'tolerie':
