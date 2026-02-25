@@ -8,12 +8,16 @@ import {
   Pause, RotateCcw, Database, Cloud, CloudOff, Loader2, History,
   Server, Wifi, WifiOff, Download, Upload, X, Route, FileDown,
   Navigation, Compass, Globe, MessageSquare, Send, Plus, Minus,
-  FolderOpen, File, Image, FileSpreadsheet, Trash2, Package
+  FolderOpen, File, Image, FileSpreadsheet, Trash2, Package, QrCode, Printer
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
 import { generateRapportMensuel, generateRapportAscenseur } from '@/services/pdfService';
 import { getDocumentsByCodeAscenseur, uploadDocumentForAscenseur } from '@/services/api';
+import {
+  encodeAscenseurQR, qrContentString, generateQRSvg, generateQRDataUrl,
+  printLabels, downloadQRSvg,
+} from '@/services/qrCodeService';
 import { 
   optimizeRoute, 
   generateGoogleMapsUrl, 
@@ -30,7 +34,7 @@ import toast from 'react-hot-toast';
 import { IoTStatusDot, IoTStatusInline, IoTStatusPanel } from '@/components/integrations/IoTStatusBadge';
 import {
   getEnsembleLabel, getCauseLabel, getPannesLabel, getPanneDisplayLabel,
-  getEnsembleColor, getEnsembleIcon,
+  getEnsembleColor, getEnsembleIcon, getPanneGroupKey,
 } from '@/services/progiliftCodes';
 
 // =============================================
@@ -393,6 +397,55 @@ const SYNC_STEPS_FULL: SyncStep[] = [
   })),
   { id: 'step4', label: 'Finalisation', endpoint: '?step=4', status: 'pending' },
 ];
+
+// ═══ HELPER : Couleur et icône par catégorie de motif ═══
+function getMotifStyle(firstWord: string): { color: string; icon: string } {
+  const w = firstWord.toLowerCase();
+  // Portes
+  if (w.includes('porte') || w.includes('door') || w.includes('serrure') || w.includes('verrouil') || w.includes('fermeture') || w.includes('ouverture'))
+    return { color: '#DC2626', icon: '🚪' };
+  // Sélection / manoeuvre / appel
+  if (w.includes('select') || w.includes('sélect') || w.includes('manoeuvre') || w.includes('manoeuv') || w.includes('appel'))
+    return { color: '#8B5CF6', icon: '🔘' };
+  // Machinerie / moteur / treuil / variateur
+  if (w.includes('machin') || w.includes('moteur') || w.includes('treuil') || w.includes('variat') || w.includes('frein'))
+    return { color: '#3B82F6', icon: '⚙️' };
+  // Électrique / alimentation / courant
+  if (w.includes('electr') || w.includes('électr') || w.includes('aliment') || w.includes('courant') || w.includes('tension'))
+    return { color: '#6366F1', icon: '⚡' };
+  // Sécurité / parachute / limiteur
+  if (w.includes('sécur') || w.includes('secur') || w.includes('parachut') || w.includes('limiteur') || w.includes('fin de course'))
+    return { color: '#E11D48', icon: '🛡️' };
+  // Cabine / éclairage / ventilation
+  if (w.includes('cabine') || w.includes('cabin') || w.includes('éclair') || w.includes('ventil') || w.includes('plancher'))
+    return { color: '#059669', icon: '🛗' };
+  // Gaine / guide / câble
+  if (w.includes('gaine') || w.includes('guide') || w.includes('câble') || w.includes('cable') || w.includes('poulie'))
+    return { color: '#64748B', icon: '🏗️' };
+  // Téléalarme / interphone / GSM
+  if (w.includes('télé') || w.includes('tele') || w.includes('interph') || w.includes('gsm') || w.includes('alarme'))
+    return { color: '#F59E0B', icon: '📞' };
+  // Hydraulique
+  if (w.includes('hydrau') || w.includes('huile') || w.includes('vérin'))
+    return { color: '#14B8A6', icon: '💧' };
+  // Signalisation / affichage / bouton
+  if (w.includes('signal') || w.includes('affich') || w.includes('bouton') || w.includes('indicat') || w.includes('display'))
+    return { color: '#0EA5E9', icon: '💡' };
+  // Contrôle / armoire / carte
+  if (w.includes('contrôl') || w.includes('control') || w.includes('armoire') || w.includes('carte'))
+    return { color: '#8B5CF6', icon: '🖥️' };
+  // Nivelage / arrêt / position
+  if (w.includes('nivel') || w.includes('arrêt') || w.includes('arret') || w.includes('position') || w.includes('recal'))
+    return { color: '#CA8A04', icon: '📐' };
+  // Personne bloquée
+  if (w.includes('bloqu') || w.includes('coinc') || w.includes('personne'))
+    return { color: '#DC2626', icon: '🆘' };
+  // Bruit / vibration
+  if (w.includes('bruit') || w.includes('vibra'))
+    return { color: '#EA580C', icon: '🔊' };
+  // Default
+  return { color: '#EA580C', icon: '🔧' };
+}
 
 function SyncModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -2525,6 +2578,27 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 >
                   <FileDown className="w-5 h-5 text-orange-500" />
                 </button>
+                <button
+                  onClick={() => {
+                    const payload = encodeAscenseurQR(ascenseur);
+                    downloadQRSvg(payload);
+                    toast.success('QR Code téléchargé');
+                  }}
+                  className="p-2 hover:bg-cyan-500/20 rounded-lg"
+                  title="Télécharger QR Code"
+                >
+                  <QrCode className="w-5 h-5 text-cyan-400" />
+                </button>
+                <button
+                  onClick={() => {
+                    const payload = encodeAscenseurQR(ascenseur);
+                    printLabels([payload]);
+                  }}
+                  className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"
+                  title="Imprimer étiquette QR"
+                >
+                  <Printer className="w-5 h-5 text-[var(--text-muted)]" />
+                </button>
                 <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -2963,45 +3037,20 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                   // Statistiques de l'ascenseur
                   const totalInterventions = visites.length + controles.length + pannes.length;
                   
-                  // Pannes par type de panne (champ PANNES = "Type de panne")
-                  const pannesParType: Record<string, { count: number; code: string; ensembleCode: string }> = {};
+                  // Pannes par type — regroupement sur les 2 premiers éléments du motif
+                  // Ex: "Selection - Fin de course haut - Détail" → "Selection - Fin de course haut"
+                  const pannesParType: Record<string, { count: number }> = {};
                   pannes.forEach((p: any) => {
                     const data = p.data_wpanne || {};
-                    // Clé de regroupement : PANNES d'abord, puis ENSEMBLE, puis motif
-                    const rawPannes = data.PANNES != null ? String(data.PANNES).trim() : '';
-                    const rawEnsemble = data.ENSEMBLE != null ? String(data.ENSEMBLE).trim() : '';
-                    
-                    // Résoudre le libellé
-                    let label: string;
-                    let code = rawPannes || rawEnsemble || '?';
-                    let ensCode = rawEnsemble;
-                    
-                    if (rawPannes) {
-                      label = getPannesLabel(rawPannes);
-                      // Si getPannesLabel retourne "Type X" c'est un code inconnu
-                      // → enrichir avec ENSEMBLE si disponible
-                      if (label.startsWith('Type ') && /^\d+$/.test(rawPannes) && rawEnsemble) {
-                        const eLabel = getEnsembleLabel(rawEnsemble);
-                        if (!eLabel.startsWith('Ensemble ')) {
-                          label = `${label} — ${eLabel}`;
-                        }
-                      }
-                    } else if (rawEnsemble) {
-                      label = getEnsembleLabel(rawEnsemble);
-                      code = rawEnsemble;
-                    } else {
-                      label = getPanneDisplayLabel(data, p.motif);
-                      code = '?';
-                    }
-                    
+                    const label = getPanneGroupKey(data, p.motif);
                     if (!pannesParType[label]) {
-                      pannesParType[label] = { count: 0, code, ensembleCode: ensCode };
+                      pannesParType[label] = { count: 0 };
                     }
                     pannesParType[label].count++;
                   });
                   const topPanneTypes = Object.entries(pannesParType)
                     .sort(([,a], [,b]) => b.count - a.count)
-                    .slice(0, 8);
+                    .slice(0, 10);
                   
                   // Détection de pannes récurrentes (même type dans les 6 derniers mois)
                   const sixMonthsAgo = new Date();
@@ -3022,20 +3071,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                   const pannesRecentesParType: Record<string, number> = {};
                   pannesRecentes.forEach((p: any) => {
                     const data = p.data_wpanne || {};
-                    const rawPannes = data.PANNES != null ? String(data.PANNES).trim() : '';
-                    const rawEnsemble = data.ENSEMBLE != null ? String(data.ENSEMBLE).trim() : '';
-                    let label: string;
-                    if (rawPannes) {
-                      label = getPannesLabel(rawPannes);
-                      if (label.startsWith('Type ') && /^\d+$/.test(rawPannes) && rawEnsemble) {
-                        const eLabel = getEnsembleLabel(rawEnsemble);
-                        if (!eLabel.startsWith('Ensemble ')) label = `${label} — ${eLabel}`;
-                      }
-                    } else if (rawEnsemble) {
-                      label = getEnsembleLabel(rawEnsemble);
-                    } else {
-                      label = getPanneDisplayLabel(data, p.motif);
-                    }
+                    const label = getPanneGroupKey(data, p.motif);
                     pannesRecentesParType[label] = (pannesRecentesParType[label] || 0) + 1;
                   });
                   
@@ -3151,20 +3187,16 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                           <div className="space-y-2">
                             {topPanneTypes.map(([label, info], idx) => {
                               const maxCount = (topPanneTypes[0][1] as any).count;
-                              const { count, code, ensembleCode } = info as any;
-                              const color = ensembleCode ? getEnsembleColor(ensembleCode) : '#EA580C';
-                              const icon = ensembleCode ? getEnsembleIcon(ensembleCode) : '🔧';
+                              const { count } = info as any;
+                              // Couleur et icône basées sur le 1er mot du motif
+                              const firstWord = label.split(/\s*[-–—]\s*/)[0]?.trim().toLowerCase() || '';
+                              const { color, icon } = getMotifStyle(firstWord);
                               return (
                                 <div key={label} className="flex items-center gap-3">
                                   <span className="text-sm w-6 text-center">{icon}</span>
                                   <div className="flex-1">
                                     <div className="flex items-center justify-between mb-1">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="text-sm truncate">{label}</span>
-                                        {code && code !== '?' && (
-                                          <span className="text-[10px] text-[var(--text-muted)] font-mono flex-shrink-0">({code})</span>
-                                        )}
-                                      </div>
+                                      <span className="text-sm truncate">{label}</span>
                                       <span className="text-sm font-bold flex-shrink-0 ml-2" style={{ color }}>{count}</span>
                                     </div>
                                     <div className="w-full bg-[var(--bg-secondary)] rounded-full h-2">
@@ -3921,6 +3953,15 @@ export function ParcAscenseursPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => {
+              const list = filteredAscenseurs || ascenseurs || [];
+              if (list.length === 0) return toast.error('Aucun ascenseur à imprimer');
+              const payloads = list.map((a: any) => encodeAscenseurQR(a));
+              printLabels(payloads, 'small');
+              toast.success(`${payloads.length} étiquettes QR générées`);
+            }}>
+              <QrCode className="w-4 h-4" /> QR étiquettes
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => setShowGeocodingModal(true)}>
               <Globe className="w-4 h-4" /> GPS
             </Button>
