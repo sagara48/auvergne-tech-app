@@ -11,6 +11,12 @@ export type FormeBase = 'rectangle' | 'L' | 'U' | 'Z' | 'T' | 'custom';
 export type TypeTrou = 'rond' | 'oblong' | 'fraise' | 'taraude';
 export type CoteEncoche = 'haut' | 'bas' | 'gauche' | 'droite';
 
+/** Point 2D pour le contour libre */
+export interface Point2D {
+  x: number;
+  y: number;
+}
+
 export interface MatiereConfig {
   id: Matiere; nom: string; densite: number; kFactor: number;
   couleur: string; couleurDark: string; epaisseurs: number[];
@@ -83,6 +89,8 @@ export interface PieceConfig {
   // Matière
   matiere: Matiere; epaisseur: number; finition: Finition;
   formeBase: FormeBase; largeur: number; hauteur: number;
+  /** Contour libre : liste de sommets du polygone (mm). Si défini, remplace la forme de base. */
+  outline?: Point2D[];
   brancheL?: number; profondeurU?: number; decalageZ?: number;
   plis: Pli[]; trous: Trou[]; encoches: Encoche[];
   chanfreins: Chanfrein[]; marquages: Marquage[]; annotations: Annotation[];
@@ -285,8 +293,21 @@ export function longueurDeveloppee(p: PieceConfig): number {
 export function poidsEstime(p: PieceConfig): number {
   const mat = MATIERES.find(m => m.id === p.matiere);
   if (!mat) return 0;
-  const dev = longueurDeveloppee(p);
-  let surf = (dev * p.hauteur) / 1e6;
+  
+  let surf: number;
+  if (p.outline && p.outline.length >= 3) {
+    // Calcul aire polygone (formule du lacet)
+    let a = 0;
+    for (let i = 0; i < p.outline.length; i++) {
+      const j = (i + 1) % p.outline.length;
+      a += p.outline[i].x * p.outline[j].y - p.outline[j].x * p.outline[i].y;
+    }
+    surf = Math.abs(a / 2) / 1e6; // mm² → m²
+  } else {
+    const dev = longueurDeveloppee(p);
+    surf = (dev * p.hauteur) / 1e6;
+  }
+  
   surf -= p.trous.reduce((s, t) => {
     if (t.type === 'oblong') return s + (Math.PI * (t.diametre / 2) ** 2 + t.diametre * (t.longueurOblong || 0)) / 1e6;
     return s + (Math.PI * (t.diametre / 2) ** 2) / 1e6;
@@ -327,6 +348,18 @@ export function genererPlisFormeBase(forme: FormeBase, w: number, h: number, ep:
 // ═══ CONTOUR SVG ═══
 
 export function genererPathDeveloppe(p: PieceConfig): string {
+  // Si contour libre défini, l'utiliser directement
+  if (p.outline && p.outline.length >= 3) {
+    const pts = p.outline;
+    let path = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      path += ` L ${pts[i].x} ${pts[i].y}`;
+    }
+    path += ' Z';
+    return path;
+  }
+
+  // Sinon : forme rectangle classique avec encoches
   const w = p.largeur, h = p.hauteur;
   const enc = p.encoches || [];
   let path = `M 0 0`;
@@ -584,8 +617,8 @@ export function uid(): string { return Math.random().toString(36).substring(2, 9
 
 export function createDefaultPiece(): PieceConfig {
   return {
-    matiere: 'acier', epaisseur: 2, finition: 'brut', formeBase: 'rectangle',
-    largeur: 200, hauteur: 100, plis: [], trous: [], encoches: [],
+    matiere: 'acier', epaisseur: 2, finition: 'brut', formeBase: 'custom',
+    largeur: 200, hauteur: 100, outline: [], plis: [], trous: [], encoches: [],
     chanfreins: [], marquages: [], annotations: [],
     statut: 'brouillon', statut_historique: [{ statut: 'brouillon', date: new Date().toISOString() }],
     nom: 'Nouvelle pièce', reference: `AT-${Date.now().toString(36).toUpperCase().slice(-6)}`,
