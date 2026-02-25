@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Camera, QrCode, Loader2, AlertCircle, Building2, Package, Box } from 'lucide-react';
 import { Button, Badge, Card, CardBody } from '@/components/ui';
-import { supabase } from '@/services/supabase';
+import { parseQRContent, QRPayload } from '@/services/qrCodeService';
 import { useAppStore } from '@/stores/appStore';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -22,7 +22,7 @@ export function QRScanner({ fullScreen, autoStart, onClose, onScanResult }: QRSc
 
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ data: string; tag: any } | null>(null);
+  const [result, setResult] = useState<{ data: string; payload: QRPayload | null } | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
 
   // Démarrer la caméra
@@ -96,44 +96,30 @@ export function QRScanner({ fullScreen, autoStart, onClose, onScanResult }: QRSc
     };
   }, [cameraReady, scanning]);
 
-  // Recherche du tag dans la DB
+  // Recherche du QR dans le format ATAPP
   const handleScanResult = async (data: string) => {
     stopCamera();
 
-    // Format attendu: "AT-{type}-{id}" ou UID brut
-    let tag = null;
-    try {
-      // Chercher par UID ou par données QR
-      const { data: tagData } = await supabase
-        .from('nfc_tags')
-        .select('*, ascenseur:ascenseur_id(code_appareil, adresse, ville, statut)')
-        .or(`uid.eq.${data},qr_data.eq.${data}`)
-        .maybeSingle();
-      tag = tagData;
-    } catch (e) {
-      console.warn('Tag lookup failed:', e);
-    }
+    // Parser le format ATAPP:type:ref
+    const payload = parseQRContent(data);
 
-    setResult({ data, tag });
+    setResult({ data, payload });
 
-    if (tag) {
-      toast.success(`QR identifié : ${tag.label || tag.type}`);
+    if (payload) {
+      toast.success(`QR identifié : ${payload.type === 'stock' ? 'Article' : 'Ascenseur'} ${payload.ref}`);
     } else {
-      toast.error('QR Code non reconnu dans la base');
+      toast('QR Code non reconnu', { icon: '⚠️' });
     }
 
-    if (onScanResult) onScanResult(data, tag);
+    if (onScanResult) onScanResult(data, payload);
   };
 
   // Navigation vers la fiche
-  const navigateToTag = () => {
-    if (!result?.tag) return;
-    const tag = result.tag;
-    if (tag.type === 'ascenseur' && tag.ascenseur_id) {
+  const navigateToResult = () => {
+    if (!result?.payload) return;
+    if (result.payload.type === 'ascenseur') {
       setModuleActif('ascenseurs');
-    } else if (tag.type === 'article' && tag.article_id) {
-      setModuleActif('stock');
-    } else if (tag.type === 'emplacement') {
+    } else if (result.payload.type === 'stock') {
       setModuleActif('stock');
     }
     onClose();
@@ -146,8 +132,7 @@ export function QRScanner({ fullScreen, autoStart, onClose, onScanResult }: QRSc
 
   const TYPE_INFO: Record<string, { label: string; icon: any; color: string }> = {
     ascenseur: { label: 'Ascenseur', icon: Building2, color: '#06b6d4' },
-    article: { label: 'Article', icon: Package, color: '#B91C1C' },
-    emplacement: { label: 'Emplacement', icon: Box, color: '#f59e0b' },
+    stock: { label: 'Article stock', icon: Package, color: '#B91C1C' },
   };
 
   return (
@@ -218,11 +203,11 @@ export function QRScanner({ fullScreen, autoStart, onClose, onScanResult }: QRSc
             <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-6">
               <Card className="w-full max-w-sm">
                 <CardBody className="space-y-4">
-                  {result.tag ? (
+                  {result.payload ? (
                     <>
                       <div className="flex items-center gap-3">
                         {(() => {
-                          const info = TYPE_INFO[result.tag.type] || TYPE_INFO.emplacement;
+                          const info = TYPE_INFO[result.payload.type] || TYPE_INFO.stock;
                           const Icon = info.icon;
                           return (
                             <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${info.color}20` }}>
@@ -231,18 +216,17 @@ export function QRScanner({ fullScreen, autoStart, onClose, onScanResult }: QRSc
                           );
                         })()}
                         <div>
-                          <div className="text-lg font-bold text-[var(--text-primary)]">{result.tag.label || 'Tag identifié'}</div>
-                          <Badge variant="blue">{TYPE_INFO[result.tag.type]?.label || result.tag.type}</Badge>
+                          <div className="text-lg font-bold text-[var(--text-primary)]">{result.payload.ref}</div>
+                          <Badge variant="blue">{TYPE_INFO[result.payload.type]?.label || result.payload.type}</Badge>
                         </div>
                       </div>
-                      {result.tag.ascenseur && (
+                      {result.payload.label && (
                         <div className="p-3 rounded-lg bg-[var(--bg-tertiary)]">
-                          <div className="text-sm font-semibold text-[var(--text-primary)]">{result.tag.ascenseur.code_appareil}</div>
-                          <div className="text-xs text-[var(--text-tertiary)]">{result.tag.ascenseur.adresse} — {result.tag.ascenseur.ville}</div>
+                          <div className="text-sm text-[var(--text-primary)]">{result.payload.label}</div>
                         </div>
                       )}
                       <div className="flex gap-2">
-                        <Button variant="primary" className="flex-1" onClick={navigateToTag}>
+                        <Button variant="primary" className="flex-1" onClick={navigateToResult}>
                           Ouvrir la fiche
                         </Button>
                         <Button variant="secondary" onClick={() => { setResult(null); startCamera(); }}>
