@@ -159,6 +159,46 @@ export function getPanneDisplayLabel(data: Record<string, any>, motifFallback?: 
   return 'Non défini';
 }
 
+/**
+ * Extrait la clé de regroupement d'un motif de panne.
+ * Format motif Progilift: "Catégorie - Sous-catégorie - Détail..."
+ * → Regroupe sur les 2 premiers segments: "Catégorie - Sous-catégorie"
+ * Exemples:
+ *   "Selection - Fin de course haut - Détail" → "Selection - Fin de course haut"
+ *   "Porte cabine - Fermeture" → "Porte cabine - Fermeture"
+ *   "Panne simple" → "Panne simple"
+ */
+export function getMotifGroupKey(motif: string | null | undefined): string {
+  if (!motif || !motif.trim()) return 'Non défini';
+  const clean = motif.trim();
+
+  // Séparateurs possibles: " - ", " – ", " — "
+  const parts = clean.split(/\s*[-–—]\s*/);
+
+  if (parts.length >= 2) {
+    // Prendre les 2 premiers segments
+    return `${parts[0].trim()} - ${parts[1].trim()}`;
+  }
+
+  // Pas de séparateur → retourner tel quel
+  return clean;
+}
+
+/**
+ * Génère la clé de regroupement complète pour une panne,
+ * en utilisant le motif texte (2 premiers segments) comme clé primaire.
+ */
+export function getPanneGroupKey(data: Record<string, any>, motifFallback?: string): string {
+  // 1. Priorité au motif texte (le plus lisible)
+  const motif = data.Libelle || motifFallback;
+  if (motif && typeof motif === 'string' && motif.trim() && !/^\d+$/.test(motif.trim())) {
+    return getMotifGroupKey(motif);
+  }
+
+  // 2. Fallback sur codes PANNES / ENSEMBLE
+  return getPanneDisplayLabel(data, motifFallback);
+}
+
 /** Couleur par ensemble (pour graphiques) */
 export function getEnsembleColor(code: string | number): string {
   const colors: Record<string, string> = {
