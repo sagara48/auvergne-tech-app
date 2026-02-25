@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Package, Search, AlertTriangle, TrendingDown, TrendingUp, Plus, Minus, 
   ArrowLeftRight, Check, X, Warehouse, ShoppingCart, History, Eye, Edit, 
-  Trash2, Tag, Calendar
+  Trash2, Tag, Calendar, QrCode, Download, Printer
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select } from '@/components/ui';
 import { 
@@ -12,6 +12,10 @@ import {
   deleteStockArticle, getStockCategories, createStockCategorie, updateStockCategorie, deleteStockCategorie,
   getTravauxEnAttentePieces
 } from '@/services/api';
+import {
+  encodeStockQR, qrContentString, generateQRSvg, generateQRDataUrl,
+  printLabels, downloadQRSvg,
+} from '@/services/qrCodeService';
 import { STATUT_TRANSFERT_CONFIG } from '@/types';
 import { AddToPanierModal } from '@/components/Panier';
 import { useAppStore } from '@/stores/appStore';
@@ -95,6 +99,27 @@ function ArticleDetailModal({ article, onClose, onEdit }: { article: any; onClos
               )}
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const payload = encodeStockQR(article);
+                  downloadQRSvg(payload);
+                  toast.success('QR Code téléchargé');
+                }}
+                className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"
+                title="Télécharger QR Code"
+              >
+                <QrCode className="w-5 h-5 text-cyan-400" />
+              </button>
+              <button
+                onClick={() => {
+                  const payload = encodeStockQR(article);
+                  printLabels([payload]);
+                }}
+                className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"
+                title="Imprimer étiquette QR"
+              >
+                <Printer className="w-5 h-5 text-[var(--text-tertiary)]" />
+              </button>
               <button onClick={onEdit} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg" title="Modifier">
                 <Edit className="w-5 h-5 text-[var(--text-tertiary)]" />
               </button>
@@ -734,6 +759,14 @@ export function StockPage() {
               </Select>
             </div>
             <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => {
+                if (!filtered || filtered.length === 0) return toast.error('Aucun article à imprimer');
+                const payloads = filtered.map((a: any) => encodeStockQR(a));
+                printLabels(payloads);
+                toast.success(`${payloads.length} étiquettes QR générées`);
+              }}>
+                <QrCode className="w-4 h-4" /> QR étiquettes
+              </Button>
               <Button variant="secondary" onClick={() => setShowCategories(true)}>
                 <Tag className="w-4 h-4" /> Catégories
               </Button>
