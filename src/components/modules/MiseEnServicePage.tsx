@@ -14,6 +14,7 @@ import { Card, CardBody, Badge, Button, Select, Input, Textarea } from '@/compon
 import { supabase } from '@/services/supabase';
 import { getPiecesByMes } from '@/services/tolerieApi';
 import { STATUTS_FABRICATION } from '@/services/tolerie';
+import { archiverRapportBcDansGed } from '@/services/conformiteService';
 import { ContextChat } from './ChatPage';
 import { ContextNotes } from './NotesPage';
 import { ArchiveModal } from './ArchivesPage';
@@ -706,6 +707,18 @@ function BureauControleModal({ appareil, onClose, onSave }: { appareil: any; onC
         }
       }
       toast.success('Rapport BC enregistré');
+      // ═══ SYNERGIE 2: Auto-archivage rapport BC → GED ═══
+      try {
+        const archived = await archiverRapportBcDansGed(appareil.id, {
+          control_office: form.control_office,
+          report_number: form.report_number,
+          report_date: form.report_date,
+          status: form.status,
+          observations: form.observations,
+          reserves: reserves.map(r => ({ description: r.description, is_resolved: r.is_resolved || false })),
+        });
+        if (archived) toast.success('📄 Rapport archivé dans la GED', { icon: '⚡' });
+      } catch (e) { console.warn('Auto-archivage GED échoué:', e); }
       loadReports();
       setShowForm(false);
       onSave();

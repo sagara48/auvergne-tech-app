@@ -8,16 +8,17 @@ import {
   Pause, RotateCcw, Database, Cloud, CloudOff, Loader2, History,
   Server, Wifi, WifiOff, Download, Upload, X, Route, FileDown,
   Navigation, Compass, Globe, MessageSquare, Send, Plus, Minus,
-  FolderOpen, File, Image, FileSpreadsheet, Trash2, Package, QrCode, Printer
+  FolderOpen, File, Image, FileSpreadsheet, Trash2, Package
 } from 'lucide-react';
 import { Card, CardBody, Badge, Button, Input, Select, Textarea } from '@/components/ui';
 import { supabase } from '@/services/supabase';
 import { generateRapportMensuel, generateRapportAscenseur } from '@/services/pdfService';
 import { getDocumentsByCodeAscenseur, uploadDocumentForAscenseur } from '@/services/api';
 import {
-  encodeAscenseurQR, qrContentString, generateQRSvg, generateQRDataUrl,
-  printLabels, downloadQRSvg,
-} from '@/services/qrCodeService';
+  getReservesBcAscenseur, getDocumentsGedAscenseur, evaluerDocsObligatoires,
+  calculerScoreConformite, scoreColor, scoreLabelFr, DOCS_OBLIGATOIRES,
+  buildTimeline, type ReserveBcInfo, type DocStatus, type TimelineEvent,
+} from '@/services/conformiteService';
 import { 
   optimizeRoute, 
   generateGoogleMapsUrl, 
@@ -32,10 +33,6 @@ import { format, formatDistanceToNow, parseISO, differenceInHours, differenceInD
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { IoTStatusDot, IoTStatusInline, IoTStatusPanel } from '@/components/integrations/IoTStatusBadge';
-import {
-  getEnsembleLabel, getCauseLabel, getPannesLabel, getPanneDisplayLabel,
-  getEnsembleColor, getEnsembleIcon, getPanneGroupKey,
-} from '@/services/progiliftCodes';
 
 // =============================================
 // CONFIGURATION SYNC API
@@ -397,55 +394,6 @@ const SYNC_STEPS_FULL: SyncStep[] = [
   })),
   { id: 'step4', label: 'Finalisation', endpoint: '?step=4', status: 'pending' },
 ];
-
-// ═══ HELPER : Couleur et icône par catégorie de motif ═══
-function getMotifStyle(firstWord: string): { color: string; icon: string } {
-  const w = firstWord.toLowerCase();
-  // Portes
-  if (w.includes('porte') || w.includes('door') || w.includes('serrure') || w.includes('verrouil') || w.includes('fermeture') || w.includes('ouverture'))
-    return { color: '#DC2626', icon: '🚪' };
-  // Sélection / manoeuvre / appel
-  if (w.includes('select') || w.includes('sélect') || w.includes('manoeuvre') || w.includes('manoeuv') || w.includes('appel'))
-    return { color: '#8B5CF6', icon: '🔘' };
-  // Machinerie / moteur / treuil / variateur
-  if (w.includes('machin') || w.includes('moteur') || w.includes('treuil') || w.includes('variat') || w.includes('frein'))
-    return { color: '#3B82F6', icon: '⚙️' };
-  // Électrique / alimentation / courant
-  if (w.includes('electr') || w.includes('électr') || w.includes('aliment') || w.includes('courant') || w.includes('tension'))
-    return { color: '#6366F1', icon: '⚡' };
-  // Sécurité / parachute / limiteur
-  if (w.includes('sécur') || w.includes('secur') || w.includes('parachut') || w.includes('limiteur') || w.includes('fin de course'))
-    return { color: '#E11D48', icon: '🛡️' };
-  // Cabine / éclairage / ventilation
-  if (w.includes('cabine') || w.includes('cabin') || w.includes('éclair') || w.includes('ventil') || w.includes('plancher'))
-    return { color: '#059669', icon: '🛗' };
-  // Gaine / guide / câble
-  if (w.includes('gaine') || w.includes('guide') || w.includes('câble') || w.includes('cable') || w.includes('poulie'))
-    return { color: '#64748B', icon: '🏗️' };
-  // Téléalarme / interphone / GSM
-  if (w.includes('télé') || w.includes('tele') || w.includes('interph') || w.includes('gsm') || w.includes('alarme'))
-    return { color: '#F59E0B', icon: '📞' };
-  // Hydraulique
-  if (w.includes('hydrau') || w.includes('huile') || w.includes('vérin'))
-    return { color: '#14B8A6', icon: '💧' };
-  // Signalisation / affichage / bouton
-  if (w.includes('signal') || w.includes('affich') || w.includes('bouton') || w.includes('indicat') || w.includes('display'))
-    return { color: '#0EA5E9', icon: '💡' };
-  // Contrôle / armoire / carte
-  if (w.includes('contrôl') || w.includes('control') || w.includes('armoire') || w.includes('carte'))
-    return { color: '#8B5CF6', icon: '🖥️' };
-  // Nivelage / arrêt / position
-  if (w.includes('nivel') || w.includes('arrêt') || w.includes('arret') || w.includes('position') || w.includes('recal'))
-    return { color: '#CA8A04', icon: '📐' };
-  // Personne bloquée
-  if (w.includes('bloqu') || w.includes('coinc') || w.includes('personne'))
-    return { color: '#DC2626', icon: '🆘' };
-  // Bruit / vibration
-  if (w.includes('bruit') || w.includes('vibra'))
-    return { color: '#EA580C', icon: '🔊' };
-  // Default
-  return { color: '#EA580C', icon: '🔧' };
-}
 
 function SyncModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -1166,9 +1114,9 @@ function PanneDetailModal({ panne, onClose }: { panne: any; onClose: () => void 
                 <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                   <Wrench className="w-4 h-4 text-orange-400" /> Type de panne
                 </h3>
-                <p className="text-sm font-medium">{typePanne ? getPannesLabel(typePanne) : typePanne}</p>
+                <p className="text-sm font-medium">{typePanne}</p>
                 {ensemble && (
-                  <p className="text-xs text-[var(--text-muted)] mt-1">{getEnsembleIcon(ensemble)} Ensemble : {getEnsembleLabel(ensemble)}</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">Ensemble : {ensemble}</p>
                 )}
               </div>
             )}
@@ -1212,7 +1160,7 @@ function PanneDetailModal({ panne, onClose }: { panne: any; onClose: () => void 
               <Badge variant="gray">Secteur {panne.secteur}</Badge>
               {panne.marque && <Badge variant="gray">{panne.marque}</Badge>}
               {panne.type_planning && <Badge variant="blue">{panne.type_planning}</Badge>}
-              {causeCode && <Badge variant="orange">{getCauseLabel(causeCode)}</Badge>}
+              {causeCode && <Badge variant="orange">Cause {causeCode}</Badge>}
             </div>
           </div>
         </CardBody>
@@ -2028,7 +1976,7 @@ function SignalerPiecesModal({
 
 // Modal Détail Ascenseur
 function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse' | 'notes' | 'documents'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'pannes' | 'visites' | 'controles' | 'historique' | 'analyse' | 'notes' | 'documents' | 'timeline'>('info');
   const [selectedIntervention, setSelectedIntervention] = useState<any>(null);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [isAddingNote, setIsAddingNote] = useState(false);
@@ -2089,6 +2037,34 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
       }
     }
   });
+
+  // ═══ CONFORMITÉ — Réserves BC ═══
+  const { data: reservesBc = [] } = useQuery({
+    queryKey: ['reserves-bc', ascenseur.id],
+    queryFn: () => getReservesBcAscenseur(ascenseur.id),
+  });
+
+  // ═══ CONFORMITÉ — Documents GED ═══
+  const { data: docsGed = [] } = useQuery({
+    queryKey: ['docs-ged', ascenseur.id],
+    queryFn: () => getDocumentsGedAscenseur(ascenseur.id),
+  });
+
+  // ═══ CONFORMITÉ — Score ═══
+  const docsStatus = useMemo(() => evaluerDocsObligatoires([...(documentsAscenseur || []), ...docsGed]), [documentsAscenseur, docsGed]);
+  const reservesOuvertes = useMemo(() => reservesBc.filter(r => !r.isResolved), [reservesBc]);
+  const dernierControleDate = useMemo(() => {
+    if (!controles || controles.length === 0) return null;
+    const d = (controles[0] as any)?.data_wpanne?.DATE;
+    if (!d) return null;
+    const s = String(d);
+    if (s.length === 8) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+    return null;
+  }, [controles]);
+  const conformite = useMemo(() => calculerScoreConformite(docsStatus, reservesOuvertes, dernierControleDate), [docsStatus, reservesOuvertes, dernierControleDate]);
+
+  // ═══ TIMELINE UNIFIÉE ═══
+  const timelineEvents = useMemo(() => buildTimeline(controles || [], visites || [], pannes || [], reservesBc, docsGed), [controles, visites, pannes, reservesBc, docsGed]);
   
   // Fonction d'upload de document
   const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2245,7 +2221,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     const heureFinInter = formatHeureHHMM(data.HRFININTER);
     const technicien = data.DEPANNEUR || data.CLEPERSO || item.depanneur;
     const notes = decodeHtml(data.NOTE2);
-    const motif = data.Libelle || (data.PANNES ? getPannesLabel(data.PANNES) : null) || item.motif;
+    const motif = data.Libelle || data.PANNES || item.motif;
     
     return (
       <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
@@ -2383,7 +2359,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
         {typePanne && (
           <div className="mb-3 p-3 bg-orange-500/10 rounded-lg border border-orange-500/20">
             <p className="text-xs text-orange-400 mb-1">Type de panne:</p>
-            <p className="text-sm text-[var(--text-secondary)]">{getPannesLabel(typePanne)}</p>
+            <p className="text-sm text-[var(--text-secondary)]">{typePanne}</p>
           </div>
         )}
         
@@ -2406,8 +2382,8 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
           {causeCode && (
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-[var(--text-muted)]" />
-              <span className="text-[var(--text-muted)]">Cause:</span>
-              <span className="font-medium">{getCauseLabel(causeCode)}</span>
+              <span className="text-[var(--text-muted)]">Code cause:</span>
+              <span className="font-medium">{causeCode}</span>
             </div>
           )}
         </div>
@@ -2470,7 +2446,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     const heureFinInter = formatHeureHHMM(data.HRFININTER);
     const technicien = data.DEPANNEUR || data.CLEPERSO || item.depanneur;
     const notes = decodeHtml(data.NOTE2);
-    const motif = data.Libelle || (data.PANNES ? getPannesLabel(data.PANNES) : null) || item.motif;
+    const motif = data.Libelle || data.PANNES || item.motif;
     
     return (
       <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
@@ -2578,30 +2554,32 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 >
                   <FileDown className="w-5 h-5 text-orange-500" />
                 </button>
-                <button
-                  onClick={() => {
-                    const payload = encodeAscenseurQR(ascenseur);
-                    downloadQRSvg(payload);
-                    toast.success('QR Code téléchargé');
-                  }}
-                  className="p-2 hover:bg-cyan-500/20 rounded-lg"
-                  title="Télécharger QR Code"
-                >
-                  <QrCode className="w-5 h-5 text-cyan-400" />
-                </button>
-                <button
-                  onClick={() => {
-                    const payload = encodeAscenseurQR(ascenseur);
-                    printLabels([payload]);
-                  }}
-                  className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"
-                  title="Imprimer étiquette QR"
-                >
-                  <Printer className="w-5 h-5 text-[var(--text-muted)]" />
-                </button>
                 <button onClick={onClose} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg">
                   <XCircle className="w-5 h-5" />
                 </button>
+              </div>
+            </div>
+            
+            {/* Score conformité */}
+            <div className="flex items-center gap-3 mt-3 p-3 rounded-xl" style={{ background: `${scoreColor(conformite.score)}15`, border: `1px solid ${scoreColor(conformite.score)}30` }}>
+              <div className="relative w-12 h-12">
+                <svg width={48} height={48} style={{ transform: 'rotate(-90deg)' }}>
+                  <circle cx={24} cy={24} r={20} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={3} />
+                  <circle cx={24} cy={24} r={20} fill="none" stroke={scoreColor(conformite.score)} strokeWidth={3}
+                    strokeDasharray={125.66} strokeDashoffset={125.66 - (conformite.score / 100) * 125.66} strokeLinecap="round" />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold font-mono" style={{ color: scoreColor(conformite.score) }}>{conformite.score}</span>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold" style={{ color: scoreColor(conformite.score) }}>{scoreLabelFr(conformite.score)}</span>
+                  {reservesOuvertes.length > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">⚠️ {reservesOuvertes.length} réserve{reservesOuvertes.length > 1 ? 's' : ''}</span>}
+                </div>
+                <div className="flex gap-3 text-[10px] text-[var(--text-muted)] mt-1">
+                  <span>📄 Docs {conformite.details.docsScore}%</span>
+                  <span>📋 Réserves {conformite.details.reservesScore}%</span>
+                  <span>🔍 Contrôles {conformite.details.controleScore}%</span>
+                </div>
               </div>
             </div>
             
@@ -2615,7 +2593,8 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                 { id: 'controles', label: 'Contrôles', icon: Eye, count: controles.length },
                 { id: 'pannes', label: 'Pannes', icon: AlertTriangle, count: pannes.length },
                 { id: 'notes', label: 'Notes', icon: MessageSquare, count: notesAscenseur?.length || 0 },
-                { id: 'documents', label: 'Documents', icon: FolderOpen, count: documentsAscenseur?.length || 0 }
+                { id: 'documents', label: 'GED', icon: FolderOpen, count: (documentsAscenseur?.length || 0) + docsGed.length },
+                { id: 'timeline', label: 'Timeline', icon: Activity, count: timelineEvents.length },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -2748,6 +2727,40 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
             
             {activeTab === 'controles' && (
               <div className="space-y-4">
+                {/* ═══ SYNERGIE 3: Réserves BC dans Contrôles ═══ */}
+                {reservesOuvertes.length > 0 && (
+                  <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-xl">
+                    <h4 className="text-sm font-bold text-red-400 flex items-center gap-2 mb-3">
+                      <AlertTriangle className="w-4 h-4" />
+                      Réserves Bureau de Contrôle en cours — {reservesOuvertes.length} non levée{reservesOuvertes.length > 1 ? 's' : ''}
+                    </h4>
+                    <div className="space-y-2">
+                      {reservesOuvertes.map(r => (
+                        <div key={r.id} className="flex items-start gap-2 text-sm">
+                          <span className="text-red-400 mt-0.5">●</span>
+                          <div className="flex-1">
+                            <span className="text-[var(--text-primary)]">{r.description}</span>
+                            <span className="text-[var(--text-muted)] text-xs ml-2">{r.bureau} • {r.reportDate} • {r.joursOuvert}j</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Réserves levées */}
+                {reservesBc.filter(r => r.isResolved).length > 0 && (
+                  <div className="p-3 bg-green-500/5 border border-green-500/20 rounded-xl">
+                    <h4 className="text-xs font-bold text-green-400 flex items-center gap-2 mb-2">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      {reservesBc.filter(r => r.isResolved).length} réserve(s) levée(s)
+                    </h4>
+                    <div className="space-y-1">
+                      {reservesBc.filter(r => r.isResolved).map(r => (
+                        <div key={r.id} className="text-xs text-[var(--text-muted)] line-through">{r.description} — levée le {r.resolvedAt?.slice(0,10)}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {controles.length > 0 ? (
                   controles.map((item: any) => <ControleCard key={item.id} item={item} />)
                 ) : (
@@ -2950,7 +2963,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                                 {data.CAUSE && (
                                   <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
                                     <p className="text-xs text-[var(--text-muted)]">Cause</p>
-                                    <p className="font-medium">{getCauseLabel(data.CAUSE)}</p>
+                                    <p className="font-medium">{data.CAUSE}</p>
                                   </div>
                                 )}
                                 {rawData.motif && (
@@ -2975,13 +2988,13 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                                   {data.ENSEMBLE && (
                                     <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
                                       <p className="text-xs text-[var(--text-muted)]">Ensemble</p>
-                                      <p className="font-medium">{getEnsembleIcon(data.ENSEMBLE)} {getEnsembleLabel(data.ENSEMBLE)}</p>
+                                      <p className="font-medium">{data.ENSEMBLE}</p>
                                     </div>
                                   )}
                                   {data.ORGANE && (
                                     <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
                                       <p className="text-xs text-[var(--text-muted)]">Organe</p>
-                                      <p className="font-medium">{getEnsembleLabel(data.ORGANE)}</p>
+                                      <p className="font-medium">{data.ORGANE}</p>
                                     </div>
                                   )}
                                 </div>
@@ -3037,20 +3050,16 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                   // Statistiques de l'ascenseur
                   const totalInterventions = visites.length + controles.length + pannes.length;
                   
-                  // Pannes par type — regroupement sur les 2 premiers éléments du motif
-                  // Ex: "Selection - Fin de course haut - Détail" → "Selection - Fin de course haut"
-                  const pannesParType: Record<string, { count: number }> = {};
+                  // Pannes par type (ensemble/organe)
+                  const pannesParType: Record<string, number> = {};
                   pannes.forEach((p: any) => {
                     const data = p.data_wpanne || {};
-                    const label = getPanneGroupKey(data, p.motif);
-                    if (!pannesParType[label]) {
-                      pannesParType[label] = { count: 0 };
-                    }
-                    pannesParType[label].count++;
+                    const ensemble = data.ENSEMBLE || data.PANNES || 'Non défini';
+                    pannesParType[ensemble] = (pannesParType[ensemble] || 0) + 1;
                   });
                   const topPanneTypes = Object.entries(pannesParType)
-                    .sort(([,a], [,b]) => b.count - a.count)
-                    .slice(0, 10);
+                    .sort(([,a], [,b]) => b - a)
+                    .slice(0, 5);
                   
                   // Détection de pannes récurrentes (même type dans les 6 derniers mois)
                   const sixMonthsAgo = new Date();
@@ -3071,8 +3080,8 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                   const pannesRecentesParType: Record<string, number> = {};
                   pannesRecentes.forEach((p: any) => {
                     const data = p.data_wpanne || {};
-                    const label = getPanneGroupKey(data, p.motif);
-                    pannesRecentesParType[label] = (pannesRecentesParType[label] || 0) + 1;
+                    const ensemble = data.ENSEMBLE || data.PANNES || 'Non défini';
+                    pannesRecentesParType[ensemble] = (pannesRecentesParType[ensemble] || 0) + 1;
                   });
                   
                   const pannesRecurrentes = Object.entries(pannesRecentesParType)
@@ -3185,24 +3194,20 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                             Types de pannes les plus fréquents
                           </h4>
                           <div className="space-y-2">
-                            {topPanneTypes.map(([label, info], idx) => {
-                              const maxCount = (topPanneTypes[0][1] as any).count;
-                              const { count } = info as any;
-                              // Couleur et icône basées sur le 1er mot du motif
-                              const firstWord = label.split(/\s*[-–—]\s*/)[0]?.trim().toLowerCase() || '';
-                              const { color, icon } = getMotifStyle(firstWord);
+                            {topPanneTypes.map(([type, count], idx) => {
+                              const maxCount = topPanneTypes[0][1] as number;
                               return (
-                                <div key={label} className="flex items-center gap-3">
-                                  <span className="text-sm w-6 text-center">{icon}</span>
+                                <div key={type} className="flex items-center gap-3">
+                                  <span className="text-sm w-6 font-bold text-[var(--text-muted)]">#{idx + 1}</span>
                                   <div className="flex-1">
                                     <div className="flex items-center justify-between mb-1">
-                                      <span className="text-sm truncate">{label}</span>
-                                      <span className="text-sm font-bold flex-shrink-0 ml-2" style={{ color }}>{count}</span>
+                                      <span className="text-sm truncate">{type}</span>
+                                      <span className="text-sm font-semibold">{count}</span>
                                     </div>
                                     <div className="w-full bg-[var(--bg-secondary)] rounded-full h-2">
                                       <div 
-                                        className="h-full rounded-full transition-all"
-                                        style={{ width: `${(count / maxCount) * 100}%`, backgroundColor: color }}
+                                        className="h-full bg-orange-500 rounded-full"
+                                        style={{ width: `${(count / maxCount) * 100}%` }}
                                       ></div>
                                     </div>
                                   </div>
@@ -3336,129 +3341,143 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
             {/* Onglet Documents */}
             {activeTab === 'documents' && (
               <div className="space-y-4">
+                {/* ═══ SYNERGIE 5: Documents obligatoires ═══ */}
+                <div className="p-4 bg-orange-500/5 border border-orange-500/20 rounded-xl">
+                  <h4 className="text-sm font-bold text-orange-400 flex items-center gap-2 mb-3">📋 Documents réglementaires obligatoires</h4>
+                  <div className="flex gap-2 flex-wrap">
+                    {docsStatus.map(ds => (
+                      <div key={ds.doc.code} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
+                        ds.expire ? 'bg-red-500/15 text-red-400' :
+                        ds.present ? 'bg-green-500/15 text-green-400' :
+                        'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+                      }`}>
+                        {ds.expire ? '⛔' : ds.present ? '✅' : '❌'}
+                        {ds.doc.label}
+                        {ds.expireBientot && <span className="text-orange-400 ml-1">({ds.joursRestants}j)</span>}
+                        {ds.expire && ds.joursRestants !== null && <span className="ml-1">({Math.abs(ds.joursRestants)}j)</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Zone d'upload */}
                 <div className="p-4 bg-[var(--bg-tertiary)] rounded-xl">
                   <h4 className="font-semibold flex items-center gap-2 mb-3">
                     <Upload className="w-4 h-4 text-blue-400" />
                     Ajouter un document
                   </h4>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    onChange={handleUploadDocument}
-                    className="hidden"
-                    accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploadingDoc}
-                    className="w-full p-6 border-2 border-dashed border-[var(--border-primary)] rounded-xl hover:border-blue-500 hover:bg-blue-500/5 transition-colors flex flex-col items-center gap-2"
-                  >
-                    {isUploadingDoc ? (
-                      <>
-                        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
-                        <span className="text-sm text-[var(--text-muted)]">Upload en cours...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-8 h-8 text-[var(--text-muted)]" />
-                        <span className="text-sm text-[var(--text-muted)]">Cliquez pour ajouter un fichier</span>
-                        <span className="text-xs text-[var(--text-muted)]">PDF, Images, Word, Excel...</span>
-                      </>
-                    )}
+                  <input ref={fileInputRef} type="file" onChange={handleUploadDocument} className="hidden" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt" />
+                  <button onClick={() => fileInputRef.current?.click()} disabled={isUploadingDoc}
+                    className="w-full p-6 border-2 border-dashed border-[var(--border-primary)] rounded-xl hover:border-blue-500 hover:bg-blue-500/5 transition-colors flex flex-col items-center gap-2">
+                    {isUploadingDoc ? (<><Loader2 className="w-8 h-8 text-blue-400 animate-spin" /><span className="text-sm text-[var(--text-muted)]">Upload en cours...</span></>) : (<><Upload className="w-8 h-8 text-[var(--text-muted)]" /><span className="text-sm text-[var(--text-muted)]">Cliquez pour ajouter un fichier</span><span className="text-xs text-[var(--text-muted)]">PDF, Images, Word, Excel...</span></>)}
                   </button>
                 </div>
-                
-                {/* Liste des documents */}
-                {documentsAscenseur && documentsAscenseur.length > 0 ? (
-                  <div className="space-y-3">
-                    {documentsAscenseur.map((doc: any) => {
-                      // Déterminer l'icône selon le type
-                      const ext = doc.nom?.split('.').pop()?.toLowerCase() || '';
-                      let DocIcon = File;
-                      let iconColor = 'text-gray-400';
-                      
-                      if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-                        DocIcon = Image;
-                        iconColor = 'text-orange-400';
-                      } else if (['pdf'].includes(ext)) {
-                        DocIcon = FileText;
-                        iconColor = 'text-red-400';
-                      } else if (['xls', 'xlsx', 'csv'].includes(ext)) {
-                        DocIcon = FileSpreadsheet;
-                        iconColor = 'text-green-400';
-                      } else if (['doc', 'docx', 'txt'].includes(ext)) {
-                        DocIcon = FileText;
-                        iconColor = 'text-blue-400';
-                      }
-                      
-                      return (
-                        <div 
-                          key={doc.id} 
-                          className="p-4 bg-[var(--bg-tertiary)] rounded-xl flex items-center gap-4"
-                        >
-                          <div className={`w-12 h-12 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center ${iconColor}`}>
-                            <DocIcon className="w-6 h-6" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{doc.nom}</p>
-                            <p className="text-xs text-[var(--text-muted)]">
-                              {doc.created_at ? format(parseISO(doc.created_at), 'dd/MM/yyyy HH:mm', { locale: fr }) : '-'}
-                              {doc.fichier_taille && ` • ${(doc.fichier_taille / 1024).toFixed(1)} Ko`}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
+
+                {/* ═══ SYNERGIE 1: Documents GED intégrés ═══ */}
+                {docsGed.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase mb-2 flex items-center gap-2">📄 GED — Documents classifiés ({docsGed.length})</h4>
+                    <div className="space-y-2">
+                      {docsGed.map((doc: any) => {
+                        const isAuto = doc.source_auto === 'bureau_controle';
+                        const isExpire = doc.statut_expiration === 'expire' || (doc.date_expiration && new Date(doc.date_expiration) < new Date());
+                        const isExpireBientot = !isExpire && doc.date_expiration && ((new Date(doc.date_expiration).getTime() - Date.now()) / 86400000) <= 60;
+                        return (
+                          <div key={doc.id} className="p-3 bg-[var(--bg-tertiary)] rounded-xl flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center text-lg">
+                              {isAuto ? '📋' : doc.categorie === 'reglementaire' ? '📜' : doc.categorie === 'technique' ? '⚙️' : '📁'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium truncate">{doc.nom}</p>
+                                {isAuto && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/15 text-blue-400">⚡ Auto-archivé</span>}
+                              </div>
+                              <p className="text-xs text-[var(--text-muted)]">
+                                {doc.date_document || doc.created_at?.slice(0, 10)}
+                                {doc.date_expiration && <span> → Exp. {doc.date_expiration}</span>}
+                                {doc.numero_document && <span> • N° {doc.numero_document}</span>}
+                              </p>
+                            </div>
+                            {isExpire && <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-red-500/15 text-red-400">Expiré</span>}
+                            {isExpireBientot && <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-orange-500/15 text-orange-400">Expire bientôt</span>}
+                            {!isExpire && !isExpireBientot && doc.date_expiration && <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-green-500/15 text-green-400">Valide</span>}
                             {doc.fichier_url && (
-                              <>
-                                <a
-                                  href={doc.fichier_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg"
-                                  title="Voir"
-                                >
-                                  <Eye className="w-4 h-4 text-blue-400" />
-                                </a>
-                                <a
-                                  href={doc.fichier_url}
-                                  download={doc.nom}
-                                  className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg"
-                                  title="Télécharger"
-                                >
-                                  <Download className="w-4 h-4 text-green-400" />
-                                </a>
-                              </>
+                              <a href={doc.fichier_url} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg"><Eye className="w-4 h-4 text-blue-400" /></a>
                             )}
-                            <button
-                              onClick={async () => {
-                                if (!confirm('Supprimer ce document ?')) return;
-                                try {
-                                  const { error } = await supabase
-                                    .from('documents')
-                                    .delete()
-                                    .eq('id', doc.id);
-                                  if (error) throw error;
-                                  toast.success('Document supprimé');
-                                  refetchDocs();
-                                } catch (e) {
-                                  toast.error('Erreur lors de la suppression');
-                                }
-                              }}
-                              className="p-2 hover:bg-red-500/10 rounded-lg"
-                              title="Supprimer"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                ) : (
+                )}
+                
+                {/* Documents classiques (ancienne table) */}
+                {documentsAscenseur && documentsAscenseur.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase mb-2 flex items-center gap-2">📎 Documents uploadés ({documentsAscenseur.length})</h4>
+                    <div className="space-y-2">
+                      {documentsAscenseur.map((doc: any) => {
+                        const ext = doc.nom?.split('.').pop()?.toLowerCase() || '';
+                        let DocIcon = File; let iconColor = 'text-gray-400';
+                        if (['jpg','jpeg','png','gif','webp'].includes(ext)) { DocIcon = Image; iconColor = 'text-orange-400'; }
+                        else if (['pdf'].includes(ext)) { DocIcon = FileText; iconColor = 'text-red-400'; }
+                        else if (['xls','xlsx','csv'].includes(ext)) { DocIcon = FileSpreadsheet; iconColor = 'text-green-400'; }
+                        else if (['doc','docx','txt'].includes(ext)) { DocIcon = FileText; iconColor = 'text-blue-400'; }
+                        return (
+                          <div key={doc.id} className="p-3 bg-[var(--bg-tertiary)] rounded-xl flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center ${iconColor}`}><DocIcon className="w-5 h-5" /></div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{doc.nom}</p>
+                              <p className="text-xs text-[var(--text-muted)]">{doc.created_at ? format(parseISO(doc.created_at), 'dd/MM/yyyy HH:mm', { locale: fr }) : '-'}{doc.fichier_taille && ` • ${(doc.fichier_taille / 1024).toFixed(1)} Ko`}</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {doc.fichier_url && (<><a href={doc.fichier_url} target="_blank" rel="noopener noreferrer" className="p-1.5 hover:bg-[var(--bg-secondary)] rounded-lg" title="Voir"><Eye className="w-4 h-4 text-blue-400" /></a><a href={doc.fichier_url} download={doc.nom} className="p-1.5 hover:bg-[var(--bg-secondary)] rounded-lg" title="Télécharger"><Download className="w-4 h-4 text-green-400" /></a></>)}
+                              <button onClick={async () => { if (!confirm('Supprimer ce document ?')) return; try { await supabase.from('documents').delete().eq('id', doc.id); toast.success('Document supprimé'); refetchDocs(); } catch { toast.error('Erreur'); } }} className="p-1.5 hover:bg-red-500/10 rounded-lg" title="Supprimer"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {(!documentsAscenseur || documentsAscenseur.length === 0) && docsGed.length === 0 && (
                   <div className="text-center py-8 text-[var(--text-muted)]">
                     <FolderOpen className="w-12 h-12 mx-auto mb-2 opacity-50" />
                     <p>Aucun document pour cet ascenseur</p>
                     <p className="text-xs mt-1">Ajoutez des photos, rapports, certificats...</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ═══ SYNERGIE 7: Timeline unifiée ═══ */}
+            {activeTab === 'timeline' && (
+              <div className="space-y-1">
+                {timelineEvents.length === 0 ? (
+                  <div className="text-center py-12 text-[var(--text-muted)]">
+                    <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>Aucun événement enregistré</p>
+                  </div>
+                ) : (
+                  <div className="relative pl-6">
+                    <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-[var(--border-primary)]" />
+                    {timelineEvents.map((ev, i) => (
+                      <div key={ev.id} className="relative pb-5 pl-6">
+                        <div className="absolute left-[-5px] top-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] border-2 border-[var(--bg-primary)]" style={{ backgroundColor: ev.color }}>
+                          {ev.icon}
+                        </div>
+                        <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-mono text-[var(--text-muted)]">{ev.dateStr}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ backgroundColor: `${ev.color}20`, color: ev.color }}>
+                              {ev.type === 'controle' ? 'Contrôle' : ev.type === 'visite' ? 'Visite' : ev.type === 'panne' ? 'Panne' : ev.type === 'bc_report' ? 'Rapport BC' : ev.type === 'reserve_levee' ? 'Réserve levée' : 'Document'}
+                            </span>
+                          </div>
+                          <p className="text-sm font-medium">{ev.label}</p>
+                          {ev.detail && <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-2">{ev.detail}</p>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -3524,6 +3543,7 @@ export function ParcAscenseursPage() {
   
   // État pour le géocodage
   const [showGeocodingModal, setShowGeocodingModal] = useState(false);
+  const [showAlertesConformite, setShowAlertesConformite] = useState(false);
   const [geocodingProgress, setGeocodingProgress] = useState<{
     isRunning: boolean;
     current: number;
@@ -3640,6 +3660,64 @@ export function ParcAscenseursPage() {
   const { data: allAscenseurs } = useQuery({
     queryKey: ['parc-all-ascenseurs-enrichment'],
     queryFn: getAllAscenseursForEnrichment
+  });
+
+  // ═══ SYNERGIE 8: Alertes conformité ═══
+  const { data: alertesConformite = [] } = useQuery({
+    queryKey: ['alertes-conformite'],
+    queryFn: async () => {
+      try {
+        // Récupérer les rapports BC avec réserves non résolues
+        const { data: reports } = await supabase
+          .from('mes_control_reports')
+          .select('*, mes_bc_reserve_items(*), device:mise_en_service(device_number, site_name)')
+          .order('created_at', { ascending: false });
+        
+        const alertes: { id: string; severity: 'critical' | 'warning'; message: string; type: string }[] = [];
+        
+        if (reports) {
+          for (const r of reports) {
+            const openReserves = (r.mes_bc_reserve_items || []).filter((i: any) => !i.is_resolved);
+            if (openReserves.length > 0) {
+              const device = r.device as any;
+              const label = device?.device_number || r.device_id?.slice(0, 8) || '';
+              const site = device?.site_name || '';
+              const joursOuvert = Math.floor((Date.now() - new Date(r.report_date || r.created_at).getTime()) / 86400000);
+              alertes.push({
+                id: `res-${r.id}`,
+                severity: joursOuvert > 90 ? 'critical' : 'warning',
+                message: `${openReserves.length} réserve(s) non levée(s) — ${label} ${site} (${joursOuvert}j)`,
+                type: 'reserve',
+              });
+            }
+          }
+        }
+
+        // Récupérer les documents GED expirés
+        const { data: docsExpires } = await supabase
+          .from('ged_documents')
+          .select('nom, date_expiration, ascenseur_ids')
+          .lt('date_expiration', new Date().toISOString().slice(0, 10))
+          .neq('statut', 'supprime');
+        
+        if (docsExpires) {
+          for (const d of docsExpires) {
+            const joursExpire = Math.floor((Date.now() - new Date(d.date_expiration).getTime()) / 86400000);
+            alertes.push({
+              id: `doc-${d.nom}`,
+              severity: 'critical',
+              message: `${d.nom} expiré depuis ${joursExpire} jours`,
+              type: 'doc_expire',
+            });
+          }
+        }
+
+        return alertes;
+      } catch {
+        return [];
+      }
+    },
+    refetchInterval: 300000, // 5 min
   });
   
   // Enrichir les arrêts avec les données des ascenseurs (utiliser TOUS les ascenseurs)
@@ -3953,15 +4031,33 @@ export function ParcAscenseursPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => {
-              const list = filteredAscenseurs || ascenseurs || [];
-              if (list.length === 0) return toast.error('Aucun ascenseur à imprimer');
-              const payloads = list.map((a: any) => encodeAscenseurQR(a));
-              printLabels(payloads, 'small');
-              toast.success(`${payloads.length} étiquettes QR générées`);
-            }}>
-              <QrCode className="w-4 h-4" /> QR étiquettes
-            </Button>
+            {/* ═══ SYNERGIE 8: Notification cloche alertes ═══ */}
+            <div className="relative">
+              <button onClick={() => setShowAlertesConformite(!showAlertesConformite)}
+                className={`p-2 rounded-lg border transition-all ${alertesConformite.length > 0 ? 'border-red-500/30 bg-red-500/10 text-red-400' : 'border-[var(--border-primary)] text-[var(--text-muted)]'}`}>
+                <AlertCircle className="w-4 h-4" />
+                {alertesConformite.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">{alertesConformite.length}</span>
+                )}
+              </button>
+              {showAlertesConformite && (
+                <div className="absolute right-0 top-11 w-96 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl shadow-2xl z-50 overflow-hidden">
+                  <div className="p-3 border-b border-[var(--border-primary)] flex items-center justify-between">
+                    <span className="text-sm font-bold">🔔 Alertes conformité</span>
+                    <button onClick={() => setShowAlertesConformite(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><XCircle className="w-4 h-4" /></button>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto p-2 space-y-1.5">
+                    {alertesConformite.length === 0 ? (
+                      <p className="text-center text-sm text-[var(--text-muted)] py-6">✅ Aucune alerte</p>
+                    ) : alertesConformite.map(a => (
+                      <div key={a.id} className={`p-2.5 rounded-lg text-xs font-medium ${a.severity === 'critical' ? 'bg-red-500/10 text-red-400 border border-red-500/15' : 'bg-orange-500/10 text-orange-400 border border-orange-500/15'}`}>
+                        {a.severity === 'critical' ? '🔴' : '🟡'} {a.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <Button variant="secondary" size="sm" onClick={() => setShowGeocodingModal(true)}>
               <Globe className="w-4 h-4" /> GPS
             </Button>
@@ -4384,7 +4480,7 @@ export function ParcAscenseursPage() {
                       
                       {panneType && (
                         <div className="p-2 bg-orange-500/10 rounded-lg border border-orange-500/20 mb-2">
-                          <p className="text-sm truncate">{getPannesLabel(panneType)}</p>
+                          <p className="text-sm truncate">{panneType}</p>
                         </div>
                       )}
                       
