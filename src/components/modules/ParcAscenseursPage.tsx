@@ -2049,22 +2049,6 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     queryKey: ['docs-ged', ascenseur.id],
     queryFn: () => getDocumentsGedAscenseur(ascenseur.id),
   });
-
-  // ═══ CONFORMITÉ — Score ═══
-  const docsStatus = useMemo(() => evaluerDocsObligatoires([...(documentsAscenseur || []), ...docsGed]), [documentsAscenseur, docsGed]);
-  const reservesOuvertes = useMemo(() => reservesBc.filter(r => !r.isResolved), [reservesBc]);
-  const dernierControleDate = useMemo(() => {
-    if (!controles || controles.length === 0) return null;
-    const d = (controles[0] as any)?.data_wpanne?.DATE;
-    if (!d) return null;
-    const s = String(d);
-    if (s.length === 8) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
-    return null;
-  }, [controles]);
-  const conformite = useMemo(() => calculerScoreConformite(docsStatus, reservesOuvertes, dernierControleDate), [docsStatus, reservesOuvertes, dernierControleDate]);
-
-  // ═══ TIMELINE UNIFIÉE ═══
-  const timelineEvents = useMemo(() => buildTimeline(controles || [], visites || [], pannes || [], reservesBc, docsGed), [controles, visites, pannes, reservesBc, docsGed]);
   
   // Fonction d'upload de document
   const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2176,6 +2160,22 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     return !isVisite && !isControle;
   }) || []);
   
+  // ═══ CONFORMITÉ — Score (après controles/visites/pannes) ═══
+  const docsStatus = useMemo(() => evaluerDocsObligatoires([...(documentsAscenseur || []), ...docsGed]), [documentsAscenseur, docsGed]);
+  const reservesOuvertes = useMemo(() => reservesBc.filter(r => !r.isResolved), [reservesBc]);
+  const dernierControleDate = useMemo(() => {
+    if (!controles || controles.length === 0) return null;
+    const d = (controles[0] as any)?.data_wpanne?.DATE;
+    if (!d) return null;
+    const s = String(d);
+    if (s.length === 8) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+    return null;
+  }, [controles]);
+  const conformite = useMemo(() => calculerScoreConformite(docsStatus, reservesOuvertes, dernierControleDate), [docsStatus, reservesOuvertes, dernierControleDate]);
+
+  // ═══ TIMELINE UNIFIÉE ═══
+  const timelineEvents = useMemo(() => buildTimeline(controles || [], visites || [], pannes || [], reservesBc, docsGed), [controles, visites, pannes, reservesBc, docsGed]);
+
   // Debug final
 //   console.log(`Modal: ${allPannes?.length || 0} total → ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
   
