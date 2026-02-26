@@ -2561,6 +2561,7 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
             </div>
             
             {/* Score conformité */}
+            {conformite && (
             <div className="flex items-center gap-3 mt-3 p-3 rounded-xl" style={{ background: `${scoreColor(conformite.score)}15`, border: `1px solid ${scoreColor(conformite.score)}30` }}>
               <div className="relative w-12 h-12">
                 <svg width={48} height={48} style={{ transform: 'rotate(-90deg)' }}>
@@ -2576,12 +2577,13 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
                   {reservesOuvertes.length > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">⚠️ {reservesOuvertes.length} réserve{reservesOuvertes.length > 1 ? 's' : ''}</span>}
                 </div>
                 <div className="flex gap-3 text-[10px] text-[var(--text-muted)] mt-1">
-                  <span>📄 Docs {conformite.details.docsScore}%</span>
-                  <span>📋 Réserves {conformite.details.reservesScore}%</span>
-                  <span>🔍 Contrôles {conformite.details.controleScore}%</span>
+                  <span>📄 Docs {conformite.details?.docsScore ?? 0}%</span>
+                  <span>📋 Réserves {conformite.details?.reservesScore ?? 0}%</span>
+                  <span>🔍 Contrôles {conformite.details?.controleScore ?? 0}%</span>
                 </div>
               </div>
             </div>
+            )}
             
             {/* Tabs */}
             <div className="flex gap-2 mt-4 flex-wrap">
