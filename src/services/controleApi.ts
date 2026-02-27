@@ -61,7 +61,7 @@ export interface Controle {
   created_at: string;
   updated_at: string;
   // Joins
-  ascenseur?: { code: string; adresse: string; marque?: string; client?: { nom: string } };
+  ascenseur?: { code_appareil: string; adresse: string; marque?: string };
   observations?: Observation[];
   _observation_count?: number;
   _oa_count?: number;
@@ -146,7 +146,7 @@ export const CHECKLIST_STANDARD: { categorie: CategorieCheck; items: string[] }[
 // ═══ CRUD Contrôles ═══
 
 export async function getControles(filters?: { ascenseur_id?: string; statut?: StatutControle; type?: TypeControle }): Promise<Controle[]> {
-  let q = supabase.from('controles_techniques').select(`*, ascenseur:ascenseurs(code, adresse, marque, client:clients(nom))`).order('date_planifiee', { ascending: true });
+  let q = supabase.from('controles_techniques').select(`*, ascenseur:ascenseurs(code_appareil, adresse, marque)`).order('date_planifiee', { ascending: true });
   if (filters?.ascenseur_id) q = q.eq('ascenseur_id', filters.ascenseur_id);
   if (filters?.statut) q = q.eq('statut', filters.statut);
   if (filters?.type) q = q.eq('type_controle', filters.type);
@@ -156,7 +156,7 @@ export async function getControles(filters?: { ascenseur_id?: string; statut?: S
 }
 
 export async function getControle(id: string): Promise<Controle> {
-  const { data, error } = await supabase.from('controles_techniques').select(`*, ascenseur:ascenseurs(code, adresse, marque, client:clients(nom)), observations:controle_observations(*)`).eq('id', id).single();
+  const { data, error } = await supabase.from('controles_techniques').select(`*, ascenseur:ascenseurs(code_appareil, adresse, marque), observations:controle_observations(*)`).eq('id', id).single();
   if (error) throw error;
   return data;
 }
@@ -258,7 +258,7 @@ export interface ControleStats {
 }
 
 export async function getControleStats(): Promise<ControleStats> {
-  const { data: controles } = await supabase.from('controles_techniques').select('*, ascenseur:ascenseurs(code, adresse)').order('date_planifiee');
+  const { data: controles } = await supabase.from('controles_techniques').select('*, ascenseur:ascenseurs(code_appareil, adresse)').order('date_planifiee');
   const { data: obs } = await supabase.from('controle_observations').select('*').in('statut', ['ouverte', 'devis_envoye', 'travaux_planifies', 'en_cours']);
   const all = controles || [];
   const openObs = obs || [];
@@ -283,8 +283,8 @@ export async function getControleStats(): Promise<ControleStats> {
 
 // ═══ Ascenseurs list (for selectors) ═══
 
-export async function getAscenseursList(): Promise<{ id: string; code: string; adresse: string; marque?: string }[]> {
-  const { data, error } = await supabase.from('ascenseurs').select('id, code, adresse, marque').order('code');
+export async function getAscenseursList(): Promise<{ id: string; code_appareil: string; adresse: string; marque?: string }[]> {
+  const { data, error } = await supabase.from('ascenseurs').select('id, code_appareil, adresse, marque').order('code_appareil');
   if (error) throw error;
   return data || [];
 }
