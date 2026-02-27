@@ -15,9 +15,10 @@ import { supabase } from '@/services/supabase';
 import { generateRapportMensuel, generateRapportAscenseur } from '@/services/pdfService';
 import { getDocumentsByCodeAscenseur, uploadDocumentForAscenseur } from '@/services/api';
 import {
-  getReservesBcAscenseur, getDocumentsGedAscenseur, evaluerDocsObligatoires,
-  calculerScoreConformite, scoreColor, scoreLabelFr, DOCS_OBLIGATOIRES,
-  buildTimeline, type ReserveBcInfo, type DocStatus, type TimelineEvent,
+  getObservationsAscenseur, getControlesAscenseur, getDocumentsGedAscenseur,
+  evaluerDocsObligatoires, calculerScoreConformite, scoreColor, scoreLabelFr,
+  DOCS_OBLIGATOIRES, buildTimeline,
+  type ObservationInfo, type ControleInfo, type DocStatus, type TimelineEvent,
 } from '@/services/conformiteService';
 import { 
   optimizeRoute, 
@@ -2038,10 +2039,16 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
     }
   });
 
-  // ═══ CONFORMITÉ — Réserves BC ═══
-  const { data: reservesBc = [] } = useQuery({
-    queryKey: ['reserves-bc', ascenseur.id],
-    queryFn: () => getReservesBcAscenseur(ascenseur.id),
+  // ═══ CONFORMITÉ — Observations (source: controles_techniques) ═══
+  const { data: observationsCt = [] } = useQuery({
+    queryKey: ['observations-ct', ascenseur.id],
+    queryFn: () => getObservationsAscenseur(ascenseur.id),
+  });
+
+  // ═══ CONFORMITÉ — Contrôles techniques ═══
+  const { data: controlesTech = [] } = useQuery({
+    queryKey: ['controles-tech', ascenseur.id],
+    queryFn: () => getControlesAscenseur(ascenseur.id),
   });
 
   // ═══ CONFORMITÉ — Documents GED ═══
@@ -2162,19 +2169,23 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
   
   // ═══ CONFORMITÉ — Score (après controles/visites/pannes) ═══
   const docsStatus = useMemo(() => evaluerDocsObligatoires([...(documentsAscenseur || []), ...docsGed]), [documentsAscenseur, docsGed]);
-  const reservesOuvertes = useMemo(() => reservesBc.filter(r => !r.isResolved), [reservesBc]);
+  const observationsOuvertes = useMemo(() => observationsCt.filter(o => !o.isLevee), [observationsCt]);
   const dernierControleDate = useMemo(() => {
+    // Priorité : dernier contrôle technique terminé
+    const ctTermine = controlesTech.find(c => c.statut === 'termine' && c.dateRealisation);
+    if (ctTermine) return ctTermine.dateRealisation;
+    // Fallback : contrôles Progilift
     if (!controles || controles.length === 0) return null;
     const d = (controles[0] as any)?.data_wpanne?.DATE;
     if (!d) return null;
     const s = String(d);
     if (s.length === 8) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
     return null;
-  }, [controles]);
-  const conformite = useMemo(() => calculerScoreConformite(docsStatus, reservesOuvertes, dernierControleDate), [docsStatus, reservesOuvertes, dernierControleDate]);
+  }, [controlesTech, controles]);
+  const conformite = useMemo(() => calculerScoreConformite(docsStatus, observationsCt, dernierControleDate), [docsStatus, observationsCt, dernierControleDate]);
 
   // ═══ TIMELINE UNIFIÉE ═══
-  const timelineEvents = useMemo(() => buildTimeline(controles || [], visites || [], pannes || [], reservesBc, docsGed), [controles, visites, pannes, reservesBc, docsGed]);
+  const timelineEvents = useMemo(() => buildTimeline(controles || [], visites || [], pannes || [], observationsCt, controlesTech, docsGed), [controles, visites, pannes, observationsCt, controlesTech, docsGed]);
 
   // Debug final
 //   console.log(`Modal: ${allPannes?.length || 0} total → ${visites.length} visites, ${controles.length} contrôles, ${pannes.length} pannes`);
@@ -2574,11 +2585,11 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold" style={{ color: scoreColor(conformite.score) }}>{scoreLabelFr(conformite.score)}</span>
-                  {reservesOuvertes.length > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">⚠️ {reservesOuvertes.length} réserve{reservesOuvertes.length > 1 ? 's' : ''}</span>}
+                  {observationsOuvertes.length > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">⚠️ {observationsOuvertes.length} obs.{observationsOuvertes.filter(o => o.gravite === 'OA').length > 0 ? ` dont ${observationsOuvertes.filter(o => o.gravite === 'OA').length} OA` : ''}</span>}
                 </div>
                 <div className="flex gap-3 text-[10px] text-[var(--text-muted)] mt-1">
                   <span>📄 Docs {conformite.details?.docsScore ?? 0}%</span>
-                  <span>📋 Réserves {conformite.details?.reservesScore ?? 0}%</span>
+                  <span>📋 Observations {conformite.details?.reservesScore ?? 0}%</span>
                   <span>🔍 Contrôles {conformite.details?.controleScore ?? 0}%</span>
                 </div>
               </div>
@@ -2729,45 +2740,75 @@ function AscenseurDetailModal({ ascenseur, onClose }: { ascenseur: Ascenseur; on
             
             {activeTab === 'controles' && (
               <div className="space-y-4">
-                {/* ═══ SYNERGIE 3: Réserves BC dans Contrôles ═══ */}
-                {reservesOuvertes.length > 0 && (
+                {/* ═══ SYNERGIE 3: Observations non levées (controles_techniques) ═══ */}
+                {observationsOuvertes.length > 0 && (
                   <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-xl">
                     <h4 className="text-sm font-bold text-red-400 flex items-center gap-2 mb-3">
                       <AlertTriangle className="w-4 h-4" />
-                      Réserves Bureau de Contrôle en cours — {reservesOuvertes.length} non levée{reservesOuvertes.length > 1 ? 's' : ''}
+                      Observations non levées — {observationsOuvertes.length} en cours
                     </h4>
                     <div className="space-y-2">
-                      {reservesOuvertes.map(r => (
-                        <div key={r.id} className="flex items-start gap-2 text-sm">
-                          <span className="text-red-400 mt-0.5">●</span>
+                      {observationsOuvertes.map(o => (
+                        <div key={o.id} className="flex items-start gap-2 text-sm">
+                          <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold ${o.gravite === 'OA' ? 'bg-red-500/20 text-red-400' : o.gravite === 'OI' ? 'bg-orange-500/20 text-orange-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{o.gravite}</span>
                           <div className="flex-1">
-                            <span className="text-[var(--text-primary)]">{r.description}</span>
-                            <span className="text-[var(--text-muted)] text-xs ml-2">{r.bureau} • {r.reportDate} • {r.joursOuvert}j</span>
+                            <span className="text-[var(--text-primary)]">{o.description}</span>
+                            <span className="text-[var(--text-muted)] text-xs ml-2">{o.organisme} • {o.dateConstatation?.slice(0,10)} • {o.joursOuvert}j</span>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
-                {/* Réserves levées */}
-                {reservesBc.filter(r => r.isResolved).length > 0 && (
+                {/* Observations levées */}
+                {observationsCt.filter(o => o.isLevee).length > 0 && (
                   <div className="p-3 bg-green-500/5 border border-green-500/20 rounded-xl">
                     <h4 className="text-xs font-bold text-green-400 flex items-center gap-2 mb-2">
                       <CheckCircle className="w-3.5 h-3.5" />
-                      {reservesBc.filter(r => r.isResolved).length} réserve(s) levée(s)
+                      {observationsCt.filter(o => o.isLevee).length} observation(s) levée(s)
                     </h4>
                     <div className="space-y-1">
-                      {reservesBc.filter(r => r.isResolved).map(r => (
-                        <div key={r.id} className="text-xs text-[var(--text-muted)] line-through">{r.description} — levée le {r.resolvedAt?.slice(0,10)}</div>
+                      {observationsCt.filter(o => o.isLevee).map(o => (
+                        <div key={o.id} className="text-xs text-[var(--text-muted)] line-through">[{o.gravite}] {o.description} — levée le {o.dateLevee?.slice(0,10)}</div>
                       ))}
                     </div>
                   </div>
                 )}
-                {controles.length > 0 ? (
-                  controles.map((item: any) => <ControleCard key={item.id} item={item} />)
-                ) : (
-                  <EmptyState icon={Eye} message="Aucun contrôle câbles/parachute enregistré" />
+                {/* Contrôles techniques planifiés/terminés */}
+                {controlesTech.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-[var(--text-secondary)] flex items-center gap-1.5">
+                      <ClipboardList className="w-3.5 h-3.5" /> Contrôles Techniques ({controlesTech.length})
+                    </h4>
+                    {controlesTech.map(ct => (
+                      <div key={ct.id} className="p-3 rounded-lg" style={{ background: 'var(--bg-secondary)' }}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold text-[var(--text-primary)]">{ct.typeLabel}</span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ct.statut === 'termine' ? 'bg-green-500/20 text-green-400' : ct.statut === 'planifie' ? 'bg-blue-500/20 text-blue-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                            {ct.statut === 'termine' ? '✅ Terminé' : ct.statut === 'planifie' ? '📅 Planifié' : '🔄 En cours'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-[var(--text-muted)] space-x-3">
+                          <span>{ct.organisme || 'Interne'}</span>
+                          <span>📅 {ct.dateRealisation || ct.datePlanifiee}</span>
+                          {ct.nbObservations > 0 && <span className={ct.nbOa > 0 ? 'text-red-400' : 'text-orange-400'}>{ct.nbObservations} obs. {ct.nbOa > 0 ? `(${ct.nbOa} OA)` : ''}</span>}
+                          {ct.scoreConformite != null && <span>Score: {ct.scoreConformite}%</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
+                {/* Contrôles Progilift (données importées) */}
+                {controles.length > 0 ? (
+                  <>
+                    <h4 className="text-xs font-bold text-[var(--text-secondary)] flex items-center gap-1.5 mt-2">
+                      🔍 Contrôles Progilift ({controles.length})
+                    </h4>
+                    {controles.map((item: any) => <ControleCard key={item.id} item={item} />)}
+                  </>
+                ) : controlesTech.length === 0 ? (
+                  <EmptyState icon={Eye} message="Aucun contrôle enregistré" />
+                ) : null}
               </div>
             )}
             
@@ -3664,44 +3705,66 @@ export function ParcAscenseursPage() {
     queryFn: getAllAscenseursForEnrichment
   });
 
-  // ═══ SYNERGIE 8: Alertes conformité ═══
+  // ═══ SYNERGIE 8: Alertes conformité (source: controles_techniques) ═══
   const { data: alertesConformite = [] } = useQuery({
     queryKey: ['alertes-conformite'],
     queryFn: async () => {
       try {
-        // Récupérer les rapports BC avec réserves non résolues
-        const { data: reports } = await supabase
-          .from('mes_control_reports')
-          .select('*, mes_bc_reserve_items(*), device:mise_en_service(device_number, site_name)')
-          .order('created_at', { ascending: false });
-        
         const alertes: { id: string; severity: 'critical' | 'warning'; message: string; type: string }[] = [];
-        
-        if (reports) {
-          for (const r of reports) {
-            const openReserves = (r.mes_bc_reserve_items || []).filter((i: any) => !i.is_resolved);
-            if (openReserves.length > 0) {
-              const device = r.device as any;
-              const label = device?.device_number || r.device_id?.slice(0, 8) || '';
-              const site = device?.site_name || '';
-              const joursOuvert = Math.floor((Date.now() - new Date(r.report_date || r.created_at).getTime()) / 86400000);
-              alertes.push({
-                id: `res-${r.id}`,
-                severity: joursOuvert > 90 ? 'critical' : 'warning',
-                message: `${openReserves.length} réserve(s) non levée(s) — ${label} ${site} (${joursOuvert}j)`,
-                type: 'reserve',
-              });
-            }
+
+        // Observations non levées depuis controles_techniques
+        const { data: observations } = await supabase
+          .from('controle_observations')
+          .select('id, description, gravite, statut, date_constatation, controle_id, controle:controles_techniques(ascenseur_id, organisme, ascenseur:ascenseurs(code_appareil, adresse))')
+          .not('statut', 'in', '("levee","validee")')
+          .order('date_constatation', { ascending: true });
+
+        if (observations) {
+          for (const obs of observations) {
+            const ct = obs.controle as any;
+            const asc = ct?.ascenseur as any;
+            const code = asc?.code_appareil || '';
+            const site = asc?.adresse || '';
+            const dateConst = obs.date_constatation || '';
+            const joursOuvert = dateConst ? Math.floor((Date.now() - new Date(dateConst).getTime()) / 86400000) : 0;
+            const isOA = obs.gravite === 'OA';
+            alertes.push({
+              id: `obs-${obs.id}`,
+              severity: isOA || joursOuvert > 90 ? 'critical' : 'warning',
+              message: `[${obs.gravite}] ${obs.description.slice(0, 80)} — ${code} ${site} (${joursOuvert}j)`,
+              type: 'observation',
+            });
           }
         }
 
-        // Récupérer les documents GED expirés
+        // Contrôles en retard
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: retards } = await supabase
+          .from('controles_techniques')
+          .select('id, type_controle, date_planifiee, ascenseur:ascenseurs(code_appareil, adresse)')
+          .eq('statut', 'planifie')
+          .lt('date_planifiee', today);
+
+        if (retards) {
+          for (const ct of retards) {
+            const asc = ct.ascenseur as any;
+            const joursRetard = Math.floor((Date.now() - new Date(ct.date_planifiee).getTime()) / 86400000);
+            alertes.push({
+              id: `retard-${ct.id}`,
+              severity: joursRetard > 30 ? 'critical' : 'warning',
+              message: `Contrôle ${ct.type_controle} en retard (${joursRetard}j) — ${asc?.code_appareil || ''} ${asc?.adresse || ''}`,
+              type: 'controle_retard',
+            });
+          }
+        }
+
+        // Documents GED expirés
         const { data: docsExpires } = await supabase
           .from('ged_documents')
           .select('nom, date_expiration, ascenseur_ids')
-          .lt('date_expiration', new Date().toISOString().slice(0, 10))
+          .lt('date_expiration', today)
           .neq('statut', 'supprime');
-        
+
         if (docsExpires) {
           for (const d of docsExpires) {
             const joursExpire = Math.floor((Date.now() - new Date(d.date_expiration).getTime()) / 86400000);

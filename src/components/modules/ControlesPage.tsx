@@ -26,6 +26,7 @@ import {
   getControleStats, getAscenseursList, ControleStats,
 } from '@/services/controleApi';
 import { PDFBuilder, fmtDate } from '@/services/pdfBuilder';
+import { archiverControleDansGed } from '@/services/conformiteService';
 
 type View = 'dashboard' | 'calendar' | 'list' | 'detail';
 type Tab = 'info' | 'checklist' | 'observations' | 'levees';
@@ -48,7 +49,7 @@ export function ControlesPage() {
   const filtered = useMemo(() => {
     if (!searchQ) return controles;
     const q = searchQ.toLowerCase();
-    return controles.filter(c => c.ascenseur?.code?.toLowerCase().includes(q) || c.ascenseur?.adresse?.toLowerCase().includes(q) || c.organisme?.toLowerCase().includes(q));
+    return controles.filter(c => c.ascenseur?.code_appareil?.toLowerCase().includes(q) || c.ascenseur?.adresse?.toLowerCase().includes(q) || c.organisme?.toLowerCase().includes(q));
   }, [controles, searchQ]);
 
   const openDetail = (id: string) => { setSelectedId(id); setView('detail'); };
@@ -141,7 +142,7 @@ function DashboardView({ stats, onOpenDetail }: { stats: ControleStats; onOpenDe
           return <button key={c.id} onClick={() => onOpenDetail(c.id)} className="w-full flex items-center gap-2 p-1.5 rounded hover:bg-[var(--bg-tertiary)] text-left">
             <div className="w-1 h-8 rounded-full" style={{ backgroundColor: tc?.couleur }} />
             <div className="flex-1 min-w-0">
-              <p className="text-[9px] font-semibold truncate">{c.ascenseur?.code} — {c.ascenseur?.adresse}</p>
+              <p className="text-[9px] font-semibold truncate">{c.ascenseur?.code_appareil} — {c.ascenseur?.adresse}</p>
               <p className="text-[7px] text-[var(--text-muted)]">{tc?.nom} {c.organisme && `· ${c.organisme}`}</p>
             </div>
             <div className="text-right">
@@ -188,7 +189,7 @@ function CalendarView({ controles, onSelect }: { controles: Controle[]; onSelect
         {items.slice(0, 2).map(c => {
           const tc = TYPES_CONTROLE.find(t => t.id === c.type_controle);
           return <button key={c.id} onClick={() => onSelect(c.id)} className="w-full text-left mt-px px-0.5 py-px rounded text-[6px] font-semibold truncate" style={{ backgroundColor: tc?.couleur + '20', color: tc?.couleur }}>
-            {c.ascenseur?.code}</button>;
+            {c.ascenseur?.code_appareil}</button>;
         })}
         {items.length > 2 && <p className="text-[6px] text-[var(--text-muted)] text-center">+{items.length - 2}</p>}
       </div>;
@@ -231,7 +232,7 @@ function ListView({ controles, onSelect, isLoading }: { controles: Controle[]; o
       return <button key={c.id} onClick={() => onSelect(c.id)} className={cn('w-full flex items-center gap-2 p-2 rounded-lg border text-left hover:bg-[var(--bg-tertiary)] transition-colors', late ? 'border-[#DC2626]/30 bg-[#DC2626]/3' : 'border-[var(--border-secondary)]')}>
         <div className="w-1.5 self-stretch rounded-full" style={{ backgroundColor: tc?.couleur }} />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5"><p className="text-[10px] font-bold truncate">{c.ascenseur?.code}</p>{statutBadge(c.statut)}{late && <Badge variant="red" className="text-[6px]">EN RETARD</Badge>}</div>
+          <div className="flex items-center gap-1.5"><p className="text-[10px] font-bold truncate">{c.ascenseur?.code_appareil}</p>{statutBadge(c.statut)}{late && <Badge variant="red" className="text-[6px]">EN RETARD</Badge>}{c.statut === 'termine' && <span className="text-[6px] text-[#F97316] font-bold">⚡GED</span>}</div>
           <p className="text-[8px] text-[var(--text-muted)] truncate">{c.ascenseur?.adresse}</p>
           <p className="text-[7px] text-[var(--text-muted)]">{tc?.nom} {c.organisme && `· ${c.organisme}`}</p>
         </div>
@@ -275,7 +276,7 @@ function DetailView({ id, onBack }: { id: string; onBack: () => void }) {
       <div className="w-2 h-8 rounded-full" style={{ backgroundColor: tc?.couleur }} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <h2 className="text-[13px] font-extrabold truncate">{controle.ascenseur?.code}</h2>
+          <h2 className="text-[13px] font-extrabold truncate">{controle.ascenseur?.code_appareil}</h2>
           <span className="px-1.5 py-0.5 rounded-full text-[7px] font-bold text-white" style={{ backgroundColor: tc?.couleur }}>{tc?.nom}</span>
           {oaCt > 0 && <Badge variant="red" className="text-[7px] animate-pulse">{oaCt} OA</Badge>}
         </div>
@@ -283,7 +284,24 @@ function DetailView({ id, onBack }: { id: string; onBack: () => void }) {
       </div>
       <div className="flex gap-0.5">
         {controle.statut === 'planifie' && <button onClick={() => updMut.mutate({ statut: 'en_cours', date_realisation: new Date().toISOString().slice(0, 10) })} className="px-2 py-1 rounded bg-[#EA580C] text-white text-[8px] font-bold">Démarrer</button>}
-        {controle.statut === 'en_cours' && <button onClick={() => updMut.mutate({ statut: 'termine', score_conformite: confRate })} className="px-2 py-1 rounded bg-[#059669] text-white text-[8px] font-bold">Terminer</button>}
+        {controle.statut === 'en_cours' && <button onClick={async () => {
+          updMut.mutate({ statut: 'termine', score_conformite: confRate }, {
+            onSuccess: async () => {
+              try {
+                const archived = await archiverControleDansGed(controle.ascenseur_id, {
+                  id: controle.id,
+                  type_controle: controle.type_controle,
+                  organisme: controle.organisme || '',
+                  date_realisation: controle.date_realisation || new Date().toISOString().slice(0, 10),
+                  notes: controle.notes,
+                  score_conformite: confRate,
+                  observations: observations.map(o => ({ description: o.description, gravite: o.gravite, statut: o.statut })),
+                });
+                if (archived) toast.success('📄 Archivé dans la GED', { icon: '⚡' });
+              } catch { console.warn('Auto-archivage GED échoué'); }
+            }
+          });
+        }} className="px-2 py-1 rounded bg-[#059669] text-white text-[8px] font-bold">Terminer</button>}
         <button onClick={() => { exportControlePDF(controle, observations, checks); toast.success('PDF exporté'); }} className="px-2 py-1 rounded border border-[var(--border-primary)] text-[8px] font-semibold"><FileDown className="w-3 h-3 inline mr-0.5" />PDF</button>
         <button onClick={() => { if (confirm('Supprimer ?')) delMut.mutate(); }} className="p-1 rounded text-[#DC2626] hover:bg-[#DC2626]/10"><Trash2 className="w-3 h-3" /></button>
       </div>
@@ -339,11 +357,11 @@ function InfoTab({ controle, onUpdate }: { controle: Controle; onUpdate: (c: Par
     <Card><CardBody className="p-2">
       <p className="text-[8px] font-bold uppercase mb-1">Ascenseur</p>
       <div className="grid grid-cols-2 gap-1 text-[8px]">
-        <div><span className="text-[var(--text-muted)]">Code:</span> <b>{controle.ascenseur?.code}</b></div>
+        <div><span className="text-[var(--text-muted)]">Code:</span> <b>{controle.ascenseur?.code_appareil}</b></div>
         <div><span className="text-[var(--text-muted)]">Marque:</span> <b>{controle.ascenseur?.marque || '—'}</b></div>
         <div className="col-span-2"><span className="text-[var(--text-muted)]">Adresse:</span> <b>{controle.ascenseur?.adresse}</b></div>
-        <div className="col-span-2"><span className="text-[var(--text-muted)]">Client:</span> <b>{controle.ascenseur?.client?.nom || '—'}</b></div>
       </div>
+      {controle.statut === 'termine' && <div className="mt-1.5 flex items-center gap-1"><span className="px-1.5 py-0.5 rounded bg-[#F97316]/20 text-[#F97316] text-[7px] font-bold">⚡ Archivé GED</span></div>}
     </CardBody></Card>
   </div>;
 }
@@ -514,7 +532,7 @@ function CreateModal({ ascenseurs, onClose, onCreated }: { ascenseurs: { id: str
 
       <div><label className="text-[8px] font-bold">Ascenseur *</label>
         <select value={form.ascenseur_id || ''} onChange={e => setForm({ ...form, ascenseur_id: e.target.value })} className="w-full px-2 py-1.5 text-[9px] bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded">
-          <option value="">— Sélectionner —</option>{ascenseurs.map(a => <option key={a.id} value={a.id}>{a.code} — {a.adresse}</option>)}</select></div>
+          <option value="">— Sélectionner —</option>{ascenseurs.map(a => <option key={a.id} value={a.id}>{a.code_appareil} — {a.adresse}</option>)}</select></div>
 
       <div className="grid grid-cols-2 gap-1.5">
         <div><label className="text-[8px] font-bold">Type</label>
@@ -541,9 +559,9 @@ function CreateModal({ ascenseurs, onClose, onCreated }: { ascenseurs: { id: str
 
 function exportControlePDF(controle: Controle, observations: Observation[], checks: CheckItem[]) {
   const tc = TYPES_CONTROLE.find(t => t.id === controle.type_controle);
-  const pdf = new PDFBuilder('Contrôle Technique', controle.ascenseur?.code || '', 'portrait');
+  const pdf = new PDFBuilder('Contrôle Technique', controle.ascenseur?.code_appareil || '', 'portrait');
   pdf.docTitle('Rapport de Contrôle Technique');
-  pdf.docSubtitle(`${tc?.nom} — ${controle.ascenseur?.code}`);
+  pdf.docSubtitle(`${tc?.nom} — ${controle.ascenseur?.code_appareil}`);
 
   pdf.kpiRow([
     { label: 'Date', value: controle.date_planifiee ? new Date(controle.date_planifiee).toLocaleDateString('fr') : '—' },
@@ -553,7 +571,7 @@ function exportControlePDF(controle: Controle, observations: Observation[], chec
   ]);
 
   pdf.section('Ascenseur');
-  pdf.info([['Code', controle.ascenseur?.code || ''], ['Adresse', controle.ascenseur?.adresse || ''], ['Marque', controle.ascenseur?.marque || '—'], ['Client', controle.ascenseur?.client?.nom || '—']], 2);
+  pdf.info([['Code', controle.ascenseur?.code_appareil || ''], ['Adresse', controle.ascenseur?.adresse || ''], ['Marque', controle.ascenseur?.marque || '—'], ['Client', '—']], 2);
 
   if (observations.length > 0) {
     pdf.section('Observations');
@@ -581,5 +599,5 @@ function exportControlePDF(controle: Controle, observations: Observation[], chec
 
   if (controle.notes) { pdf.section('Notes'); pdf.noteBox(controle.notes); }
 
-  pdf.save(`Controle-${controle.ascenseur?.code}-${fmtDate(new Date(), 'yyyyMMdd')}.pdf`);
+  pdf.save(`Controle-${controle.ascenseur?.code_appareil}-${fmtDate(new Date(), 'yyyyMMdd')}.pdf`);
 }
